@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Microsoft To Do</title>
+<style>
+/* ============================================================
+   CSS 变量 & 主题 — 微软 Fluent 设计风格
+   ============================================================ */
+:root {
+  --bg: #faf9f8;
+  --sidebar-bg: #f3f2f1;
+  --card-bg: #ffffff;
+  --text: #1b1a19;
+  --text-secondary: #605e5c;
+  --text-tertiary: #a19f9d;
+  --border: #edebe9;
+  --accent: #2564cf;
+  --accent-light: #deecf9;
+  --accent-hover: #1a4fb0;
+  --danger: #d13438;
+  --danger-hover: #b52d30;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+  --radius: 8px;
+  --radius-sm: 4px;
+  --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --checkbox-size: 20px;
+  --sidebar-width: 280px;
+  --font: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+}
+
+/* 暗色主题 */
+[data-theme="dark"] {
+  --bg: #1b1a19;
+  --sidebar-bg: #201f1e;
+  --card-bg: #292827;
+  --text: #f3f2f1;
+  --text-secondary: #bebbb8;
+  --text-tertiary: #797775;
+  --border: #3b3a39;
+  --accent: #60a5fa;
+  --accent-light: #1e3a5f;
+  --accent-hover: #93bbfc;
+  --shadow: 0 2px 8px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* ============================================================
+   全局重置 & 布局
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================================
+   侧边栏
+   ============================================================ */
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  user-select: none;
+  z-index: 10;
+}
+
+.sidebar-header {
+  padding: 16px 16px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* 搜索框 */
+.search-box {
+  margin: 0 12px 12px;
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 8px 12px 8px 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.search-box input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.search-box input::placeholder { color: var(--text-tertiary); }
+
+.search-box svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-tertiary);
+}
+
+/* 侧边栏列表项 */
+.nav-list {
+  list-style: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+
+.nav-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: var(--transition);
+  position: relative;
+}
+
+.nav-list li:hover { background: var(--border); }
+
+.nav-list li.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-list li .icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-list li .icon svg { width: 18px; height: 18px; }
+
+.nav-list li .count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  min-width: 20px;
+  text-align: center;
+}
+
+/* 自定义清单区域 */
+.custom-lists-section {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+
+.custom-lists-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.custom-lists {
+  list-style: none;
+}
+
+.custom-lists li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  transition: var(--transition);
+}
+
+.custom-lists li:hover { background: var(--border); }
+
+.custom-lists li.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.custom-lists li .delete-list-btn {
+  margin-left: auto;
+  opacity: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.custom-lists li:hover .delete-list-btn { opacity: 1; }
+.custom-lists li .delete-list-btn:hover { color: var(--danger); background: rgba(209,52,56,0.1); }
+
+/* 添加清单按钮 */
+.add-list-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.add-list-btn:hover { background: var(--border); color: var(--text); }
+
+/* 主题切换 & 底部操作 */
+.sidebar-footer {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius);
+  color: var(--text-secondary);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.theme-toggle:hover { background: var(--border); color: var(--text); }
+
+/* ============================================================
+   主内容区域
+   ============================================================ */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 顶部标题栏 */
+.main-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.main-header h2 {
+  font-size: 22px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.main-header .header-icon { color: var(--accent); }
+
+/* 今日日期显示 */
+.today-date {
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+/* ============================================================
+   添加任务区域
+   ============================================================ */
+.task-add-area {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* 修复重点：在"已计划"视图下显示日期快捷选择器 */
+.task-add-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px 4px 4px 16px;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.task-add-row:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+.task-add-row input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  padding: 10px 0;
+  background: transparent;
+  color: var(--text);
+}
+
+.task-add-row input::placeholder { color: var(--text-tertiary); }
+
+.task-add-row button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.task-add-row button:hover { background: var(--accent-hover); }
+
+/* 已计划视图的日期指示器 */
+.planned-date-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.planned-date-indicator input[type="date"] {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: var(--font);
+  outline: none;
+  cursor: pointer;
+}
+
+/* 重要清单的星标指示器 */
+.important-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #e8a808;
+  background: #fef8e6;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .important-indicator {
+  background: #3d2e00;
+}
+
+/* 清单归属指示器 */
+.list-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  background: var(--accent-light);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   任务列表
+   ============================================================ */
+.task-list-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 24px 24px;
+}
+
+/* 分组标题 */
+.task-group-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 16px 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+.empty-state svg { margin-bottom: 16px; opacity: 0.4; }
+
+.empty-state p { font-size: 14px; line-height: 1.6; }
+
+/* ============================================================
+   单个任务卡片
+   ============================================================ */
+.task-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 4px;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  position: relative;
+}
+
+.task-item:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--text-tertiary);
+}
+
+.task-item.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+/* 复选框 */
+.task-checkbox {
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.task-checkbox:hover { border-color: var(--accent); }
+
+.task-checkbox.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.task-checkbox.checked svg {
+  width: 12px;
+  height: 12px;
+  color: #fff;
+}
+
+/* 任务内容 */
+.task-content { flex: 1; min-width: 0; }
+
+.task-title {
+  font-size: 14px;
+  color: var(--text);
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+/* 完成状态 — 划线动画 */
+.task-item.completed .task-title {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+  transition: color 0.3s, text-decoration 0.3s;
+}
+
+/* 任务元信息行 */
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.task-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.task-meta-item.due-date { color: var(--accent); }
+.task-meta-item.due-date.overdue { color: var(--danger); font-weight: 600; }
+
+.task-meta-item.important-star {
+  color: #e8a808;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.task-meta-item.important-star svg { width: 14px; height: 14px; }
+
+.task-meta-item.list-tag {
+  background: var(--accent-light);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+/* 任务右侧操作按钮 */
+.task-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: var(--transition);
+}
+
+.task-item:hover .task-actions { opacity: 1; }
+
+.task-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+}
+
+.task-actions button:hover { background: var(--border); color: var(--text); }
+.task-actions button.delete-btn:hover { color: var(--danger); background: rgba(209,52,56,0.1); }
+
+/* ============================================================
+   任务详情展开面板
+   ============================================================ */
+.task-detail {
+  padding: 0 16px 16px;
+  margin: -4px 0 4px 32px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--radius) var(--radius);
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 600px; }
+}
+
+/* 步骤（子任务） */
+.steps-section { margin-top: 12px; }
+
+.steps-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.step-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-checkbox:hover { border-color: var(--accent); }
+
+.step-checkbox.done {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.step-checkbox.done svg { width: 10px; height: 10px; color: #fff; }
+
+.step-title {
+  font-size: 13px;
+  flex: 1;
+}
+
+.step-item.done .step-title {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+.step-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  opacity: 0;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+
+.step-item:hover .step-delete { opacity: 1; }
+.step-delete:hover { color: var(--danger); }
+
+.add-step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.add-step-row input {
+  flex: 1;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.add-step-row input:focus { border-color: var(--accent); }
+
+.add-step-row button {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 备注 */
+.notes-section { margin-top: 12px; }
+
+.notes-section h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.notes-section textarea {
+  width: 100%;
+  min-height: 60px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+}
+
+.notes-section textarea:focus { border-color: var(--accent); }
+
+/* 日期 & 提醒行 */
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.detail-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-label input[type="date"],
+.detail-label input[type="datetime-local"] {
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font);
+  background: var(--card-bg);
+  color: var(--text);
+  outline: none;
+}
+
+.detail-label input:focus { border-color: var(--accent); }
+
+/* ============================================================
+   提示 Toast
+   ============================================================ */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text);
+  animation: toastIn 0.3s ease, toastOut 0.3s ease 2.5s forwards;
+  max-width: 360px;
+}
+
+@keyframes toastIn  { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes toastOut { from { opacity: 1; transform: translateX(0); } to { opacity: 0; transform: translateX(40px); } }
+
+/* ============================================================
+   模态框
+   ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.modal {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  min-width: 320px;
+  max-width: 90vw;
+}
+
+.modal h3 { font-size: 16px; margin-bottom: 16px; color: var(--text); }
+
+.modal input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+  margin-bottom: 16px;
+}
+
+.modal input:focus { border-color: var(--accent); }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-actions button {
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  transition: var(--transition);
+}
+
+.modal-actions .btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.modal-actions .btn-primary:hover { background: var(--accent-hover); }
+
+.modal-actions .btn-secondary {
+  background: transparent;
+  color: var(--text);
+}
+
+.modal-actions .btn-secondary:hover { background: var(--border); }
+
+/* ============================================================
+   滚动条美化
+   ============================================================ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-tertiary); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ============================================================
+   响应式
+   ============================================================ */
+@media (max-width: 768px) {
+  .sidebar { width: 64px; min-width: 64px; }
+  .sidebar .nav-list li span:not(.count),
+  .sidebar h1,
+  .sidebar .search-box,
+  .sidebar .custom-lists-section span,
+  .sidebar .add-list-btn span,
+  .sidebar .theme-toggle span { display: none; }
+  .main-header { padding: 12px 16px; }
+  .task-add-area { padding: 12px 16px; }
+  .task-list-container { padding: 8px 16px 24px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     侧边栏
+     ============================================================ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>📋 待办事项</h1>
+  </div>
+
+  <!-- 搜索框 -->
+  <div class="search-box">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input type="text" id="searchInput" placeholder="搜索任务..." autocomplete="off">
+  </div>
+
+  <!-- 默认清单 -->
+  <ul class="nav-list" id="defaultLists">
+    <li data-list="myday" class="active">
+      <span class="icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      <span>我的一天</span>
+      <span class="count" id="countMyDay">0</span>
+    </li>
+    <li data-list="important">
+      <span class="icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+      <span>重要</span>
+      <span class="count" id="countImportant">0</span>
+    </li>
+    <li data-list="planned">
+      <span class="icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+      <span>已计划</span>
+      <span class="count" id="countPlanned">0</span>
+    </li>
+    <li data-list="tasks">
+      <span class="icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></span>
+      <span>任务</span>
+      <span class="count" id="countTasks">0</span>
+    </li>
+  </ul>
+
+  <!-- 自定义清单区域 -->
+  <div class="custom-lists-section">
+    <div class="custom-lists-header">
+      <span>自定义清单</span>
+    </div>
+    <ul class="custom-lists" id="customLists"></ul>
+    <button class="add-list-btn" id="addListBtn">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>新建清单</span>
+    </button>
+  </div>
+
+  <!-- 底部操作 -->
+  <div class="sidebar-footer">
+    <button class="theme-toggle" id="themeToggle">
+      <svg id="themeIconSun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg id="themeIconMoon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+      <span>主题</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ============================================================
+     主内容区域
+     ============================================================ -->
+<main class="main">
+  <!-- 标题栏 -->
+  <div class="main-header">
+    <span class="header-icon" id="headerIcon">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </span>
+    <h2 id="mainTitle">我的一天</h2>
+    <span class="today-date" id="todayDate"></span>
+  </div>
+
+  <!-- 添加任务区域（含联动指示器） -->
+  <div class="task-add-area">
+    <div class="task-add-row">
+      <!-- 联动指示器（动态显示） -->
+      <div id="contextIndicator"></div>
+      <input type="text" id="taskInput" placeholder="添加任务，按 Enter 确认" autocomplete="off">
+      <button id="addTaskBtn">添加</button>
+    </div>
+  </div>
+
+  <!-- 任务列表 -->
+  <div class="task-list-container" id="taskListContainer">
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+      <p>暂无任务<br>在上方输入框中添加新任务吧 ✨</p>
+    </div>
+  </div>
+</main>
+
+<!-- Toast 容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ============================================================
+     JavaScript — 应用逻辑
+     ============================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ==========================================================
+  // 数据层：从 localStorage 读写
+  // ==========================================================
+  var STORAGE_KEY_TASKS = 'mstodo_tasks';
+  var STORAGE_KEY_LISTS = 'mstodo_lists';
+  var STORAGE_KEY_THEME = 'mstodo_theme';
+
+  /** @returns {Array} 所有任务 */
+  function loadTasks() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY_TASKS)) || []; }
+    catch (e) { return []; }
+  }
+
+  function saveTasks(tasksArr) {
+    localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(tasksArr));
+  }
+
+  /** @returns {Array<{id:string, name:string}>} 自定义清单 */
+  function loadCustomLists() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY_LISTS)) || []; }
+    catch (e) { return []; }
+  }
+
+  function saveCustomLists(listsArr) {
+    localStorage.setItem(STORAGE_KEY_LISTS, JSON.stringify(listsArr));
+  }
+
+  function loadTheme() {
+    return localStorage.getItem(STORAGE_KEY_THEME) || 'light';
+  }
+
+  function saveTheme(theme) {
+    localStorage.setItem(STORAGE_KEY_THEME, theme);
+  }
+
+  // ==========================================================
+  // 工具函数
+  // ==========================================================
+  /** 生成简易唯一 ID */
+  function uid() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  /** 获取今天的日期字符串 YYYY-MM-DD */
+  function todayStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  /** 获取今天的日期对象（本地时间） */
+  function todayLocal() {
+    var d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }
+
+  /** 格式化日期为中文 */
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    var parts = dateStr.split('-');
+    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    var now = todayLocal();
+    var target = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    var diffDays = Math.round((target - now) / 86400000);
+
+    if (diffDays === 0) return '今天';
+    if (diffDays === 1) return '明天';
+    if (diffDays === -1) return '昨天';
+    if (diffDays < -1) return Math.abs(diffDays) + '天前';
+    if (diffDays < 7) {
+      var weekdays = ['周日','周一','周二','周三','周四','周五','周六'];
+      return weekdays[d.getDay()];
+    }
+    return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  /** 判断日期是否已过期 */
+  function isOverdue(dateStr) {
+    if (!dateStr) return false;
+    return dateStr < todayStr();
+  }
+
+  /** 格式化今天日期显示 */
+  function formatTodayDisplay() {
+    var d = new Date();
+    var weekdays = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+    return d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + weekdays[d.getDay()];
+  }
+
+  // ==========================================================
+  // 全局状态
+  // ==========================================================
+  var tasks = loadTasks();
+  var customLists = loadCustomLists();
+  var activeList = 'myday';          // 当前选中的清单 ID
+  var expandedTaskId = null;         // 当前展开详情的任务 ID
+  var searchQuery = '';              // 搜索关键词
+
+  // ==========================================================
+  // "我的一天" 每日刷新逻辑
+  //   每天自动清空当日视图但不删除任务（仅清除 myDay 标记）
+  // ==========================================================
+  function refreshMyDay() {
+    var today = todayStr();
+    var changed = false;
+    tasks.forEach(function(t) {
+      // 如果 myDayDate 不是今天，则从"我的一天"中移除
+      if (t.myDay && t.myDayDate !== today) {
+        t.myDay = false;
+        t.myDayDate = null;
+        changed = true;
+      }
+    });
+    if (changed) saveTasks(tasks);
+  }
+
+  // ==========================================================
+  // 提醒检查（每 30 秒检查一次，浏览器通知）
+  // ==========================================================
+  function checkReminders() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+    var now = new Date();
+    tasks.forEach(function(t) {
+      if (t.completed || !t.reminder) return;
+      var remindTime = new Date(t.reminder);
+      // 在提醒时间前后 1 分钟内触发
+      var diff = Math.abs(now - remindTime);
+      if (diff < 60000 && !t._reminded) {
+        t._reminded = true; // 防止重复提醒
+        new Notification('📋 任务提醒', {
+          body: t.title,
+          icon: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%232564cf"><path d="M9 11l3 3L22 4"/></svg>'),
+          tag: t.id,
+        });
+        // 1 分钟后重置标记
+        setTimeout(function() { t._reminded = false; }, 120000);
+      }
+    });
+  }
+
+  // 请求通知权限
+  function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }
+
+  // 每 30 秒检查提醒
+  setInterval(checkReminders, 30000);
+  // 初始延迟检查
+  setTimeout(checkReminders, 2000);
+
+  // ==========================================================
+  // Toast 提示
+  // ==========================================================
+  function showToast(msg) {
+    var container = document.getElementById('toastContainer');
+    var toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    container.appendChild(toast);
+    setTimeout(function() { toast.remove(); }, 3000);
+  }
+
+  // ==========================================================
+  // DOM 缓存
+  // ==========================================================
+  function $(sel) { return document.querySelector(sel); }
+  function $$(sel) { return document.querySelectorAll(sel); }
+
+  var domSearchInput      = $('#searchInput');
+  var domTaskInput        = $('#taskInput');
+  var domAddBtn           = $('#addTaskBtn');
+  var domTaskContainer    = $('#taskListContainer');
+  var domMainTitle        = $('#mainTitle');
+  var domHeaderIcon       = $('#headerIcon');
+  var domContextIndicator = $('#contextIndicator');
+  var domDefaultLists     = $('#defaultLists');
+  var domCustomLists      = $('#customLists');
+  var domAddListBtn       = $('#addListBtn');
+  var domThemeToggle      = $('#themeToggle');
+  var domCountMyDay       = $('#countMyDay');
+  var domCountImportant   = $('#countImportant');
+  var domCountPlanned     = $('#countPlanned');
+  var domCountTasks       = $('#countTasks');
+  var domTodayDate        = $('#todayDate');
+
+  // ==========================================================
+  // 核心修复：侧边栏清单联动 — 根据当前选中的清单确定新建任务的属性
+  // ==========================================================
+
+  /**
+   * 根据当前 activeList 返回新任务应附加的默认属性。
+   *
+   * 这是侧边栏联动的核心逻辑：
+   *  - "重要"清单 (important) → 自动标星 (important: true)
+   *  - "已计划"清单 (planned)  → 自动设置截止日期为当天 (dueDate: today)
+   *  - 自定义清单 (custom-*)    → 自动归入该清单 (listId: activeList)
+   *  - "我的一天" (myday)       → 自动加入我的一天 (myDay: true)
+   *  - "任务" (tasks)           → 普通任务，无额外属性
+   */
+  function getContextDefaults() {
+    var defaults = {
+      important: false,
+      dueDate: null,
+      listId: null,
+      myDay: false,
+      myDayDate: null,
+    };
+
+    switch (activeList) {
+      case 'important':
+        // 修复重点 1：在"重要"视图添加的任务自动标星
+        defaults.important = true;
+        break;
+      case 'planned':
+        // 修复重点 2：在"已计划"视图添加的任务自动设置截止日期
+        //    用户可以通过日期选择器修改日期（默认今天）
+        defaults.dueDate = getPlannedDateFromPicker();
+        break;
+      case 'myday':
+        // "我的一天"视图添加的任务自动加入我的一天
+        defaults.myDay = true;
+        defaults.myDayDate = todayStr();
+        break;
+      case 'tasks':
+        // "任务"视图 — 普通任务，无需额外处理
+        break;
+      default:
+        // 修复重点 3：自定义清单 — 自动归入该清单
+        if (activeList.indexOf('custom-') === 0) {
+          defaults.listId = activeList;
+        }
+        break;
+    }
+
+    return defaults;
+  }
+
+  /** 读取"已计划"视图中日期选择器的值 */
+  function getPlannedDateFromPicker() {
+    var picker = document.getElementById('plannedDatePicker');
+    return picker ? picker.value : todayStr();
+  }
+
+  // ==========================================================
+  // 更新添加任务区域的联动指示器
+  //   让用户明确知道当前清单的添加规则
+  // ==========================================================
+  function renderContextIndicator() {
+    var html = '';
+
+    if (activeList === 'planned') {
+      // "已计划"视图：显示日期选择器，默认今天
+      html =
+        '<div class="planned-date-indicator">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">' +
+            '<rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>' +
+            '<line x1="16" y1="2" x2="16" y2="6"/>' +
+            '<line x1="8" y1="2" x2="8" y2="6"/>' +
+            '<line x1="3" y1="10" x2="21" y2="10"/>' +
+          '</svg>' +
+          '<input type="date" id="plannedDatePicker" value="' + todayStr() + '">' +
+        '</div>';
+    } else if (activeList === 'important') {
+      // "重要"视图：显示星标指示
+      html =
+        '<div class="important-indicator">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
+          '<span>自动标星</span>' +
+        '</div>';
+    } else if (activeList.indexOf('custom-') === 0) {
+      // 自定义清单：显示清单名称
+      var list = null;
+      for (var i = 0; i < customLists.length; i++) {
+        if ('custom-' + customLists[i].id === activeList) {
+          list = customLists[i];
+          break;
+        }
+      }
+      if (list) {
+        html =
+          '<div class="list-indicator">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>' +
+            '<span>归入「' + escapeHtml(list.name) + '」</span>' +
+          '</div>';
+      }
+    } else if (activeList === 'myday') {
+      html =
+        '<div class="planned-date-indicator">' +
+          '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+          '<span>加入「我的一天」</span>' +
+        '</div>';
+    }
+
+    domContextIndicator.innerHTML = html;
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  // ==========================================================
+  // 获取当前视图下应显示的任务列表（筛选逻辑）
+  // ==========================================================
+  function getFilteredTasks() {
+    var filtered = tasks.slice(); // 浅拷贝
+
+    // 如果有搜索关键词，优先搜索（模糊匹配标题和备注）
+    if (searchQuery) {
+      var q = searchQuery.toLowerCase();
+      filtered = filtered.filter(function(t) {
+        return t.title.toLowerCase().indexOf(q) !== -1 ||
+               (t.notes && t.notes.toLowerCase().indexOf(q) !== -1);
+      });
+      return filtered;
+    }
+
+    switch (activeList) {
+      case 'myday':
+        // 只显示标记为"我的一天"且日期是今天的任务
+        filtered = filtered.filter(function(t) {
+          return t.myDay && t.myDayDate === todayStr();
+        });
+        break;
+      case 'important':
+        // 只显示标为重要的任务
+        filtered = filtered.filter(function(t) { return t.important; });
+        break;
+      case 'planned':
+        // 只显示有截止日期且未完成的任务
+        filtered = filtered.filter(function(t) {
+          return t.dueDate && !t.completed;
+        });
+        break;
+      case 'tasks':
+        // 显示所有任务
+        break;
+      default:
+        // 自定义清单：只显示归入此清单的任务
+        if (activeList.indexOf('custom-') === 0) {
+          filtered = filtered.filter(function(t) {
+            return t.listId === activeList;
+          });
+        }
+        break;
+    }
+
+    return filtered;
+  }
+
+  // ==========================================================
+  // 更新侧边栏计数
+  // ==========================================================
+  function updateCounts() {
+    var today = todayStr();
+    domCountMyDay.textContent     = tasks.filter(function(t) { return t.myDay && t.myDayDate === today; }).length;
+    domCountImportant.textContent = tasks.filter(function(t) { return t.important; }).length;
+    domCountPlanned.textContent   = tasks.filter(function(t) { return t.dueDate && !t.completed; }).length;
+    domCountTasks.textContent     = tasks.filter(function(t) { return !t.completed; }).length;
+  }
+
+  // ==========================================================
+  // 渲染任务列表
+  // ==========================================================
+  function renderTasks() {
+    var filtered = getFilteredTasks();
+
+    // 排序：未完成在前，按创建时间倒序
+    filtered.sort(function(a, b) {
+      if (a.completed !== b.completed) return a.completed ? 1 : -1;
+      return (b.createdAt || '').localeCompare(a.createdAt || '');
+    });
+
+    if (filtered.length === 0) {
+      domTaskContainer.innerHTML = getEmptyStateHtml();
+      return;
+    }
+
+    // 分组：未完成 / 已完成
+    var pending = filtered.filter(function(t) { return !t.completed; });
+    var completed = filtered.filter(function(t) { return t.completed; });
+
+    var html = '';
+
+    if (pending.length > 0) {
+      html += renderTaskItems(pending);
+    }
+
+    if (completed.length > 0) {
+      html += '<div class="task-group-title">已完成 (' + completed.length + ')</div>';
+      html += renderTaskItems(completed);
+    }
+
+    domTaskContainer.innerHTML = html;
+  }
+
+  function renderTaskItems(taskList) {
+    return taskList.map(function(t) {
+      var isExpanded = t.id === expandedTaskId;
+      var checkedClass = t.completed ? 'checked' : '';
+      var completedClass = t.completed ? 'completed' : '';
+      var selectedClass = isExpanded ? 'selected' : '';
+      var overdueClass = (!t.completed && isOverdue(t.dueDate)) ? 'overdue' : '';
+
+      var metaHtml = '';
+
+      // 步骤进度
+      if (t.steps && t.steps.length > 0) {
+        var doneSteps = t.steps.filter(function(s) { return s.completed; }).length;
+        metaHtml +=
+          '<span class="task-meta-item">' +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/></svg>' +
+            doneSteps + '/' + t.steps.length +
+          '</span>';
+      }
+
+      // 截止日期
+      if (t.dueDate) {
+        metaHtml +=
+          '<span class="task-meta-item due-date ' + overdueClass + '">' +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+            formatDate(t.dueDate) +
+          '</span>';
+      }
+
+      // 重要标记
+      if (t.important) {
+        metaHtml +=
+          '<span class="task-meta-item important-star" data-action="toggleImportant" data-id="' + t.id + '">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' +
+          '</span>';
+      }
+
+      // 清单归属标签（仅在"任务"总览视图时显示）
+      if (activeList === 'tasks' && t.listId && t.listId.indexOf('custom-') === 0) {
+        var list = null;
+        for (var i = 0; i < customLists.length; i++) {
+          if ('custom-' + customLists[i].id === t.listId) {
+            list = customLists[i];
+            break;
+          }
+        }
+        if (list) {
+          metaHtml += '<span class="task-meta-item list-tag">' + escapeHtml(list.name) + '</span>';
+        }
+      }
+
+      // 备注标记
+      if (t.notes && t.notes.trim()) {
+        metaHtml +=
+          '<span class="task-meta-item" title="' + escapeHtml(t.notes) + '">' +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>' +
+          '</span>';
+      }
+
+      var detailHtml = '';
+      if (isExpanded) {
+        detailHtml = renderTaskDetail(t);
+      }
+
+      // 操作按钮：星标 & 删除
+      var actionsHtml = '';
+      if (!t.important) {
+        actionsHtml += '<button data-action="toggleImportant" data-id="' + t.id + '" title="标为重要"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>';
+      }
+      actionsHtml += '<button data-action="delete" data-id="' + t.id + '" class="delete-btn" title="删除任务"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg></button>';
+
+      return (
+        '<div class="task-item ' + completedClass + ' ' + selectedClass + '" data-id="' + t.id + '">' +
+          '<div class="task-checkbox ' + checkedClass + '" data-action="toggleComplete" data-id="' + t.id + '">' +
+            (t.completed ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
+          '</div>' +
+          '<div class="task-content" data-action="expand" data-id="' + t.id + '">' +
+            '<div class="task-title">' + escapeHtml(t.title) + '</div>' +
+            (metaHtml ? '<div class="task-meta">' + metaHtml + '</div>' : '') +
+          '</div>' +
+          '<div class="task-actions">' + actionsHtml + '</div>' +
+        '</div>' +
+        detailHtml
+      );
+    }).join('');
+  }
+
+  // ==========================================================
+  // 渲染任务详情展开面板（步骤、日期、提醒、备注）
+  // ==========================================================
+  function renderTaskDetail(task) {
+    var steps = task.steps || [];
+    var stepsHtml = steps.map(function(s, i) {
+      return (
+        '<div class="step-item ' + (s.completed ? 'done' : '') + '">' +
+          '<div class="step-checkbox ' + (s.completed ? 'done' : '') + '" data-action="toggleStep" data-task-id="' + task.id + '" data-step-index="' + i + '">' +
+            (s.completed ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : '') +
+          '</div>' +
+          '<span class="step-title">' + escapeHtml(s.title) + '</span>' +
+          '<button class="step-delete" data-action="deleteStep" data-task-id="' + task.id + '" data-step-index="' + i + '">' +
+            '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</div>'
+      );
+    }).join('');
+
+    var doneSteps = steps.filter(function(s) { return s.completed; }).length;
+
+    return (
+      '<div class="task-detail" data-detail-id="' + task.id + '">' +
+        // 步骤（子任务）
+        '<div class="steps-section">' +
+          '<h4>📋 步骤 (' + doneSteps + '/' + steps.length + ')</h4>' +
+          stepsHtml +
+          '<div class="add-step-row">' +
+            '<input type="text" placeholder="添加步骤..." data-action="addStepInput" data-task-id="' + task.id + '">' +
+            '<button data-action="addStepBtn" data-task-id="' + task.id + '">添加</button>' +
+          '</div>' +
+        '</div>' +
+
+        // 日期 & 提醒行
+        '<div class="detail-row">' +
+          '<label class="detail-label">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' +
+            '截止日期' +
+            '<input type="date" value="' + (task.dueDate || '') + '" data-action="setDueDate" data-task-id="' + task.id + '">' +
+          '</label>' +
+          '<label class="detail-label">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
+            '提醒' +
+            '<input type="datetime-local" value="' + (task.reminder || '') + '" data-action="setReminder" data-task-id="' + task.id + '">' +
+          '</label>' +
+        '</div>' +
+
+        // 备注
+        '<div class="notes-section">' +
+          '<h4>📝 备注</h4>' +
+          '<textarea placeholder="添加备注..." data-action="setNotes" data-task-id="' + task.id + '">' + escapeHtml(task.notes || '') + '</textarea>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  // ==========================================================
+  // 空状态 HTML
+  // ==========================================================
+  function getEmptyStateHtml() {
+    if (searchQuery) {
+      return (
+        '<div class="empty-state">' +
+          '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>' +
+          '<p>未找到匹配的任务</p>' +
+        '</div>'
+      );
+    }
+
+    var messages = {
+      myday:     { icon: '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>', text: '今天没有待办任务<br>享受你的一天吧 ☀️' },
+      important: { icon: '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>', text: '暂无重要任务<br>点击星标标记重要任务 ⭐' },
+      planned:   { icon: '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>', text: '暂无已计划任务<br>为任务设置截止日期以在此查看 📅' },
+      tasks:     { icon: '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>', text: '暂无任务<br>在上方输入框中添加新任务吧 ✨' },
+    };
+
+    var msg = messages[activeList] || messages['tasks'];
+
+    return (
+      '<div class="empty-state">' +
+        msg.icon +
+        '<p>' + msg.text + '</p>' +
+      '</div>'
+    );
+  }
+
+  // ==========================================================
+  // 更新主标题 & 图标
+  // ==========================================================
+  function updateHeader() {
+    var titles = {
+      myday: '我的一天',
+      important: '重要',
+      planned: '已计划',
+      tasks: '任务',
+    };
+
+    if (activeList.indexOf('custom-') === 0) {
+      var list = null;
+      for (var i = 0; i < customLists.length; i++) {
+        if ('custom-' + customLists[i].id === activeList) {
+          list = customLists[i];
+          break;
+        }
+      }
+      domMainTitle.textContent = list ? list.name : '任务';
+    } else if (searchQuery) {
+      domMainTitle.textContent = '搜索: "' + searchQuery + '"';
+    } else {
+      domMainTitle.textContent = titles[activeList] || '任务';
+    }
+
+    // 更新今天日期显示
+    domTodayDate.textContent = formatTodayDisplay();
+  }
+
+  // ==========================================================
+  // 核心：添加任务（含联动逻辑）
+  //   根据当前选中的清单，自动赋予任务相应属性
+  // ==========================================================
+  function addTask(title) {
+    title = title.trim();
+    if (!title) {
+      domTaskInput.focus();
+      return;
+    }
+
+    // 获取当前清单的默认属性（侧边栏联动核心）
+    var defaults = getContextDefaults();
+
+    var task = {
+      id: uid(),
+      title: title,
+      completed: false,
+      important: defaults.important,
+      dueDate: defaults.dueDate,
+      reminder: null,
+      listId: defaults.listId,
+      myDay: defaults.myDay,
+      myDayDate: defaults.myDayDate,
+      steps: [],
+      notes: '',
+      createdAt: new Date().toISOString(),
+    };
+
+    // 添加到任务数组头部
+    tasks.unshift(task);
+    saveTasks(tasks);
+
+    // 清空输入并收起详情
+    domTaskInput.value = '';
+    expandedTaskId = null;
+
+    // 刷新所有 UI
+    updateCounts();
+    renderTasks();
+    renderContextIndicator();
+
+    // 根据添加上下文给出提示
+    var toastMsg = '任务已添加';
+    if (defaults.important) {
+      toastMsg = '⭐ 任务已添加并自动标为重要';
+    } else if (defaults.dueDate) {
+      toastMsg = '📅 任务已添加，截止日期：' + formatDate(defaults.dueDate);
+    } else if (defaults.myDay) {
+      toastMsg = '☀️ 任务已加入"我的一天"';
+    } else if (defaults.listId) {
+      var list = null;
+      for (var i = 0; i < customLists.length; i++) {
+        if ('custom-' + customLists[i].id === defaults.listId) {
+          list = customLists[i];
+          break;
+        }
+      }
+      toastMsg = list ? '📋 任务已归入「' + list.name + '」' : '任务已添加';
+    }
+    showToast(toastMsg);
+
+    // 重新聚焦输入框方便连续添加
+    domTaskInput.focus();
+  }
+
+  // ==========================================================
+  // 任务操作函数
+  // ==========================================================
+
+  /** 切换任务完成状态 */
+  function toggleComplete(taskId) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.completed = !task.completed;
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+  }
+
+  /** 切换任务星标（重要） */
+  function toggleImportant(taskId) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.important = !task.important;
+
+    // 如果取消了星标且当前在"重要"视图，任务将不再显示
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+
+    if (task.important) {
+      showToast('⭐ 已标为重要');
+    }
+  }
+
+  /** 删除任务 */
+  function deleteTask(taskId) {
+    if (!confirm('确定要删除这个任务吗？此操作不可恢复。')) return;
+
+    tasks = tasks.filter(function(t) { return t.id !== taskId; });
+    if (expandedTaskId === taskId) expandedTaskId = null;
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+    showToast('🗑️ 任务已删除');
+  }
+
+  /** 设置任务截止日期 */
+  function setDueDate(taskId, dateStr) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.dueDate = dateStr || null;
+    saveTasks(tasks);
+    updateCounts();
+    // 只更新详情面板中的日期显示，不整体重渲染（保持展开状态）
+    renderTasks();
+  }
+
+  /** 设置任务提醒时间 */
+  function setReminder(taskId, datetimeStr) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.reminder = datetimeStr || null;
+    task._reminded = false; // 重置提醒状态，允许新时间再次触发
+    saveTasks(tasks);
+    if (datetimeStr) {
+      requestNotificationPermission();
+      showToast('⏰ 提醒已设置');
+    }
+  }
+
+  /** 设置任务备注 */
+  function setNotes(taskId, notes) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.notes = notes;
+    saveTasks(tasks);
+  }
+
+  // ---- 步骤（子任务）操作 ----
+
+  /** 添加步骤 */
+  function addStep(taskId, title) {
+    title = title.trim();
+    if (!title) return;
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    if (!task.steps) task.steps = [];
+    task.steps.push({ id: uid(), title: title, completed: false });
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+  }
+
+  /** 切换步骤完成状态 */
+  function toggleStep(taskId, stepIndex) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task || !task.steps || !task.steps[stepIndex]) return;
+    task.steps[stepIndex].completed = !task.steps[stepIndex].completed;
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+  }
+
+  /** 删除步骤 */
+  function deleteStep(taskId, stepIndex) {
+    var task = null;
+    for (var i = 0; i < tasks.length; i++) {
+      if (tasks[i].id === taskId) { task = tasks[i]; break; }
+    }
+    if (!task) return;
+    task.steps.splice(stepIndex, 1);
+    saveTasks(tasks);
+    updateCounts();
+    renderTasks();
+  }
+
+  // ==========================================================
+  // 自定义清单操作
+  // ==========================================================
+
+  /** 创建新的自定义清单 */
+  function addCustomList(name) {
+    name = name.trim();
+    if (!name) return;
+    var list = { id: uid(), name: name };
+    customLists.push(list);
+    saveCustomLists(customLists);
+    renderCustomLists();
+    // 自动切换到新清单
+    selectList('custom-' + list.id);
+    showToast('📋 清单「' + name + '」已创建');
+  }
+
+  /** 删除自定义清单（任务不移除，归入默认"任务"） */
+  function deleteCustomList(listId) {
+    var list = null;
+    for (var i = 0; i < customLists.length; i++) {
+      if ('custom-' + customLists[i].id === listId) { list = customLists[i]; break; }
+    }
+    if (!list) return;
+    if (!confirm('确定要删除清单「' + list.name + '」吗？\n清单中的任务不会被删除，它们将保留在"任务"视图中。')) return;
+
+    // 将该清单下的任务归入默认"任务"（清空 listId）
+    tasks.forEach(function(t) {
+      if (t.listId === listId) t.listId = null;
+    });
+    saveTasks(tasks);
+
+    // 从列表中移除
+    customLists = customLists.filter(function(l) { return 'custom-' + l.id !== listId; });
+    saveCustomLists(customLists);
+
+    // 如果正在查看被删清单，切换到"任务"
+    if (activeList === listId) selectList('tasks');
+
+    renderCustomLists();
+    updateCounts();
+    renderTasks();
+    showToast('🗑️ 清单已删除');
+  }
+
+  /** 渲染自定义清单列表 */
+  function renderCustomLists() {
+    if (customLists.length === 0) {
+      domCustomLists.innerHTML = '';
+      return;
+    }
+
+    domCustomLists.innerHTML = customLists.map(function(l) {
+      var listId = 'custom-' + l.id;
+      var activeClass = activeList === listId ? 'active' : '';
+      var count = tasks.filter(function(t) { return t.listId === listId && !t.completed; }).length;
+      return (
+        '<li class="' + activeClass + '" data-list="' + listId + '">' +
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>' +
+          '<span>' + escapeHtml(l.name) + '</span>' +
+          '<span class="count">' + count + '</span>' +
+          '<button class="delete-list-btn" data-action="deleteList" data-list-id="' + listId + '" title="删除清单">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</li>'
+      );
+    }).join('');
+  }
+
+  // ==========================================================
+  // 清单切换（核心：选中清单后任务列表联动刷新）
+  // ==========================================================
+  function selectList(listId) {
+    activeList = listId;
+    searchQuery = '';
+    domSearchInput.value = '';
+    expandedTaskId = null;
+
+    // 更新默认清单高亮
+    var defaultItems = domDefaultLists.querySelectorAll('li');
+    defaultItems.forEach(function(li) { li.classList.remove('active'); });
+    var targetLi = domDefaultLists.querySelector('[data-list="' + listId + '"]');
+    if (targetLi) targetLi.classList.add('active');
+
+    // 更新自定义清单高亮
+    var customItems = domCustomLists.querySelectorAll('li');
+    customItems.forEach(function(li) { li.classList.remove('active'); });
+    var targetCustom = domCustomLists.querySelector('[data-list="' + listId + '"]');
+    if (targetCustom) targetCustom.classList.add('active');
+
+    // 更新界面
+    updateHeader();
+    renderContextIndicator();   // 更新联动指示器
+    renderTasks();
+    updateCounts();
+
+    // 自动聚焦输入框
+    domTaskInput.focus();
+  }
+
+  // ==========================================================
+  // 搜索功能
+  // ==========================================================
+  function doSearch(query) {
+    searchQuery = query.trim();
+    expandedTaskId = null;
+
+    if (searchQuery) {
+      // 搜索模式：取消所有清单高亮
+      var allItems = domDefaultLists.querySelectorAll('li');
+      allItems.forEach(function(li) { li.classList.remove('active'); });
+      var customItems = domCustomLists.querySelectorAll('li');
+      customItems.forEach(function(li) { li.classList.remove('active'); });
+    } else {
+      // 清空搜索：恢复到之前选中的清单
+      selectList(activeList);
+      return;
+    }
+
+    updateHeader();
+    renderTasks();
+  }
+
+  // ==========================================================
+  // 主题切换
+  // ==========================================================
+  function toggleTheme() {
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    var next = current === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    saveTheme(theme);
+    // 切换太阳/月亮图标
+    var sunIcon = document.getElementById('themeIconSun');
+    var moonIcon = document.getElementById('themeIconMoon');
+    if (theme === 'dark') {
+      sunIcon.style.display = 'none';
+      moonIcon.style.display = '';
+    } else {
+      sunIcon.style.display = '';
+      moonIcon.style.display = 'none';
+    }
+  }
+
+  // ==========================================================
+  // 全局事件委托（处理动态渲染的任务列表中的点击）
+  // ==========================================================
+  document.addEventListener('click', function(e) {
+    var target = e.target.closest('[data-action]');
+    if (!target) return;
+
+    var action = target.dataset.action;
+    var taskId = target.dataset.taskId || target.dataset.id;
+    var stepIndex = parseInt(target.dataset.stepIndex);
+
+    e.stopPropagation();
+
+    switch (action) {
+      case 'toggleComplete':
+        toggleComplete(taskId);
+        break;
+      case 'toggleImportant':
+        toggleImportant(taskId);
+        break;
+      case 'delete':
+        deleteTask(taskId);
+        break;
+      case 'expand':
+        // 点击任务内容 → 展开/折叠详情面板
+        if (e.target.closest('[data-action]') && !e.target.closest('[data-action="expand"]')) return;
+        expandedTaskId = (expandedTaskId === taskId) ? null : taskId;
+        renderTasks();
+        break;
+      case 'toggleStep':
+        toggleStep(taskId, stepIndex);
+        break;
+      case 'deleteStep':
+        deleteStep(taskId, stepIndex);
+        break;
+      case 'deleteList':
+        deleteCustomList(target.dataset.listId);
+        break;
+      case 'addStepBtn':
+        // 找到同级的输入框
+        var inputEl = target.parentElement.querySelector('[data-action="addStepInput"]');
+        if (inputEl) {
+          addStep(taskId, inputEl.value);
+          inputEl.value = '';
+        }
+        break;
+    }
+  });
+
+  // 键盘事件（步骤输入框回车添加）
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      var addStepInput = e.target.closest('[data-action="addStepInput"]');
+      if (addStepInput) {
+        e.preventDefault();
+        var taskId = addStepInput.dataset.taskId;
+        var title = addStepInput.value;
+        addStep(taskId, title);
+        addStepInput.value = '';
+      }
+    }
+  });
+
+  // 变更事件（日期、提醒 — 使用 change 事件）
+  document.addEventListener('change', function(e) {
+    var target = e.target;
+    var action = target.dataset.action;
+    var taskId = target.dataset.taskId;
+
+    if (action === 'setDueDate') {
+      setDueDate(taskId, target.value);
+    } else if (action === 'setReminder') {
+      setReminder(taskId, target.value);
+    }
+  });
+
+  // 备注使用 blur 事件（避免每次按键都保存）
+  document.addEventListener('blur', function(e) {
+    var target = e.target;
+    if (target.dataset.action === 'setNotes') {
+      setNotes(target.dataset.taskId, target.value);
+    }
+  }, true);
+
+  // ==========================================================
+  // 初始事件绑定（静态 DOM 元素）
+  // ==========================================================
+
+  // 添加任务按钮
+  domAddBtn.addEventListener('click', function() {
+    addTask(domTaskInput.value);
+  });
+
+  // 回车添加任务
+  domTaskInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addTask(domTaskInput.value);
+    }
+  });
+
+  // 默认清单点击
+  domDefaultLists.addEventListener('click', function(e) {
+    var li = e.target.closest('li[data-list]');
+    if (!li) return;
+    if (e.target.closest('[data-action]')) return;
+    selectList(li.dataset.list);
+  });
+
+  // 自定义清单点击
+  domCustomLists.addEventListener('click', function(e) {
+    if (e.target.closest('[data-action="deleteList"]')) return;
+    var li = e.target.closest('li[data-list]');
+    if (!li) return;
+    selectList(li.dataset.list);
+  });
+
+  // 新建清单按钮 → 弹出模态框
+  domAddListBtn.addEventListener('click', function() {
+    var name = prompt('请输入新清单的名称：');
+    if (name !== null) addCustomList(name);
+  });
+
+  // 主题切换
+  domThemeToggle.addEventListener('click', toggleTheme);
+
+  // 搜索输入
+  domSearchInput.addEventListener('input', function(e) {
+    doSearch(e.target.value);
+  });
+
+  // 搜索框按 Escape 清空搜索
+  domSearchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      domSearchInput.value = '';
+      doSearch('');
+    }
+  });
+
+  // 点击任务列表空白区域折叠详情
+  domTaskContainer.addEventListener('click', function(e) {
+    if (e.target === domTaskContainer) {
+      expandedTaskId = null;
+      renderTasks();
+    }
+  });
+
+  // 全局快捷键 Ctrl+K 聚焦搜索框
+  document.addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      domSearchInput.focus();
+      domSearchInput.select();
+    }
+  });
+
+  // ==========================================================
+  // 初始化应用
+  // ==========================================================
+  function init() {
+    // 应用保存的主题
+    applyTheme(loadTheme());
+
+    // 刷新"我的一天"（跨天自动清理）
+    refreshMyDay();
+
+    // 初始渲染
+    renderCustomLists();
+    updateCounts();
+    renderContextIndicator();   // 显示联动指示器
+    updateHeader();
+    renderTasks();
+
+    // 请求浏览器通知权限（用于任务提醒）
+    requestNotificationPermission();
+
+    // 聚焦输入框
+    domTaskInput.focus();
+
+    console.log('✅ Microsoft To Do 应用已就绪');
+    console.log('  ├─ 侧边栏联动已修复：选中「重要」添加 → 自动标星 ⭐');
+    console.log('  ├─ 侧边栏联动已修复：选中「已计划」添加 → 自动设截止日期 📅');
+    console.log('  └─ 侧边栏联动已修复：选中自定义清单添加 → 自动归入该清单 📋');
+    console.log('  💾 数据存储在 localStorage');
+    console.log('  ⌨️  Ctrl+K 快速搜索');
+  }
+
+  init();
+
+})();
+</script>
+</body>
+</html>
