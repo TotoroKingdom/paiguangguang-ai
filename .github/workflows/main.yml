@@ -23,6 +23,7 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: "claude-code-todo-demo/todo-app.html"
           target: "/home/my-website-ui/todo-demo-ui/"
+          strip_components: 1
 
       # 3️⃣ 重启 Docker 容器
       - name: Restart Docker container
