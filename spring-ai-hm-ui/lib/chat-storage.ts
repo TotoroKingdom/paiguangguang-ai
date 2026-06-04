@@ -1,12 +1,18 @@
-import { mockConversations } from "@/lib/mock-data";
 import type { Conversation, Message } from "@/types/chat";
 
 const CHAT_STORAGE_KEY = "spring-ai-hm-ui:conversations";
 const NEW_CONVERSATION_TITLE = "New chat";
 
+export function generateId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+}
+
 export function createConversation(messages: Message[] = []): Conversation {
   return refreshConversationSummary({
-    id: `conv-${crypto.randomUUID()}`,
+    id: `conv-${generateId()}`,
     messages,
     preview: "No messages yet",
     title: NEW_CONVERSATION_TITLE,
@@ -15,7 +21,7 @@ export function createConversation(messages: Message[] = []): Conversation {
 }
 
 export function createInitialConversations() {
-  return mockConversations.map((conversation) => ({ ...conversation }));
+  return [createConversation()];
 }
 
 export function getConversationTitle(prompt: string) {

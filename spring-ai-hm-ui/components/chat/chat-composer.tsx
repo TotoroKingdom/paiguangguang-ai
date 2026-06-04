@@ -70,7 +70,6 @@ export function ChatComposer({ isLoading, onSend, onStop }: ChatComposerProps) {
             rows={1}
             value={value}
             onChange={(event) => handleInputValue(event.target.value)}
-            onInput={(event) => handleInputValue(event.currentTarget.value)}
             onKeyDown={handleKeyDown}
           />
           <Button

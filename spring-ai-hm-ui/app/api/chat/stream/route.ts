@@ -1,10 +1,11 @@
-const DEFAULT_BACKEND_URL = "http://localhost:8080/ai/chat/stream";
+const DEFAULT_BACKEND_URL = "http://localhost:8080/ai/chat/stream/v2";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const prompt = searchParams.get("prompt")?.trim();
+  const conversationId = searchParams.get("conversationId")?.trim();
 
   if (!prompt) {
     return new Response("Prompt is required.", { status: 400 });
@@ -14,6 +15,10 @@ export async function GET(request: Request) {
     process.env.AI_CHAT_BACKEND_URL ?? DEFAULT_BACKEND_URL,
   );
   backendUrl.searchParams.set("prompt", prompt);
+
+  if (conversationId) {
+    backendUrl.searchParams.set("conversationId", conversationId);
+  }
 
   try {
     const upstream = await fetch(backendUrl, {
