@@ -108,66 +108,144 @@ function TextMarkdown({ content }: MarkdownMessageProps) {
 }
 
 function BlockMarkdown({ block }: { block: string }) {
-  const trimmed = block.trim();
-  const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+  const lines = block.split("\n");
+  const elements: ReactNode[] = [];
+  let currentList: string[] = [];
+  let currentOrderedList: string[] = [];
+  let currentQuote: string[] = [];
+  let currentPara: string[] = [];
 
-  if (heading) {
-    const level = heading[1].length;
-    const className =
-      level === 1
-        ? "text-xl font-semibold"
-        : level === 2
-          ? "text-lg font-semibold"
-          : "text-base font-semibold";
-
-    return <div className={className}>{renderInlineMarkdown(heading[2])}</div>;
+  function flushList() {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul className="list-disc space-y-1 pl-5" key={`ul-${elements.length}`}>
+          {currentList.map((line, i) => (
+            <li key={`li-${i}`}>
+              {renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}
+            </li>
+          ))}
+        </ul>,
+      );
+      currentList = [];
+    }
   }
 
-  const lines = trimmed.split("\n");
-
-  if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
-    return (
-      <ul className="list-disc space-y-1 pl-5">
-        {lines.map((line) => (
-          <li key={line}>{renderInlineMarkdown(line.replace(/^\s*[-*]\s+/, ""))}</li>
-        ))}
-      </ul>
-    );
+  function flushOrderedList() {
+    if (currentOrderedList.length > 0) {
+      elements.push(
+        <ol
+          className="list-decimal space-y-1 pl-5"
+          key={`ol-${elements.length}`}
+        >
+          {currentOrderedList.map((line, i) => (
+            <li key={`oli-${i}`}>
+              {renderInlineMarkdown(line.replace(/^\s*\d+\.\s+/, ""))}
+            </li>
+          ))}
+        </ol>,
+      );
+      currentOrderedList = [];
+    }
   }
 
-  if (lines.every((line) => /^\s*\d+\.\s+/.test(line))) {
-    return (
-      <ol className="list-decimal space-y-1 pl-5">
-        {lines.map((line) => (
-          <li key={line}>{renderInlineMarkdown(line.replace(/^\s*\d+\.\s+/, ""))}</li>
-        ))}
-      </ol>
-    );
+  function flushQuote() {
+    if (currentQuote.length > 0) {
+      elements.push(
+        <blockquote
+          className="border-l-2 border-zinc-300 pl-3 text-zinc-700"
+          key={`bq-${elements.length}`}
+        >
+          {currentQuote.map((line, i) => (
+            <span key={`bql-${i}`}>
+              {i > 0 ? <br /> : null}
+              {renderInlineMarkdown(line.replace(/^\s*>\s?/, ""))}
+            </span>
+          ))}
+        </blockquote>,
+      );
+      currentQuote = [];
+    }
   }
 
-  if (lines.every((line) => /^\s*>\s?/.test(line))) {
-    return (
-      <blockquote className="border-l-2 border-zinc-300 pl-3 text-zinc-700">
-        {lines.map((line, index) => (
-          <span key={line}>
-            {index > 0 ? <br /> : null}
-            {renderInlineMarkdown(line.replace(/^\s*>\s?/, ""))}
-          </span>
-        ))}
-      </blockquote>
-    );
+  function flushPara() {
+    if (currentPara.length > 0) {
+      elements.push(
+        <p
+          className="whitespace-pre-wrap break-words"
+          key={`p-${elements.length}`}
+        >
+          {currentPara.map((line, i) => (
+            <span key={`pl-${i}`}>
+              {i > 0 ? <br /> : null}
+              {renderInlineMarkdown(line)}
+            </span>
+          ))}
+        </p>,
+      );
+      currentPara = [];
+    }
   }
 
-  return (
-    <p className="whitespace-pre-wrap break-words">
-      {lines.map((line, index) => (
-        <span key={`${index}-${line}`}>
-          {index > 0 ? <br /> : null}
-          {renderInlineMarkdown(line)}
-        </span>
-      ))}
-    </p>
-  );
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
+
+    if (headingMatch) {
+      flushList();
+      flushOrderedList();
+      flushQuote();
+      flushPara();
+      const level = headingMatch[1].length;
+      const className =
+        level === 1
+          ? "text-xl font-semibold"
+          : level === 2
+            ? "text-lg font-semibold"
+            : "text-base font-semibold";
+      elements.push(
+        <div className={className} key={`h-${elements.length}`}>
+          {renderInlineMarkdown(headingMatch[2])}
+        </div>,
+      );
+      continue;
+    }
+
+    if (/^\s*[-*]\s+/.test(line)) {
+      flushOrderedList();
+      flushQuote();
+      flushPara();
+      currentList.push(line);
+      continue;
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      flushList();
+      flushQuote();
+      flushPara();
+      currentOrderedList.push(line);
+      continue;
+    }
+
+    if (/^\s*>\s?/.test(line)) {
+      flushList();
+      flushOrderedList();
+      flushPara();
+      currentQuote.push(line);
+      continue;
+    }
+
+    flushList();
+    flushOrderedList();
+    flushQuote();
+    currentPara.push(line);
+  }
+
+  flushList();
+  flushOrderedList();
+  flushQuote();
+  flushPara();
+
+  return <>{elements}</>;
 }
 
 function renderInlineMarkdown(text: string) {

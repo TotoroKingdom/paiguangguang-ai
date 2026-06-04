@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import {
   createConversation,
   createInitialConversations,
+  generateId,
   loadConversations,
   refreshConversationSummary,
   saveConversations,
@@ -124,13 +125,14 @@ export function ChatLayout() {
     let streamedContent = "";
 
     try {
-      const response = await fetch(
-        `/api/chat/stream?prompt=${encodeURIComponent(prompt)}`,
-        {
-          cache: "no-store",
-          signal: abortController.signal,
-        },
-      );
+      const streamUrl = new URL("/api/chat/stream", window.location.href);
+      streamUrl.searchParams.set("prompt", prompt);
+      streamUrl.searchParams.set("conversationId", conversationId);
+
+      const response = await fetch(streamUrl.toString(), {
+        cache: "no-store",
+        signal: abortController.signal,
+      });
 
       if (!response.ok) {
         const message = await response.text().catch(() => "");
@@ -203,29 +205,28 @@ export function ChatLayout() {
     }
 
     let conversationId = activeConversation?.id;
+    let targetConversation = activeConversation;
 
     if (!conversationId) {
       const conversation = createConversation();
       conversationId = conversation.id;
+      targetConversation = conversation;
       setConversations((current) => [conversation, ...current]);
       setActiveConversationId(conversation.id);
     }
 
-    const currentConversation = conversations.find(
-      (conversation) => conversation.id === conversationId,
-    );
-    const shouldRename = !currentConversation?.messages.some(
+    const shouldRename = !targetConversation?.messages.some(
       (message) => message.role === "user",
     );
     const userMessage: Message = {
-      id: `msg-${crypto.randomUUID()}`,
+      id: `msg-${generateId()}`,
       role: "user",
       content,
       createdAt: "Just now",
       status: "complete",
     };
     const assistantMessage: Message = {
-      id: `msg-${crypto.randomUUID()}`,
+      id: `msg-${generateId()}`,
       role: "assistant",
       content: "",
       createdAt: "Just now",

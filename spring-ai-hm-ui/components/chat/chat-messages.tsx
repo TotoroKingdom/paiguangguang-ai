@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bot,
   Loader2,
@@ -27,13 +27,35 @@ export function ChatMessages({
   onRegenerate,
 }: ChatMessagesProps) {
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [messages]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const threshold = 80;
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      setIsAtBottom(distanceFromBottom < threshold);
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (isAtBottom && bottomRef.current) {
+      bottomRef.current.scrollIntoView({
+        block: "end",
+        behavior: isLoading ? "auto" : "smooth",
+      });
+    }
+  }, [messages, isAtBottom, isLoading]);
 
   return (
-    <ScrollArea className="min-h-0 flex-1">
+    <ScrollArea ref={scrollContainerRef} className="min-h-0 flex-1">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         {messages.length === 0 ? (
           <div className="flex min-h-[45vh] flex-col items-center justify-center text-center">
