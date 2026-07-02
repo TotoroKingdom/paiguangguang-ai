@@ -1,29 +1,126 @@
-```
-V1：作品集可展示 + 基础 AI 问答
+# Roadmap
+
+## V1: Foundation + Portfolio Chat
+
+Goal: create a runnable full-stack portfolio base with one working AI chat module.
+
+Deliverables:
+
+- Next.js frontend skeleton with routes `/`, `/agents/knowledge`, `/agents/browser`, `/agents/office`, `/architecture`
+- FastAPI backend skeleton with `/api/v1/health`
+- Shared response envelope for backend JSON APIs
+- Basic navigation and layout
+- Portfolio Chat backend API using DeepSeek
+- Portfolio Chat UI connected to backend
+
+Not included:
+
+- No RAG
+- No Chroma
+- No Redis
+- No LangGraph
+- No file upload
+
+Acceptance:
+
+- Frontend starts locally
+- Backend starts locally
+- `/api/v1/health` returns the standard response envelope
+- Portfolio Chat works end to end when `DEEPSEEK_API_KEY` is configured
+- Missing API key produces a clear configuration error
+
+Verification commands:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
 ```
 
-- 搭建 Next.js + FastAPI 基础工程。
-- 完成首页、模块导航、项目展示页。
-- 完成 Portfolio Chat Agent，先用静态项目资料 + DeepSeek。
-- 完成基础 API client、错误处理、loading 状态。
-- 目标：网站能展示能力，并能围绕你的项目进行聊天。
-
-```
-V2：RAG + 架构可视化
+```powershell
+cd backend
+python -m pytest
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-- 引入 Chroma，完成文档入库、切分、检索、引用来源返回。
-- 完成 Enterprise RAG Agent 页面。
-- 完成 React Flow 架构图页面，展示 RAG、Agent、Tool Calling 架构。
-- 加入 Redis 存会话上下文和任务状态。
-- 目标：体现真正 AI 工程能力，而不是单纯聊天壳。
+## V2: Knowledge Agent + Architecture Visualization
 
-```
-V3：LangGraph + 多 Agent + Office 自动化
+Goal: add the real RAG demo and visual architecture explanation.
+
+Deliverables:
+
+- Document upload/register API
+- Deterministic text extraction and fixed-size chunking
+- Embedding wrapper
+- Chroma storage and similarity search
+- RAG query API with answer and citations
+- Knowledge Agent frontend page
+- React Flow architecture page
+
+Not included:
+
+- No Browser Agent implementation
+- No Office Agent implementation
+- No LangGraph
+- No Redis requirement unless explicitly needed by a task
+
+Acceptance:
+
+- Uploaded text can be chunked deterministically
+- Chunks can be stored and retrieved from Chroma
+- RAG answer includes source metadata
+- Architecture graph renders and node detail panel works
+
+Verification commands:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
 ```
 
-- 引入 LangGraph 编排 Agent 流程。
-- 完成 Office Automation Agent，例如生成文档摘要、表格分析、PPT 大纲。
-- 完成 Multi-Agent Research System，包括规划、搜索、总结、报告生成。
-- 增加任务进度流式展示、失败重试、工具调用日志。
-- 目标：形成完整 AI Engineer Portfolio Demo。
+```powershell
+cd backend
+python -m pytest
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+## V3: Agent Workflows + Task Events
+
+Goal: add mock tool-calling agents and visible task execution state.
+
+Deliverables:
+
+- Browser Agent mock workflow API and UI
+- Office Agent mock workflow API and UI
+- Agent step traces with structured output
+- Redis-backed task state if long-running execution is introduced
+- SSE task event endpoint
+- Optional LangGraph orchestration for agent state flow
+
+Not included:
+
+- No real browser automation
+- No real Office file editing
+- No production authentication
+
+Acceptance:
+
+- Browser Agent shows plan, mock search steps, intermediate results, and final answer
+- Office Agent shows tool calls and structured final result
+- Task status endpoint returns current state
+- SSE endpoint streams task progress when a task is running
+
+Verification commands:
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+```powershell
+cd backend
+python -m pytest
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
