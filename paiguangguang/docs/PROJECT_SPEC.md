@@ -1,241 +1,109 @@
-- # AI Engineer Portfolio System
+# AI Engineer Portfolio System
 
-  ## 1. Project Goal
+## 1. Project Goal
 
-  Build an AI engineering portfolio website that demonstrates strong system design and implementation skills in:
+Build an interactive AI engineering portfolio website that demonstrates real full-stack AI application ability.
 
-  - LLM application engineering
-  - RAG systems
-  - Agent orchestration (LangGraph)
-  - Tool calling systems
-  - AI system visualization
+This is not a static resume site. It should behave like a mini AI product where visitors can see, use, and inspect AI workflows.
 
-  This is NOT a static portfolio website.
+## 2. Unified Module Scope
 
-  It is an interactive AI system demo platform.
+The project contains five modules:
 
-  The website itself should feel like an AI product.
+| Module | Route | Phase | Purpose |
+| --- | --- | --- | --- |
+| Portfolio Chat | `/` and chat panel | V1 | Chat with static personal/project profile data |
+| Knowledge Agent | `/agents/knowledge` | V2 | Enterprise-style RAG demo with upload, retrieval, and citations |
+| Browser Agent | `/agents/browser` | V3 | Mock web research workflow showing planning, tool calls, and synthesis |
+| Office Agent | `/agents/office` | V3 | Mock office automation workflow showing structured tool execution |
+| Architecture Visualization | `/architecture` | V2 | Interactive system and AI workflow visualization |
 
-  ---
+Portfolio Chat is the lightweight V1 assistant. Knowledge Agent is the full RAG implementation. Browser Agent and Office Agent are separate tool-calling demos.
 
-  ## 2. Core System Overview
+## 3. Page Requirements
 
-  The system consists of three main AI Agents + one visualization layer:
+| Route | Required Experience |
+| --- | --- |
+| `/` | Hero section with interactive Agent Workflow and RAG Pipeline previews, plus entry points to all modules |
+| `/agents/knowledge` | Document upload, query input, answer panel, source/citation display |
+| `/agents/browser` | Research prompt input, visible plan, mock search steps, final answer |
+| `/agents/office` | Workflow input, visible tool steps, structured result |
+| `/architecture` | React Flow graph with clickable nodes and detail panel |
 
-  ### 1) Enterprise Knowledge Base Agent (RAG Agent)
-  - Chat with uploaded enterprise documents
-  - Supports semantic retrieval + citation
-  - Demonstrates RAG pipeline
+## 4. AI Workflow Requirements
 
-  ### 2) Browser Agent (Web Research Agent)
-  - Simulates browsing + information gathering workflow
-  - Demonstrates tool calling + reasoning
-  - Multi-step planning and execution
+All AI-facing modules should expose the workflow, not only the final answer.
 
-  ### 3) Office Automation Agent
-  - Automates office workflows (reports, emails, data processing)
-  - Demonstrates tool use + workflow orchestration
+Common pipeline:
 
-  ---
+```text
+User Input -> Planner or Prompt Layer -> Tool/Retrieval Layer -> LLM Response -> Visible Result
+```
 
-  ## 3. Homepage Requirement (IMPORTANT)
+Knowledge Agent requirements:
 
-  The homepage must include a HERO SECTION that visually represents:
+- Document upload
+- Text extraction
+- Fixed-size chunking for MVP
+- Embedding generation
+- Chroma vector retrieval
+- Context assembly
+- Answer with citations
 
-  ### 3.1 Agent Workflow Visualization
+Browser Agent requirements:
 
-  Show an interactive flow diagram:
+- Mock search tool
+- Multi-step plan
+- Intermediate results
+- Final synthesized answer
 
-  User Input
-  → Intent Analysis
-  → Agent Router
-  → Selected Agent
-  → Tool Execution
-  → Final Response
+Office Agent requirements:
 
-  Agents:
-  - Knowledge Agent
-  - Browser Agent
-  - Office Agent
+- Mock tools such as `generate_report`, `summarize_data`, and `write_email`
+- Step-by-step execution output
+- Structured final result
 
-  ---
+## 5. Technology Stack
 
-  ### 3.2 RAG Pipeline Visualization
+Frontend:
 
-  Show RAG flow:
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- React Flow
+- Framer Motion
 
-  Document Upload
-  → Chunking
-  → Embedding
-  → Vector Search
-  → Retrieval
-  → LLM Generation
-  → Answer with Citations
+Backend:
 
-  This should be visually interactive (not static text).
+- FastAPI
+- Python
+- Pydantic
 
-  ---
+AI Layer:
 
-  ## 4. Pages Structure
+- DeepSeek API using OpenAI-compatible chat format
+- LangGraph in V3 only
+- Prompt templates per module
 
-  ### /
-  - Hero section (Agent + RAG visualization)
-  - Entry points to 3 agents
+Storage:
 
-  ### /agents/knowledge
-  Enterprise Knowledge Base Agent (RAG system demo)
+- Chroma for vector storage starting in V2
+- Redis for long-running task state and event streaming starting in V3
+- No relational database in MVP unless a future task explicitly adds one
 
-  ### /agents/browser
-  Browser Agent (web reasoning simulation)
+## 6. Non-Goals
 
-  ### /agents/office
-  Office Automation Agent (workflow + tools)
-
-  ### /architecture
-  Full system architecture visualization
-
-  ---
-
-  ## 5. Agent Design Requirements
-
-  All agents must follow a structured pipeline:
-
-  ### Common Architecture:
-
-  User Input
-  → Planner (LLM reasoning)
-  → Tool Selection (if needed)
-  → Execution Layer
-  → Response Generator
-
-  ---
-
-  ### 5.1 Knowledge Agent (RAG)
-
-  Must include:
-
-  - Document upload
-  - Chunking strategy
-  - Embedding generation
-  - Vector database retrieval
-  - Reranking (optional)
-  - Citation in answers
-
-  Must support:
-  - multi-document context
-  - source tracing
-
-  ---
-
-  ### 5.2 Browser Agent
-
-  Simulates:
-
-  - search planning
-  - multi-step reasoning
-  - tool calling (mock web search)
-  - result aggregation
-
-  Must show:
-  - step-by-step reasoning process
-  - intermediate results
-
-  ---
-
-  ### 5.3 Office Automation Agent
-
-  Must support workflows like:
-
-  - generate report
-  - analyze dataset
-  - simulate email writing
-  - structured output generation
-
-  Must demonstrate:
-  - tool calling
-  - workflow orchestration
-  - structured outputs
-
-  ---
-
-  ## 6. Technology Stack
-
-  ### Frontend
-  - Next.js (App Router)
-  - TypeScript
-  - Tailwind CSS
-  - React Flow (for visualization)
-  - Framer Motion (animations)
-
-  ### Backend
-  - FastAPI
-  - Python
-
-  ### AI Layer
-  - DeepSeek API (OpenAI-compatible)
-  - Prompt engineering
-  - Optional: LangGraph for orchestration
-
-  ### Storage
-  - Vector DB: Chroma or Milvus Lite
-  - Cache: Redis (optional)
-
-  ---
-
-  ## 7. Key Engineering Requirements
-
-  ### 7.1 RAG System Must Include
-  - Chunking strategy
-  - Embedding pipeline
-  - Vector retrieval
-  - Context assembly
-  - Answer generation with citations
-
-  ---
-
-  ### 7.2 Agent System Must Include
-  - Planner (LLM)
-  - Tool router
-  - Execution layer
-  - State management (optional LangGraph)
-
-  ---
-
-  ### 7.3 Visualization Requirements
-  - Interactive graphs (not static images)
-  - Clickable nodes
-  - Expandable workflow steps
-  - Real-time state display
-
-  ---
-
-  ## 8. Non-Goals
-
-  - No fine-tuning models
-  - No local LLM hosting
-  - No distributed system complexity
-  - No authentication system in MVP
-
-  ---
-
-  ## 9. Development Principle
-
-  The system must be:
-
-  - Modular
-  - Demo-friendly
-  - Interview explainable
-  - Production-structured (but simplified)
-
-  ---
-
-  ## 10. Final Outcome
-
-  This project should allow demonstration of:
-
-  - RAG engineering ability
-  - Agent system design ability
-  - LLM application architecture understanding
-  - Full-stack AI system implementation
-
-  The website itself should behave like a mini AI product.
+- No local model training
+- No local LLM hosting
+- No production authentication in MVP
+- No complex distributed system
+- No real browser automation in MVP Browser Agent
+- No real Office file mutation in MVP Office Agent
+
+## 7. Development Principles
+
+- Build one task at a time from `docs/codex_tasks.md`
+- Keep implementation modular and interview-explainable
+- Prefer visible workflow state over hidden AI behavior
+- Keep V1 simple enough to run locally
+- Do not introduce future-phase dependencies early
