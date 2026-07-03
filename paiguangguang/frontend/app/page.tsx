@@ -46,6 +46,24 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="grid gap-4 md:grid-cols-3">
+        <div className="border border-ink/10 bg-white/60 p-5">
+          <p className="text-sm font-semibold uppercase text-clay">V1</p>
+          <h2 className="mt-2 text-xl font-semibold text-ink">Portfolio Chat</h2>
+          <p className="mt-3 leading-7 text-ink/70">A lightweight assistant surface for your personal and project story.</p>
+        </div>
+        <div className="border border-ink/10 bg-white/60 p-5">
+          <p className="text-sm font-semibold uppercase text-clay">V2</p>
+          <h2 className="mt-2 text-xl font-semibold text-ink">Knowledge Agent</h2>
+          <p className="mt-3 leading-7 text-ink/70">A future RAG workspace for retrieval, citations, and knowledge exploration.</p>
+        </div>
+        <div className="border border-ink/10 bg-white/60 p-5">
+          <p className="text-sm font-semibold uppercase text-clay">V3</p>
+          <h2 className="mt-2 text-xl font-semibold text-ink">Agent Workflows</h2>
+          <p className="mt-3 leading-7 text-ink/70">Mock browser and office agents that reveal planning and execution.</p>
+        </div>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-2">
         {modules.map((module) => (
           <Link

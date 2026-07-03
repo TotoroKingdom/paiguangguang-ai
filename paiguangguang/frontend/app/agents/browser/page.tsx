@@ -1,11 +1,16 @@
+import { PageShell } from "@/components/page-shell";
+
 export default function BrowserAgentPage() {
   return (
-    <section className="space-y-5">
-      <p className="text-sm font-semibold uppercase text-clay">V3 Module Placeholder</p>
-      <h1 className="text-4xl font-semibold text-ink">Browser Agent</h1>
-      <p className="max-w-3xl text-lg leading-8 text-ink/70">
-        This route is reserved for the mock web research workflow with planning, search steps, intermediate results, and a final answer.
-      </p>
-    </section>
+    <PageShell
+      eyebrow="V3 Module Placeholder"
+      title="Browser Agent"
+      description="This route is reserved for the mock web research workflow with planning, search steps, intermediate results, and a final answer."
+      status="Workflow Focus"
+    >
+      <div className="border-l-4 border-brass bg-paper px-4 py-3">Planning and intent capture zone</div>
+      <div className="border-l-4 border-tide bg-paper px-4 py-3">Search trace and intermediate results</div>
+      <div className="border-l-4 border-clay bg-paper px-4 py-3">Final synthesis and response panel</div>
+    </PageShell>
   );
 }

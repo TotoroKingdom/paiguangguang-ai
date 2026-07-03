@@ -1,11 +1,16 @@
+import { PageShell } from "@/components/page-shell";
+
 export default function OfficeAgentPage() {
   return (
-    <section className="space-y-5">
-      <p className="text-sm font-semibold uppercase text-clay">V3 Module Placeholder</p>
-      <h1 className="text-4xl font-semibold text-ink">Office Agent</h1>
-      <p className="max-w-3xl text-lg leading-8 text-ink/70">
-        This route is reserved for mock office automation workflows that show tool calls and structured outputs.
-      </p>
-    </section>
+    <PageShell
+      eyebrow="V3 Module Placeholder"
+      title="Office Agent"
+      description="This route is reserved for mock office automation workflows that show tool calls and structured outputs."
+      status="Tool Focus"
+    >
+      <div className="border-l-4 border-brass bg-paper px-4 py-3">Task planning and tool selection</div>
+      <div className="border-l-4 border-tide bg-paper px-4 py-3">Step-by-step execution log</div>
+      <div className="border-l-4 border-clay bg-paper px-4 py-3">Structured output and summary</div>
+    </PageShell>
   );
 }
