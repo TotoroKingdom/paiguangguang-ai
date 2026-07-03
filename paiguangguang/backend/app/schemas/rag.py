@@ -47,3 +47,21 @@ class RagIngestData(BaseModel):
     text_length: int
     chunk_count: int
     chunks: list[RagChunkData]
+
+
+class RagQueryRequest(BaseModel):
+    question: str = Field(min_length=1, max_length=4000)
+    collection: str = Field(min_length=1, max_length=128)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class RagSourceData(BaseModel):
+    doc_id: str
+    chunk_id: str
+    text: str
+    score: float
+
+
+class RagQueryData(BaseModel):
+    answer: str
+    sources: list[RagSourceData]
