@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { PortfolioChatPanel } from "@/features/portfolio-chat/portfolio-chat-panel";
+
 const modules = [
   {
     title: "Knowledge Agent",
@@ -26,7 +28,7 @@ const modules = [
 export default function HomePage() {
   return (
     <div className="space-y-10">
-      <section className="grid gap-8 md:grid-cols-[1.15fr_0.85fr] md:items-center">
+      <section className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
         <div className="space-y-6">
           <p className="text-sm font-semibold uppercase text-clay">AI Engineer Portfolio</p>
           <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-ink md:text-6xl">
@@ -35,16 +37,23 @@ export default function HomePage() {
           <p className="max-w-2xl text-lg leading-8 text-ink/70">
             A staged portfolio platform for Portfolio Chat, RAG, tool-calling agents, and architecture visualization.
           </p>
+          <div className="flex flex-wrap gap-3 text-sm font-medium text-ink/70">
+            <span className="border border-ink/10 bg-white/60 px-3 py-2">V1 Chat live</span>
+            <span className="border border-ink/10 bg-white/60 px-3 py-2">V2 RAG ready</span>
+            <span className="border border-ink/10 bg-white/60 px-3 py-2">V3 agents planned</span>
+          </div>
         </div>
         <div className="border border-ink/10 bg-white/65 p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-tide">V1 Frontend Skeleton</p>
+          <p className="mb-4 text-sm font-semibold text-tide">Portfolio Chat Workflow</p>
           <div className="space-y-3 text-sm text-ink/70">
-            <div className="border-l-4 border-brass bg-paper px-4 py-3">User Input</div>
-            <div className="border-l-4 border-tide bg-paper px-4 py-3">Portfolio Chat</div>
-            <div className="border-l-4 border-clay bg-paper px-4 py-3">Visible AI Workflow</div>
+            <div className="border-l-4 border-brass bg-paper px-4 py-3">User asks about the portfolio</div>
+            <div className="border-l-4 border-tide bg-paper px-4 py-3">Backend keeps session memory</div>
+            <div className="border-l-4 border-clay bg-paper px-4 py-3">DeepSeek returns a project-aware reply</div>
           </div>
         </div>
       </section>
+
+      <PortfolioChatPanel />
 
       <section className="grid gap-4 md:grid-cols-3">
         <div className="border border-ink/10 bg-white/60 p-5">
