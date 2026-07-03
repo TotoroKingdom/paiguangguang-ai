@@ -1,16 +1,27 @@
 import { PageShell } from "@/components/page-shell";
+import { KnowledgeAgentWorkspace } from "@/features/knowledge-agent/knowledge-agent-workspace";
 
 export default function KnowledgeAgentPage() {
   return (
-    <PageShell
-      eyebrow="V2 Module Placeholder"
-      title="Knowledge Agent"
-      description="This route is reserved for the enterprise RAG demo with document ingestion, retrieval, answers, and citations."
-      status="Layout Focus"
-    >
-      <div className="border-l-4 border-brass bg-paper px-4 py-3">Document upload and ingestion area</div>
-      <div className="border-l-4 border-tide bg-paper px-4 py-3">Question and answer workspace</div>
-      <div className="border-l-4 border-clay bg-paper px-4 py-3">Sources and citation rail</div>
-    </PageShell>
+    <div className="space-y-8">
+      <PageShell
+        eyebrow="V2 Live Module"
+        title="Knowledge Agent"
+        description="Upload or paste reference text, index it into Chroma, and ask questions with visible sources and citations."
+        status="RAG Workspace"
+      >
+        <div className="border-l-4 border-brass bg-paper px-4 py-3">
+          Ingest text from a file or paste area into the retrieval collection.
+        </div>
+        <div className="border-l-4 border-tide bg-paper px-4 py-3">
+          Query the backend for answers grounded in retrieved chunks.
+        </div>
+        <div className="border-l-4 border-clay bg-paper px-4 py-3">
+          Review doc IDs, chunk IDs, and scores in the citation rail.
+        </div>
+      </PageShell>
+
+      <KnowledgeAgentWorkspace />
+    </div>
   );
 }
