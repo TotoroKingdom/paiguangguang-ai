@@ -31,3 +31,4 @@ class OfficeAgentRunData(BaseModel):
     prompt: str
     steps: list[OfficeAgentStepData]
     final_output: OfficeAgentFinalOutputData
+    task_id: str | None = None

@@ -31,3 +31,4 @@ class BrowserAgentRunData(BaseModel):
     steps: list[BrowserAgentStepData]
     search_results: list[BrowserSearchResultData]
     final_answer: str
+    task_id: str | None = None

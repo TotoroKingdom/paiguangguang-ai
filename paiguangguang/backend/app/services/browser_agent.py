@@ -8,6 +8,7 @@ from app.schemas.browser import (
     BrowserAgentStepData,
     BrowserSearchResultData,
 )
+from app.services.task_service import TaskService, get_task_service
 from app.tools.browser_search import MockBrowserSearchResult, MockBrowserSearchTool
 
 
@@ -117,79 +118,111 @@ def _build_plan(prompt: str, search_query: str) -> list[BrowserAgentStepData]:
 
 
 class BrowserAgentService:
-    def __init__(self, search_tool: MockBrowserSearchTool | None = None) -> None:
+    def __init__(
+        self,
+        search_tool: MockBrowserSearchTool | None = None,
+        task_service: TaskService | None = None,
+    ) -> None:
         self.search_tool = search_tool or MockBrowserSearchTool()
+        self.task_service = task_service or get_task_service()
 
     def run(self, request: BrowserAgentRequest) -> BrowserAgentRunData:
         prompt = request.prompt.strip()
         search_query = _build_search_query(prompt)
-        plan_steps = _build_plan(prompt, search_query)
-        search_results = self.search_tool.search(search_query, top_k=request.top_k)
-
-        steps = [
-            *plan_steps,
-            BrowserAgentStepData(
-                step_id="step-4",
-                kind="tool_call",
-                title="Call mock search tool",
-                detail="Execute the deterministic browser search simulation.",
-                data={
-                    "tool": "mock_browser_search",
-                    "query": search_query,
-                    "top_k": request.top_k,
-                },
-            ),
-            BrowserAgentStepData(
-                step_id="step-5",
-                kind="observation",
-                title="Review intermediate results",
-                detail="Inspect the top-ranked mock results and extract evidence for synthesis.",
-                data={
-                    "results": [
-                        BrowserSearchResultData(
-                            title=result.title,
-                            url=result.url,
-                            snippet=result.snippet,
-                            score=result.score,
-                        ).model_dump()
-                        for result in search_results
-                    ],
-                },
-            ),
-            BrowserAgentStepData(
-                step_id="step-6",
-                kind="synthesis",
-                title="Write final answer",
-                detail="Assemble a final response grounded in the strongest mock references.",
-                data={
-                    "evidence": [
-                        {
-                            "title": result.title,
-                            "url": result.url,
-                            "score": result.score,
-                        }
-                        for result in search_results
-                    ]
-                },
-            ),
-        ]
-
-        final_answer = self._synthesize_answer(prompt, search_query, search_results)
-        return BrowserAgentRunData(
-            prompt=prompt,
-            search_query=search_query,
-            steps=steps,
-            search_results=[
-                BrowserSearchResultData(
-                    title=result.title,
-                    url=result.url,
-                    snippet=result.snippet,
-                    score=result.score,
-                )
-                for result in search_results
-            ],
-            final_answer=final_answer,
+        task_id = self.task_service.start_task(
+            task_type="browser_agent",
+            title="Browser research workflow",
+            metadata={
+                "prompt": prompt,
+                "top_k": request.top_k,
+            },
         )
+
+        try:
+            plan_steps = _build_plan(prompt, search_query)
+            search_results = self.search_tool.search(search_query, top_k=request.top_k)
+
+            steps = [
+                *plan_steps,
+                BrowserAgentStepData(
+                    step_id="step-4",
+                    kind="tool_call",
+                    title="Call mock search tool",
+                    detail="Execute the deterministic browser search simulation.",
+                    data={
+                        "tool": "mock_browser_search",
+                        "query": search_query,
+                        "top_k": request.top_k,
+                    },
+                ),
+                BrowserAgentStepData(
+                    step_id="step-5",
+                    kind="observation",
+                    title="Review intermediate results",
+                    detail="Inspect the top-ranked mock results and extract evidence for synthesis.",
+                    data={
+                        "results": [
+                            BrowserSearchResultData(
+                                title=result.title,
+                                url=result.url,
+                                snippet=result.snippet,
+                                score=result.score,
+                            ).model_dump()
+                            for result in search_results
+                        ],
+                    },
+                ),
+                BrowserAgentStepData(
+                    step_id="step-6",
+                    kind="synthesis",
+                    title="Write final answer",
+                    detail="Assemble a final response grounded in the strongest mock references.",
+                    data={
+                        "evidence": [
+                            {
+                                "title": result.title,
+                                "url": result.url,
+                                "score": result.score,
+                            }
+                            for result in search_results
+                        ]
+                    },
+                ),
+            ]
+
+            for index, step in enumerate(steps, start=1):
+                self.task_service.record_step(task_id, step=step.model_dump(mode="json"), index=index, total=len(steps))
+
+            final_answer = self._synthesize_answer(prompt, search_query, search_results)
+            result = BrowserAgentRunData(
+                prompt=prompt,
+                search_query=search_query,
+                steps=steps,
+                search_results=[
+                    BrowserSearchResultData(
+                        title=result.title,
+                        url=result.url,
+                        snippet=result.snippet,
+                        score=result.score,
+                    )
+                    for result in search_results
+                ],
+                final_answer=final_answer,
+                task_id=task_id,
+            )
+            self.task_service.complete_task(task_id, output=result.model_dump(mode="json"))
+            return result
+        except Exception as exc:
+            self.task_service.fail_task(
+                task_id,
+                message="Browser workflow failed",
+                error=str(exc),
+                payload={
+                    "prompt": prompt,
+                    "search_query": search_query,
+                },
+            )
+            raise
 
     @staticmethod
     def _synthesize_answer(
