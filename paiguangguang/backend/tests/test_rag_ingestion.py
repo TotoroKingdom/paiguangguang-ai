@@ -22,7 +22,7 @@ def test_chunk_text_is_deterministic() -> None:
     assert first[0].start_char == 0
 
     repository = RagDocumentRepository()
-    service = RagIngestionService(repository=repository)
+    service = RagIngestionService(repository=repository, index_to_vector_store=False)
     registration_one = service.register_document(
         RagDocumentCreateRequest(title="Stable Notes", text=text)
     )
@@ -36,7 +36,7 @@ def test_chunk_text_is_deterministic() -> None:
 
 def test_register_and_ingest_document_from_text() -> None:
     repository = RagDocumentRepository()
-    service = RagIngestionService(repository=repository)
+    service = RagIngestionService(repository=repository, index_to_vector_store=False)
 
     registration = service.register_document(
         RagDocumentCreateRequest(
@@ -59,9 +59,48 @@ def test_register_and_ingest_document_from_text() -> None:
     assert ingestion.chunks[0].text
 
 
+def test_ingestion_indexes_chunks_when_vector_store_is_enabled() -> None:
+    class FakeVectorStore:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        def index_ingestion(self, collection_name, *, doc_id, title, content_hash, chunks):
+            self.calls.append(
+                {
+                    "collection_name": collection_name,
+                    "doc_id": doc_id,
+                    "title": title,
+                    "content_hash": content_hash,
+                    "chunks": list(chunks),
+                }
+            )
+            return len(chunks)
+
+    repository = RagDocumentRepository()
+    vector_store = FakeVectorStore()
+    service = RagIngestionService(
+        repository=repository,
+        vector_store=vector_store,  # type: ignore[arg-type]
+    )
+
+    service.ingest_document(
+        RagIngestRequest(
+            text="Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau.",
+            chunk_size=25,
+            chunk_overlap=5,
+        )
+    )
+
+    assert len(vector_store.calls) == 1
+    assert vector_store.calls[0]["collection_name"] == "portfolio_knowledge"
+    assert vector_store.calls[0]["doc_id"]
+    assert vector_store.calls[0]["content_hash"]
+    assert len(vector_store.calls[0]["chunks"]) >= 2
+
+
 def test_rag_endpoints_return_expected_payloads() -> None:
     repository = RagDocumentRepository()
-    service = RagIngestionService(repository=repository)
+    service = RagIngestionService(repository=repository, index_to_vector_store=False)
     app.dependency_overrides[get_rag_ingestion_service] = lambda: service
     client = TestClient(app)
 

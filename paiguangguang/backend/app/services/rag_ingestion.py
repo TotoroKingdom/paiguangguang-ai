@@ -9,6 +9,8 @@ from app.schemas.rag import (
     RagIngestData,
     RagIngestRequest,
 )
+from app.core.config import get_settings
+from app.storage.chroma_store import ChromaRagStore, get_chroma_rag_store
 from app.storage.rag_documents import (
     RagChunkRecord,
     RagDocumentRecord,
@@ -70,8 +72,17 @@ def chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[RagChu
 
 
 class RagIngestionService:
-    def __init__(self, repository: RagDocumentRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: RagDocumentRepository | None = None,
+        vector_store: ChromaRagStore | None = None,
+        collection_name: str | None = None,
+        index_to_vector_store: bool = True,
+    ) -> None:
+        settings = get_settings()
         self.repository = repository or get_rag_document_repository()
+        self.vector_store = (vector_store or get_chroma_rag_store()) if index_to_vector_store else None
+        self.collection_name = collection_name or settings.rag_collection_name
 
     def register_document(self, request: RagDocumentCreateRequest) -> RagDocumentData:
         normalized_text = normalize_text(request.text)
@@ -136,6 +147,14 @@ class RagIngestionService:
             chunks=chunks,
         )
         self.repository.upsert_ingestion(ingestion)
+        if self.vector_store and chunks:
+            self.vector_store.index_ingestion(
+                self.collection_name,
+                doc_id=doc_id,
+                title=title,
+                content_hash=content_hash,
+                chunks=chunks,
+            )
         return RagIngestData(
             doc_id=doc_id,
             title=title,
