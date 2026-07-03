@@ -1,16 +1,27 @@
 import { PageShell } from "@/components/page-shell";
+import { BrowserAgentWorkspace } from "@/features/browser-agent/browser-agent-workspace";
 
 export default function BrowserAgentPage() {
   return (
-    <PageShell
-      eyebrow="V3 Module Placeholder"
-      title="Browser Agent"
-      description="This route is reserved for the mock web research workflow with planning, search steps, intermediate results, and a final answer."
-      status="Workflow Focus"
-    >
-      <div className="border-l-4 border-brass bg-paper px-4 py-3">Planning and intent capture zone</div>
-      <div className="border-l-4 border-tide bg-paper px-4 py-3">Search trace and intermediate results</div>
-      <div className="border-l-4 border-clay bg-paper px-4 py-3">Final synthesis and response panel</div>
-    </PageShell>
+    <div className="space-y-8">
+      <PageShell
+        eyebrow="V3 Live Module"
+        title="Browser Agent"
+        description="Run a mock research workflow that shows the plan, search steps, intermediate results, and final answer."
+        status="Research Workflow"
+      >
+        <div className="border-l-4 border-brass bg-paper px-4 py-3">
+          The workflow remains visible from prompt to synthesis.
+        </div>
+        <div className="border-l-4 border-tide bg-paper px-4 py-3">
+          Search results are deterministic so the demo is easy to inspect and test.
+        </div>
+        <div className="border-l-4 border-clay bg-paper px-4 py-3">
+          The layout stays readable on desktop and mobile.
+        </div>
+      </PageShell>
+
+      <BrowserAgentWorkspace />
+    </div>
   );
 }
