@@ -9,3 +9,4 @@ build/
 *.pyd
 .env
 .env.*
+!.env.example
