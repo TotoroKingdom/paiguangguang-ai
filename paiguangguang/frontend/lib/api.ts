@@ -49,3 +49,24 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
 
   return payload.data;
 }
+
+export async function getJson<TResponse>(path: string): Promise<TResponse> {
+  const response = await fetch(`${getBackendBaseUrl()}${path}`, {
+    method: "GET",
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+
+  const payload = (await response.json()) as ApiEnvelope<TResponse>;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new ApiError(
+      payload.error?.message || "Request failed",
+      response.status,
+      payload.error?.code || "REQUEST_FAILED"
+    );
+  }
+
+  return payload.data;
+}
