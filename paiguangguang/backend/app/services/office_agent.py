@@ -6,6 +6,7 @@ from app.schemas.office import (
     OfficeAgentRunData,
     OfficeAgentStepData,
 )
+from app.services.task_service import TaskService, get_task_service
 from app.tools.office_tools import (
     _append_suffix_once,
     generate_report,
@@ -45,6 +46,9 @@ def _build_plan(prompt: str, workflow: str) -> list[OfficeAgentStepData]:
 
 
 class OfficeAgentService:
+    def __init__(self, task_service: TaskService | None = None) -> None:
+        self.task_service = task_service or get_task_service()
+
     def run(self, request: OfficeAgentRequest) -> OfficeAgentRunData:
         prompt = request.prompt.strip()
         workflow = _normalize_workflow(request.workflow)
@@ -52,69 +56,152 @@ class OfficeAgentService:
         if workflow not in SUPPORTED_WORKFLOWS:
             raise ValueError(f"Unsupported office workflow: {request.workflow}")
 
-        summary = summarize_data(prompt)
-        plan_steps = _build_plan(prompt, workflow)
+        task_id = self.task_service.start_task(
+            task_type="office_agent",
+            title="Office automation workflow",
+            metadata={
+                "prompt": prompt,
+                "workflow": workflow,
+            },
+        )
 
-        if workflow == "summarize_data":
-            tool_steps = [
-                OfficeAgentStepData(
-                    step_id="step-3",
-                    kind="tool_call",
-                    title="Call summarize_data",
-                    detail="Generate a deterministic summary of the request.",
-                    data={"tool": "summarize_data", "input": prompt},
-                ),
-                OfficeAgentStepData(
-                    step_id="step-4",
-                    kind="observation",
-                    title="Review summary output",
-                    detail="Inspect the generated summary and key points.",
-                    data={
-                        "summary": summary["summary"],
+        try:
+            summary = summarize_data(prompt)
+            plan_steps = _build_plan(prompt, workflow)
+
+            if workflow == "summarize_data":
+                tool_steps = [
+                    OfficeAgentStepData(
+                        step_id="step-3",
+                        kind="tool_call",
+                        title="Call summarize_data",
+                        detail="Generate a deterministic summary of the request.",
+                        data={"tool": "summarize_data", "input": prompt},
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-4",
+                        kind="observation",
+                        title="Review summary output",
+                        detail="Inspect the generated summary and key points.",
+                        data={
+                            "summary": summary["summary"],
+                            "key_points": summary["key_points"],
+                            "keywords": summary["keywords"],
+                        },
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-5",
+                        kind="synthesis",
+                        title="Finalize summary artifact",
+                        detail="Package the summary into a structured office result.",
+                        data={"artifact_type": "summary"},
+                    ),
+                ]
+                final_output = OfficeAgentFinalOutputData(
+                    artifact_type="summary",
+                    title=_append_suffix_once(str(summary["subject"]), "Summary"),
+                    summary=str(summary["summary"]),
+                    content="\n".join(f"- {point}" for point in summary["key_points"]),
+                    metadata={
+                        "keywords": summary["keywords"],
                         "key_points": summary["key_points"],
+                    },
+                )
+                steps = [*plan_steps, *tool_steps]
+                for index, step in enumerate(steps, start=1):
+                    self.task_service.record_step(task_id, step=step.model_dump(mode="json"), index=index, total=len(steps))
+                result = OfficeAgentRunData(
+                    workflow=workflow,
+                    prompt=prompt,
+                    steps=steps,
+                    final_output=final_output,
+                    task_id=task_id,
+                )
+                self.task_service.complete_task(task_id, output=result.model_dump(mode="json"))
+                return result
+
+            if workflow == "generate_report":
+                report = generate_report(prompt, summary)
+                tool_steps = [
+                    OfficeAgentStepData(
+                        step_id="step-3",
+                        kind="tool_call",
+                        title="Call summarize_data",
+                        detail="Generate the supporting summary for the report.",
+                        data={"tool": "summarize_data", "input": prompt},
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-4",
+                        kind="observation",
+                        title="Review summary output",
+                        detail="Inspect the summary that will feed the report draft.",
+                        data={
+                            "summary": summary["summary"],
+                            "key_points": summary["key_points"],
+                        },
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-5",
+                        kind="tool_call",
+                        title="Call generate_report",
+                        detail="Assemble the structured report artifact.",
+                        data={"tool": "generate_report", "input": prompt},
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-6",
+                        kind="observation",
+                        title="Review report draft",
+                        detail="Check the generated report sections and content.",
+                        data={
+                            "title": report["title"],
+                            "sections": report["sections"],
+                        },
+                    ),
+                    OfficeAgentStepData(
+                        step_id="step-7",
+                        kind="synthesis",
+                        title="Finalize report artifact",
+                        detail="Package the report into a structured office result.",
+                        data={"artifact_type": "report"},
+                    ),
+                ]
+                final_output = OfficeAgentFinalOutputData(
+                    artifact_type="report",
+                    title=str(report["title"]),
+                    summary=str(report["summary"]),
+                    content=str(report["content"]),
+                    metadata={
+                        "sections": report["sections"],
                         "keywords": summary["keywords"],
                     },
-                ),
-                OfficeAgentStepData(
-                    step_id="step-5",
-                    kind="synthesis",
-                    title="Finalize summary artifact",
-                    detail="Package the summary into a structured office result.",
-                    data={"artifact_type": "summary"},
-                ),
-            ]
-            final_output = OfficeAgentFinalOutputData(
-                artifact_type="summary",
-                title=_append_suffix_once(str(summary["subject"]), "Summary"),
-                summary=str(summary["summary"]),
-                content="\n".join(f"- {point}" for point in summary["key_points"]),
-                metadata={
-                    "keywords": summary["keywords"],
-                    "key_points": summary["key_points"],
-                },
-            )
-            return OfficeAgentRunData(
-                workflow=workflow,
-                prompt=prompt,
-                steps=[*plan_steps, *tool_steps],
-                final_output=final_output,
-            )
+                )
+                steps = [*plan_steps, *tool_steps]
+                for index, step in enumerate(steps, start=1):
+                    self.task_service.record_step(task_id, step=step.model_dump(mode="json"), index=index, total=len(steps))
+                result = OfficeAgentRunData(
+                    workflow=workflow,
+                    prompt=prompt,
+                    steps=steps,
+                    final_output=final_output,
+                    task_id=task_id,
+                )
+                self.task_service.complete_task(task_id, output=result.model_dump(mode="json"))
+                return result
 
-        if workflow == "generate_report":
-            report = generate_report(prompt, summary)
+            email = write_email(prompt, summary)
             tool_steps = [
                 OfficeAgentStepData(
                     step_id="step-3",
                     kind="tool_call",
                     title="Call summarize_data",
-                    detail="Generate the supporting summary for the report.",
+                    detail="Generate the supporting summary for the email draft.",
                     data={"tool": "summarize_data", "input": prompt},
                 ),
                 OfficeAgentStepData(
                     step_id="step-4",
                     kind="observation",
                     title="Review summary output",
-                    detail="Inspect the summary that will feed the report draft.",
+                    detail="Inspect the summary and keywords before drafting the email.",
                     data={
                         "summary": summary["summary"],
                         "key_points": summary["key_points"],
@@ -123,105 +210,61 @@ class OfficeAgentService:
                 OfficeAgentStepData(
                     step_id="step-5",
                     kind="tool_call",
-                    title="Call generate_report",
-                    detail="Assemble the structured report artifact.",
-                    data={"tool": "generate_report", "input": prompt},
+                    title="Call write_email",
+                    detail="Generate a structured email draft from the summary.",
+                    data={"tool": "write_email", "input": prompt},
                 ),
                 OfficeAgentStepData(
                     step_id="step-6",
                     kind="observation",
-                    title="Review report draft",
-                    detail="Check the generated report sections and content.",
+                    title="Review email draft",
+                    detail="Check the generated subject and body before finalizing.",
                     data={
-                        "title": report["title"],
-                        "sections": report["sections"],
+                        "recipient": email["recipient"],
+                        "subject": email["subject"],
                     },
                 ),
                 OfficeAgentStepData(
                     step_id="step-7",
                     kind="synthesis",
-                    title="Finalize report artifact",
-                    detail="Package the report into a structured office result.",
-                    data={"artifact_type": "report"},
+                    title="Finalize email artifact",
+                    detail="Package the email into a structured office result.",
+                    data={"artifact_type": "email"},
                 ),
             ]
             final_output = OfficeAgentFinalOutputData(
-                artifact_type="report",
-                title=str(report["title"]),
-                summary=str(report["summary"]),
-                content=str(report["content"]),
+                artifact_type="email",
+                title=str(email["subject"]),
+                summary=str(email["summary"]),
+                content=str(email["content"]),
                 metadata={
-                    "sections": report["sections"],
+                    "recipient": email["recipient"],
                     "keywords": summary["keywords"],
                 },
             )
-            return OfficeAgentRunData(
+            steps = [*plan_steps, *tool_steps]
+            for index, step in enumerate(steps, start=1):
+                self.task_service.record_step(task_id, step=step.model_dump(mode="json"), index=index, total=len(steps))
+            result = OfficeAgentRunData(
                 workflow=workflow,
                 prompt=prompt,
-                steps=[*plan_steps, *tool_steps],
+                steps=steps,
                 final_output=final_output,
+                task_id=task_id,
             )
-
-        email = write_email(prompt, summary)
-        tool_steps = [
-            OfficeAgentStepData(
-                step_id="step-3",
-                kind="tool_call",
-                title="Call summarize_data",
-                detail="Generate the supporting summary for the email draft.",
-                data={"tool": "summarize_data", "input": prompt},
-            ),
-            OfficeAgentStepData(
-                step_id="step-4",
-                kind="observation",
-                title="Review summary output",
-                detail="Inspect the summary and keywords before drafting the email.",
-                data={
-                    "summary": summary["summary"],
-                    "key_points": summary["key_points"],
+            self.task_service.complete_task(task_id, output=result.model_dump(mode="json"))
+            return result
+        except Exception as exc:
+            self.task_service.fail_task(
+                task_id,
+                message="Office workflow failed",
+                error=str(exc),
+                payload={
+                    "prompt": prompt,
+                    "workflow": workflow,
                 },
-            ),
-            OfficeAgentStepData(
-                step_id="step-5",
-                kind="tool_call",
-                title="Call write_email",
-                detail="Generate a structured email draft from the summary.",
-                data={"tool": "write_email", "input": prompt},
-            ),
-            OfficeAgentStepData(
-                step_id="step-6",
-                kind="observation",
-                title="Review email draft",
-                detail="Check the generated subject and body before finalizing.",
-                data={
-                    "recipient": email["recipient"],
-                    "subject": email["subject"],
-                },
-            ),
-            OfficeAgentStepData(
-                step_id="step-7",
-                kind="synthesis",
-                title="Finalize email artifact",
-                detail="Package the email into a structured office result.",
-                data={"artifact_type": "email"},
-            ),
-        ]
-        final_output = OfficeAgentFinalOutputData(
-            artifact_type="email",
-            title=str(email["subject"]),
-            summary=str(email["summary"]),
-            content=str(email["content"]),
-            metadata={
-                "recipient": email["recipient"],
-                "keywords": summary["keywords"],
-            },
-        )
-        return OfficeAgentRunData(
-            workflow=workflow,
-            prompt=prompt,
-            steps=[*plan_steps, *tool_steps],
-            final_output=final_output,
-        )
+            )
+            raise
 
 
 _OFFICE_AGENT_SERVICE = OfficeAgentService()
