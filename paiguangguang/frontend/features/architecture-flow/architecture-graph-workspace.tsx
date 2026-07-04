@@ -1,5 +1,7 @@
 "use client";
 
+import "@xyflow/react/dist/style.css";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   Background,
@@ -205,7 +207,7 @@ function ArchitectureWorkspaceContent() {
           </div>
         </div>
 
-        <div className="relative min-h-[42rem] overflow-hidden border border-ink/10 bg-white/70 shadow-sm">
+        <div className="relative h-[42rem] overflow-hidden border border-ink/10 bg-white/70 shadow-sm">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(45,111,115,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(195,154,61,0.12),transparent_28%)]" />
           {isLoading ? (
             <div className="absolute inset-0 z-10 flex items-center justify-center bg-paper/70 backdrop-blur-sm">
