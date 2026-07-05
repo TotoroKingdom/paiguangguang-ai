@@ -87,6 +87,20 @@ class RagQueryRequest(BaseModel):
     top_k: int = Field(default=5, ge=1, le=20)
 
 
+class RagQueryRewriteMetadata(BaseModel):
+    enabled: bool
+    model: str | None = None
+    status: str
+    fallback_reason: str | None = None
+    rewritten_query_count: int = 0
+
+
+class RagQueryRewriteData(BaseModel):
+    original_question: str
+    rewritten_queries: list[str] = Field(default_factory=list)
+    metadata: RagQueryRewriteMetadata
+
+
 class RagSourceData(BaseModel):
     doc_id: str
     chunk_id: str
@@ -102,6 +116,7 @@ class RagSourceData(BaseModel):
 class RagQueryData(BaseModel):
     answer: str
     sources: list[RagSourceData]
+    rewrite: RagQueryRewriteData | None = None
 
 
 RagIngestData.model_rebuild()

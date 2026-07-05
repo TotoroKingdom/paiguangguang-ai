@@ -10,6 +10,12 @@ def _parse_origins(raw: str | None) -> list[str]:
     return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
+def _parse_bool(raw: str | None, *, default: bool = False) -> bool:
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Paiguangguang Backend"
@@ -23,6 +29,8 @@ class Settings:
     deepseek_api_key: str = ""
     deepseek_chat_model: str = "deepseek-chat"
     deepseek_timeout_seconds: float = 30.0
+    query_rewrite_enabled: bool = False
+    query_rewrite_model: str = ""
     embedding_provider: str = "hash"
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -47,6 +55,8 @@ def get_settings() -> Settings:
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+        query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
+        query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "hash"),
         dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""),
         dashscope_base_url=os.getenv(

@@ -258,6 +258,9 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert body["success"] is True
     assert body["data"]["answer"] == "Use the retrieval context and cite the source chunks."
     assert len(body["data"]["sources"]) == 1
+    assert body["data"]["rewrite"]["original_question"] == "How is the project deployed?"
+    assert body["data"]["rewrite"]["rewritten_queries"] == []
+    assert body["data"]["rewrite"]["metadata"]["status"] == "disabled"
 
     source = body["data"]["sources"][0]
     assert source["doc_id"] == "doc-alpha"
