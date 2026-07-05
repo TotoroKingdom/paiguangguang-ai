@@ -118,6 +118,7 @@ def test_get_cache_adapter_uses_redis_when_configured_and_dependency_is_availabl
 
 def test_get_cache_adapter_falls_back_to_memory_when_redis_is_unavailable(monkeypatch) -> None:
     monkeypatch.setattr("app.storage.cache.redis", None, raising=False)
+    monkeypatch.setattr("app.storage.cache._REDIS_CACHE_ADAPTER", None, raising=False)
 
     adapter = get_cache_adapter(SimpleNamespace(redis_url="redis://localhost:6379/0"))
 

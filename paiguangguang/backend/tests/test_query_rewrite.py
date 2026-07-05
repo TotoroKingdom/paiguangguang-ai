@@ -5,6 +5,7 @@ import json
 import httpx
 
 from app.ai.deepseek import DeepSeekClient
+from app.storage.cache import InMemoryCacheAdapter
 from app.services.query_rewrite import QueryRewriteService
 
 
@@ -52,7 +53,7 @@ def test_query_rewrite_service_uses_model_output_when_enabled() -> None:
             }
         )
     )
-    service = QueryRewriteService(client=client, enabled=True)
+    service = QueryRewriteService(client=client, enabled=True, cache_adapter=InMemoryCacheAdapter())
 
     result = service.rewrite("How should I deploy the site?")
 
@@ -70,8 +71,8 @@ def test_query_rewrite_service_uses_model_output_when_enabled() -> None:
 def test_query_rewrite_service_falls_back_on_invalid_or_empty_output() -> None:
     invalid_client = _build_client("not json")
     empty_client = _build_client(json.dumps({"rewritten_queries": []}))
-    invalid_service = QueryRewriteService(client=invalid_client, enabled=True)
-    empty_service = QueryRewriteService(client=empty_client, enabled=True)
+    invalid_service = QueryRewriteService(client=invalid_client, enabled=True, cache_adapter=InMemoryCacheAdapter())
+    empty_service = QueryRewriteService(client=empty_client, enabled=True, cache_adapter=InMemoryCacheAdapter())
 
     invalid_result = invalid_service.rewrite("What changed?")
     empty_result = empty_service.rewrite("What changed?")

@@ -6,6 +6,7 @@ from typing import Any
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.core.config import get_settings
 from app.schemas.rag import RagQueryRewriteData, RagQueryRewriteMetadata
+from app.services.rag_cache import build_shared_cache_key, get_rag_cache_adapter
 
 
 def build_query_rewrite_system_prompt() -> str:
@@ -26,50 +27,97 @@ class QueryRewriteService:
         *,
         enabled: bool | None = None,
         model: str | None = None,
+        cache_adapter=None,
     ) -> None:
         settings = get_settings()
         self.client = client or DeepSeekClient(settings)
         self.enabled = settings.query_rewrite_enabled if enabled is None else enabled
         self.model = model or settings.query_rewrite_model or settings.deepseek_chat_model
+        self.cache_adapter = cache_adapter or get_rag_cache_adapter(settings)
 
-    def rewrite(self, question: str) -> RagQueryRewriteData:
+    def rewrite(self, question: str, *, cache_bypass: bool = False) -> RagQueryRewriteData:
         original_question = question.strip()
         if not self.enabled:
-            return self._build_result(
+            result = self._build_result(
                 original_question=original_question,
                 rewritten_queries=[],
                 status="disabled",
                 fallback_reason=None,
                 model=self.model,
             )
+            self._store_cache(original_question, result, cache_bypass=cache_bypass)
+            return result
+
+        if not cache_bypass:
+            cached = self._load_cache(original_question)
+            if cached is not None:
+                return cached
 
         try:
             payload = self._rewrite_with_model(original_question)
             rewritten_queries = self._normalize_queries(payload.get("rewritten_queries"), original_question)
             if not rewritten_queries:
-                return self._build_result(
+                result = self._build_result(
                     original_question=original_question,
                     rewritten_queries=[],
                     status="fallback",
                     fallback_reason="Model returned no usable rewritten queries",
                     model=self.model,
                 )
+                self._store_cache(original_question, result, cache_bypass=cache_bypass)
+                return result
 
-            return self._build_result(
+            result = self._build_result(
                 original_question=original_question,
                 rewritten_queries=rewritten_queries,
                 status="ok",
                 fallback_reason=None,
                 model=self.model,
             )
+            self._store_cache(original_question, result, cache_bypass=cache_bypass)
+            return result
         except (ValueError, TypeError, json.JSONDecodeError, DeepSeekError) as exc:
-            return self._build_result(
+            result = self._build_result(
                 original_question=original_question,
                 rewritten_queries=[],
                 status="fallback",
                 fallback_reason=str(exc),
                 model=self.model,
             )
+            self._store_cache(original_question, result, cache_bypass=cache_bypass)
+            return result
+
+    def _load_cache(self, original_question: str) -> RagQueryRewriteData | None:
+        cache_key = build_shared_cache_key(
+            "rag:rewrite",
+            model_version=self.model,
+            payload={
+                "question": original_question,
+                "enabled": self.enabled,
+                "model": self.model,
+            },
+        )
+        cached = self.cache_adapter.get(cache_key)
+        if isinstance(cached, dict):
+            try:
+                return RagQueryRewriteData.model_validate(cached)
+            except Exception:
+                return None
+        return None
+
+    def _store_cache(self, original_question: str, result: RagQueryRewriteData, *, cache_bypass: bool) -> None:
+        if cache_bypass:
+            return
+        cache_key = build_shared_cache_key(
+            "rag:rewrite",
+            model_version=self.model,
+            payload={
+                "question": original_question,
+                "enabled": self.enabled,
+                "model": self.model,
+            },
+        )
+        self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
 
     def _rewrite_with_model(self, question: str) -> dict[str, Any]:
         result = self.client.chat_completions(

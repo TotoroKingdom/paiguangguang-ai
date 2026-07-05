@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from time import perf_counter
 
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
@@ -14,6 +15,12 @@ from app.schemas.rag import (
     RagSourceData,
 )
 from app.services.context_assembler import ContextAssembler, ContextAssemblyResult, get_context_assembler
+from app.services.rag_cache import (
+    RAG_KNOWLEDGE_BASE_VERSION,
+    RAG_RETRIEVAL_STRATEGY_VERSION,
+    build_authorized_cache_key,
+    get_rag_cache_adapter,
+)
 from app.storage.chroma_store import RagSearchAccessContext
 from app.services.hybrid_retrieval import (
     HybridRetrievalHit,
@@ -44,6 +51,7 @@ class RagQueryService:
         client: DeepSeekClient | None = None,
         rewrite_service: QueryRewriteService | None = None,
         rerank_provider: RerankProvider | None = None,
+        cache_adapter=None,
     ) -> None:
         settings = get_settings()
         self.client = client or DeepSeekClient(settings)
@@ -51,28 +59,65 @@ class RagQueryService:
         self.context_assembler = context_assembler or get_context_assembler()
         self.rewrite_service = rewrite_service or get_query_rewrite_service()
         self.rerank_provider = rerank_provider if rerank_provider is not None else get_rerank_provider(settings)
+        self.cache_adapter = cache_adapter or get_rag_cache_adapter(settings)
         self.default_collection_name = settings.rag_collection_name
+        self.knowledge_base_version = RAG_KNOWLEDGE_BASE_VERSION
+        self.retrieval_strategy_version = RAG_RETRIEVAL_STRATEGY_VERSION
+        self.answer_model_version = settings.deepseek_chat_model
+        self.retrieval_model_version = ":".join(
+            [
+                self.rewrite_service.model,
+                self.rerank_provider.__class__.__name__ if self.rerank_provider is not None else "none",
+            ]
+        )
 
     def query(
         self,
         request: RagQueryRequest,
         *,
         access_context: RagSearchAccessContext | None = None,
+        cache_bypass: bool = False,
     ) -> RagQueryData:
         started_at = perf_counter()
         collection_name = request.collection or self.default_collection_name
-        rewrite = self.rewrite_service.rewrite(request.question)
-        trace = self.retrieval_service.search_with_trace(
+        rewrite = self.rewrite_service.rewrite(request.question, cache_bypass=cache_bypass)
+        trace = self._get_retrieval_trace(
             collection_name,
-            rewrite.original_question,
-            top_k=request.top_k,
+            request=request,
+            rewrite=rewrite,
             access_context=access_context,
-            rewrite_queries=rewrite.rewritten_queries,
+            cache_bypass=cache_bypass,
         )
         hits = trace.fusion_hits
         fusion_hits = list(hits)
         hits = self._apply_rerank(request.question, hits)
         assembly = self.context_assembler.assemble(hits)
+
+        cached_result = self._load_answer_cache(
+            request=request,
+            rewrite=rewrite,
+            access_context=access_context,
+            assembly=assembly,
+            cache_bypass=cache_bypass,
+        )
+        if cached_result is not None:
+            debug = self._build_debug_data(
+                request,
+                rewrite=rewrite,
+                trace=trace,
+                fusion_hits=fusion_hits,
+                reranked_hits=hits,
+                assembly=assembly,
+                latency_ms=int((perf_counter() - started_at) * 1000),
+                model_usage={},
+            )
+            return RagQueryData(
+                answer=cached_result.answer,
+                sources=cached_result.sources,
+                rewrite=rewrite,
+                debug=debug,
+            )
+
         answer, model_usage = self._ask_model(request.question, assembly)
 
         sources = [
@@ -89,7 +134,16 @@ class RagQueryService:
             latency_ms=int((perf_counter() - started_at) * 1000),
             model_usage=model_usage,
         )
-        return RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
+        result = RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
+        self._store_answer_cache(
+            request=request,
+            rewrite=rewrite,
+            access_context=access_context,
+            assembly=assembly,
+            result=result,
+            cache_bypass=cache_bypass,
+        )
+        return result
 
     def query_for_user(
         self,
@@ -98,6 +152,7 @@ class RagQueryService:
         session: Session,
         user: User,
         rbac_service: RBACService | None = None,
+        cache_bypass: bool = False,
     ) -> RagQueryData:
         rbac_service = rbac_service or get_rbac_service()
         if not rbac_service.has_permission(session, user.id, "knowledge.query"):
@@ -107,7 +162,7 @@ class RagQueryService:
             )
 
         access_context = self._build_access_context(session, user)
-        return self.query(request, access_context=access_context)
+        return self.query(request, access_context=access_context, cache_bypass=cache_bypass)
 
     def _build_access_context(self, session: Session, user: User) -> RagSearchAccessContext:
         workspace_id = self._resolve_workspace_id(session, user)
@@ -152,6 +207,55 @@ class RagQueryService:
         result = self.client.chat_completions(messages)
         return self._extract_reply(result), self._extract_usage(result)
 
+    def _get_retrieval_trace(
+        self,
+        collection_name: str,
+        *,
+        request: RagQueryRequest,
+        rewrite: RagQueryRewriteData,
+        access_context: RagSearchAccessContext | None,
+        cache_bypass: bool,
+    ) -> HybridRetrievalTrace:
+        if access_context is None or request.include_debug or cache_bypass:
+            return self.retrieval_service.search_with_trace(
+                collection_name,
+                rewrite.original_question,
+                top_k=request.top_k,
+                access_context=access_context,
+                rewrite_queries=rewrite.rewritten_queries,
+            )
+
+        cache_key = build_authorized_cache_key(
+            "rag:retrieval",
+            access_context=access_context,
+            knowledge_base_version=self.knowledge_base_version,
+            retrieval_strategy_version=self.retrieval_strategy_version,
+            model_version=self.retrieval_model_version,
+            payload={
+                "collection": collection_name,
+                "question": request.question,
+                "top_k": request.top_k,
+                "rewrite": rewrite.model_dump(mode="json"),
+            },
+        )
+        if cache_key is not None:
+            cached = self.cache_adapter.get(cache_key)
+            if isinstance(cached, dict):
+                trace = self._trace_from_payload(cached)
+                if trace is not None:
+                    return trace
+
+        trace = self.retrieval_service.search_with_trace(
+            collection_name,
+            rewrite.original_question,
+            top_k=request.top_k,
+            access_context=access_context,
+            rewrite_queries=rewrite.rewritten_queries,
+        )
+        if cache_key is not None:
+            self.cache_adapter.set(cache_key, self._trace_to_payload(trace))
+        return trace
+
     def _apply_rerank(self, question: str, hits: list[HybridRetrievalHit]) -> list[HybridRetrievalHit]:
         if self.rerank_provider is None or not hits:
             return hits
@@ -191,6 +295,137 @@ class RagQueryService:
             route_scores=dict(hit.route_scores),
             metadata=dict(hit.metadata),
         )
+
+    @staticmethod
+    def _hit_to_payload(hit: HybridRetrievalHit) -> dict[str, object]:
+        return asdict(hit)
+
+    @staticmethod
+    def _hit_from_payload(payload: dict[str, object]) -> HybridRetrievalHit | None:
+        try:
+            return HybridRetrievalHit(
+                doc_id=str(payload["doc_id"]),
+                chunk_id=str(payload["chunk_id"]),
+                title=payload.get("title") if payload.get("title") is None or isinstance(payload.get("title"), str) else None,
+                page_number=payload.get("page_number") if payload.get("page_number") is None or isinstance(payload.get("page_number"), int) else None,
+                chunk_index=int(payload.get("chunk_index", 0)),
+                text=str(payload.get("text", "")),
+                score=float(payload.get("score", 0.0)),
+                start_char=int(payload.get("start_char", 0)),
+                end_char=int(payload.get("end_char", 0)),
+                metadata=dict(payload.get("metadata", {}) or {}),
+                rerank_score=payload.get("rerank_score") if payload.get("rerank_score") is None or isinstance(payload.get("rerank_score"), (int, float)) else None,
+                route_scores={str(key): float(value) for key, value in dict(payload.get("route_scores", {}) or {}).items()},
+            )
+        except Exception:
+            return None
+
+    def _trace_to_payload(self, trace: HybridRetrievalTrace) -> dict[str, object]:
+        return {
+            "queries": list(trace.queries),
+            "vector_hits": [self._hit_to_payload(hit) for hit in trace.vector_hits],
+            "keyword_hits": [self._hit_to_payload(hit) for hit in trace.keyword_hits],
+            "fusion_hits": [self._hit_to_payload(hit) for hit in trace.fusion_hits],
+        }
+
+    def _trace_from_payload(self, payload: dict[str, object]) -> HybridRetrievalTrace | None:
+        queries = payload.get("queries")
+        vector_hits_payload = payload.get("vector_hits")
+        keyword_hits_payload = payload.get("keyword_hits")
+        fusion_hits_payload = payload.get("fusion_hits")
+        if not isinstance(queries, list) or not isinstance(vector_hits_payload, list) or not isinstance(keyword_hits_payload, list) or not isinstance(fusion_hits_payload, list):
+            return None
+
+        vector_hits = [
+            hit
+            for item in vector_hits_payload
+            if isinstance(item, dict) and (hit := self._hit_from_payload(item)) is not None
+        ]
+        keyword_hits = [
+            hit
+            for item in keyword_hits_payload
+            if isinstance(item, dict) and (hit := self._hit_from_payload(item)) is not None
+        ]
+        fusion_hits = [
+            hit
+            for item in fusion_hits_payload
+            if isinstance(item, dict) and (hit := self._hit_from_payload(item)) is not None
+        ]
+        return HybridRetrievalTrace(
+            queries=[str(query) for query in queries if isinstance(query, str)],
+            vector_hits=vector_hits,
+            keyword_hits=keyword_hits,
+            fusion_hits=fusion_hits,
+        )
+
+    def _load_answer_cache(
+        self,
+        *,
+        request: RagQueryRequest,
+        rewrite: RagQueryRewriteData,
+        access_context: RagSearchAccessContext | None,
+        assembly: ContextAssemblyResult,
+        cache_bypass: bool,
+    ) -> RagQueryData | None:
+        if access_context is None or request.include_debug or cache_bypass:
+            return None
+
+        cache_key = build_authorized_cache_key(
+            "rag:answer",
+            access_context=access_context,
+            knowledge_base_version=self.knowledge_base_version,
+            retrieval_strategy_version=self.retrieval_strategy_version,
+            model_version=self.answer_model_version,
+            payload={
+                "question": request.question,
+                "collection": request.collection or self.default_collection_name,
+                "top_k": request.top_k,
+                "rewrite": rewrite.model_dump(mode="json"),
+                "selected_sources": [self._hit_to_payload(source) for source in assembly.selected_sources],
+                "context_text": assembly.context_text,
+            },
+        )
+        if cache_key is None:
+            return None
+
+        cached = self.cache_adapter.get(cache_key)
+        if isinstance(cached, dict):
+            try:
+                return RagQueryData.model_validate(cached)
+            except Exception:
+                return None
+        return None
+
+    def _store_answer_cache(
+        self,
+        *,
+        request: RagQueryRequest,
+        rewrite: RagQueryRewriteData,
+        access_context: RagSearchAccessContext | None,
+        assembly: ContextAssemblyResult,
+        result: RagQueryData,
+        cache_bypass: bool,
+    ) -> None:
+        if access_context is None or request.include_debug or cache_bypass:
+            return
+
+        cache_key = build_authorized_cache_key(
+            "rag:answer",
+            access_context=access_context,
+            knowledge_base_version=self.knowledge_base_version,
+            retrieval_strategy_version=self.retrieval_strategy_version,
+            model_version=self.answer_model_version,
+            payload={
+                "question": request.question,
+                "collection": request.collection or self.default_collection_name,
+                "top_k": request.top_k,
+                "rewrite": rewrite.model_dump(mode="json"),
+                "selected_sources": [self._hit_to_payload(source) for source in assembly.selected_sources],
+                "context_text": assembly.context_text,
+            },
+        )
+        if cache_key is not None:
+            self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
 
     def _build_debug_data(
         self,

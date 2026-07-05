@@ -128,6 +128,7 @@ class RedisCacheAdapter:
         if redis_impl is None:  # pragma: no cover - optional dependency
             raise RuntimeError("redis package is not installed")
         self._client = redis_impl.from_url(redis_url, decode_responses=True)
+        self._redis_url = redis_url
         self._prefix = prefix.rstrip(":")
         self._client.ping()
 
@@ -159,11 +160,19 @@ class RedisCacheAdapter:
             self._client.delete(*keys)
 
 
+_IN_MEMORY_CACHE_ADAPTER = InMemoryCacheAdapter()
+_REDIS_CACHE_ADAPTER: RedisCacheAdapter | None = None
+
+
 def get_cache_adapter(settings: Settings | None = None) -> CacheAdapter:
+    global _REDIS_CACHE_ADAPTER
+
     settings = settings or get_settings()
     if settings.redis_url:
         try:
-            return RedisCacheAdapter(settings.redis_url)
+            if _REDIS_CACHE_ADAPTER is None or getattr(_REDIS_CACHE_ADAPTER, "_redis_url", None) != settings.redis_url:
+                _REDIS_CACHE_ADAPTER = RedisCacheAdapter(settings.redis_url)
+            return _REDIS_CACHE_ADAPTER
         except Exception:
-            return InMemoryCacheAdapter()
-    return InMemoryCacheAdapter()
+            return _IN_MEMORY_CACHE_ADAPTER
+    return _IN_MEMORY_CACHE_ADAPTER
