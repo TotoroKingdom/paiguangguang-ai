@@ -19,6 +19,7 @@ class HybridRetrievalHit:
     start_char: int
     end_char: int
     metadata: dict[str, object]
+    rerank_score: float | None = None
     route_scores: dict[str, float] = field(default_factory=dict)
 
     @classmethod
@@ -31,6 +32,7 @@ class HybridRetrievalHit:
             chunk_index=hit.chunk_index,
             text=hit.text,
             score=0.0,
+            rerank_score=None,
             start_char=hit.start_char,
             end_char=hit.end_char,
             metadata=dict(hit.metadata),

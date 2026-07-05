@@ -31,6 +31,9 @@ class Settings:
     deepseek_timeout_seconds: float = 30.0
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
+    rerank_provider: str = ""
+    rerank_model: str = "qwen3-rerank"
+    rerank_timeout_seconds: float = 30.0
     embedding_provider: str = "hash"
     dashscope_api_key: str = ""
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -57,6 +60,9 @@ def get_settings() -> Settings:
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
+        rerank_provider=os.getenv("RERANK_PROVIDER", ""),
+        rerank_model=os.getenv("RERANK_MODEL", "qwen3-rerank"),
+        rerank_timeout_seconds=float(os.getenv("RERANK_TIMEOUT_SECONDS", "30")),
         embedding_provider=os.getenv("EMBEDDING_PROVIDER", "hash"),
         dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""),
         dashscope_base_url=os.getenv(
