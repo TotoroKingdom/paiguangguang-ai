@@ -12,6 +12,7 @@ from app.db.base import Base
 from app.db.models import User
 from app.main import app
 from app.schemas.rag import RagQueryRequest
+from app.ai.rerank import RerankResult
 from app.services.auth import AuthService, get_auth_service
 from app.services.hybrid_retrieval import HybridRetrievalService
 from app.services.rag_query import RagQueryService, get_rag_query_service
@@ -63,6 +64,23 @@ class FakeKeywordRetriever(FakeSearchStore):
     pass
 
 
+class FakeRerankProvider:
+    def __init__(self, ranking: dict[str, float] | None = None) -> None:
+        self.ranking = dict(ranking or {})
+        self.calls: list[dict[str, object]] = []
+
+    def rerank(self, query: str, documents, *, top_n=None):
+        self.calls.append({"query": query, "documents": list(documents), "top_n": top_n})
+        results = [
+            RerankResult(index=index, relevance_score=self.ranking.get(document, 0.0))
+            for index, document in enumerate(documents)
+        ]
+        results.sort(key=lambda item: (-item.relevance_score, item.index))
+        if top_n is not None:
+            return results[:top_n]
+        return results
+
+
 def _create_session(tmp_path, filename: str) -> Session:
     engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / filename).as_posix()}")
     Base.metadata.create_all(bind=engine)
@@ -70,7 +88,7 @@ def _create_session(tmp_path, filename: str) -> Session:
     return session_factory()
 
 
-def _build_query_service(vector_hits, keyword_hits, handler):
+def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=None):
     transport = httpx.MockTransport(handler)
     client = DeepSeekClient(api_key="test-key", transport=transport)
     vector_store = FakeVectorStore(vector_hits)
@@ -79,7 +97,16 @@ def _build_query_service(vector_hits, keyword_hits, handler):
         vector_store=vector_store,
         keyword_retriever=keyword_retriever,
     )
-    return RagQueryService(retrieval_service=retrieval_service, client=client), vector_store, keyword_retriever
+    return (
+        RagQueryService(
+            retrieval_service=retrieval_service,
+            client=client,
+            rerank_provider=rerank_provider,
+        ),
+        vector_store,
+        keyword_retriever,
+        rerank_provider,
+    )
 
 
 def _build_test_client(
@@ -115,7 +142,7 @@ def test_rag_query_requires_authentication(tmp_path) -> None:
     session = _create_session(tmp_path, "rag-query-auth.sqlite3")
     auth_service = AuthService()
 
-    service, _vector_store, _keyword_retriever = _build_query_service(
+    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
         [],
         [],
         lambda request: httpx.Response(200, json={}),
@@ -148,7 +175,7 @@ def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
 
     _create_user(session, auth_service, email="reader@example.com", password="Secret123!")
 
-    service, _vector_store, _keyword_retriever = _build_query_service(
+    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
         [],
         [],
         lambda request: httpx.Response(200, json={}),
@@ -257,10 +284,16 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
         },
     )
 
-    service, vector_store, keyword_retriever = _build_query_service(
+    rerank_provider = FakeRerankProvider(
+        {
+            "Alpha project notes explain the workflow.": 0.8,
+        }
+    )
+    service, vector_store, keyword_retriever, _rerank_provider = _build_query_service(
         [accessible_hit, inaccessible_hit],
         [accessible_hit],
         handler,
+        rerank_provider=rerank_provider,
     )
     client = _build_test_client(session, auth_service, service, rbac_service)
 
@@ -300,7 +333,7 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert source["chunk_index"] == 1
     assert source["text"] == "Alpha project notes explain the workflow."
     assert source["score"] > 0
-    assert source["rerank_score"] is None
+    assert source["rerank_score"] == 0.8
     assert source["route_scores"] == {"vector": 0.91, "keyword": 0.91}
     assert source["metadata"]["workspace_id"] == defaults.default_workspace.id
     assert source["metadata"]["permission_scope"] == "workspace"
@@ -328,6 +361,15 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert access_context.allowed_permission_scopes == ("workspace",)
     assert access_context.is_system_admin is False
     assert access_context.allow_legacy_metadata is True
+    assert rerank_provider.calls == [
+        {
+            "query": "How is the project deployed?",
+            "documents": [
+                "Alpha project notes explain the workflow.",
+            ],
+            "top_n": 1,
+        }
+    ]
     assert "Retrieved context:" in captured_bodies[0]
     assert "doc_id=doc-alpha" in captured_bodies[0]
     assert "page=3" in captured_bodies[0]
@@ -352,7 +394,7 @@ def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
             },
         )
 
-    service, _vector_store, _keyword_retriever = _build_query_service([], [], handler)
+    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service([], [], handler)
 
     result = service.query(
         RagQueryRequest(
@@ -365,3 +407,116 @@ def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
     assert result.answer == "I could not find relevant project context."
     assert result.sources == []
     assert captured_bodies == [{}]
+
+
+def test_rag_query_applies_rerank_before_prompt_context(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-query-rerank.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    user = _create_user(session, auth_service, email="rerank@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, user.id, "user")
+    rbac_service.add_user_to_workspace(session, user.id, defaults.default_workspace.slug)
+
+    captured_bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_bodies.append(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Rerank should reorder the context before answering.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    alpha_hit = SimpleNamespace(
+        doc_id="doc-alpha",
+        chunk_id="doc-alpha-chunk-0001",
+        title="Alpha Notes",
+        page_number=1,
+        chunk_index=1,
+        text="Alpha deployment notes.",
+        score=0.9,
+        start_char=0,
+        end_char=24,
+        metadata={
+            "doc_id": "doc-alpha",
+            "chunk_id": "doc-alpha-chunk-0001",
+            "title": "Alpha Notes",
+            "page_number": 1,
+            "chunk_index": 1,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "start_char": 0,
+            "end_char": 24,
+        },
+    )
+    beta_hit = SimpleNamespace(
+        doc_id="doc-beta",
+        chunk_id="doc-beta-chunk-0001",
+        title="Beta Notes",
+        page_number=2,
+        chunk_index=1,
+        text="Beta deployment notes.",
+        score=0.85,
+        start_char=0,
+        end_char=23,
+        metadata={
+            "doc_id": "doc-beta",
+            "chunk_id": "doc-beta-chunk-0001",
+            "title": "Beta Notes",
+            "page_number": 2,
+            "chunk_index": 1,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "start_char": 0,
+            "end_char": 23,
+        },
+    )
+    rerank_provider = FakeRerankProvider(
+        {
+            "Alpha deployment notes.": 0.2,
+            "Beta deployment notes.": 0.9,
+        }
+    )
+    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
+        [alpha_hit, beta_hit],
+        [alpha_hit, beta_hit],
+        handler,
+        rerank_provider=rerank_provider,
+    )
+    client = _build_test_client(session, auth_service, service, rbac_service)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "rerank@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "How is deployment organized?",
+                "collection": "portfolio_knowledge",
+                "top_k": 2,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert [source["doc_id"] for source in body["sources"]] == ["doc-beta", "doc-alpha"]
+    assert body["sources"][0]["rerank_score"] == 0.9
+    assert body["sources"][1]["rerank_score"] == 0.2
+    assert "doc_id=doc-beta" in captured_bodies[0]
+    assert captured_bodies[0].index("doc_id=doc-beta") < captured_bodies[0].index("doc_id=doc-alpha")

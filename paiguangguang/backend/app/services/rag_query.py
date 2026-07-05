@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
+from app.ai.rerank import RerankProvider, get_rerank_provider
 from app.core.config import get_settings
 from app.db.models import User
 from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
@@ -44,11 +45,13 @@ class RagQueryService:
         retrieval_service: HybridRetrievalService | None = None,
         client: DeepSeekClient | None = None,
         rewrite_service: QueryRewriteService | None = None,
+        rerank_provider: RerankProvider | None = None,
     ) -> None:
         settings = get_settings()
         self.client = client or DeepSeekClient(settings)
         self.retrieval_service = retrieval_service or get_hybrid_retrieval_service()
         self.rewrite_service = rewrite_service or get_query_rewrite_service()
+        self.rerank_provider = rerank_provider if rerank_provider is not None else get_rerank_provider(settings)
         self.default_collection_name = settings.rag_collection_name
 
     def query(
@@ -66,6 +69,7 @@ class RagQueryService:
             access_context=access_context,
             rewrite_queries=rewrite.rewritten_queries,
         )
+        hits = self._apply_rerank(request.question, hits)
 
         sources = [
             RagSourceData(
@@ -76,7 +80,7 @@ class RagQueryService:
                 chunk_index=hit.chunk_index,
                 text=hit.text,
                 score=hit.score,
-                rerank_score=None,
+                rerank_score=hit.rerank_score,
                 route_scores=dict(hit.route_scores),
                 metadata=dict(hit.metadata),
             )
@@ -146,6 +150,31 @@ class RagQueryService:
 
         result = self.client.chat_completions(messages)
         return self._extract_reply(result)
+
+    def _apply_rerank(self, question: str, hits: list[HybridRetrievalHit]) -> list[HybridRetrievalHit]:
+        if self.rerank_provider is None or not hits:
+            return hits
+
+        rerank_results = self.rerank_provider.rerank(question, [hit.text for hit in hits], top_n=len(hits))
+        if not rerank_results:
+            return hits
+
+        reranked_hits: list[HybridRetrievalHit] = []
+        seen_indexes: set[int] = set()
+        for result in rerank_results:
+            if result.index < 0 or result.index >= len(hits) or result.index in seen_indexes:
+                continue
+            seen_indexes.add(result.index)
+            hit = hits[result.index]
+            hit.rerank_score = result.relevance_score
+            reranked_hits.append(hit)
+
+        for index, hit in enumerate(hits):
+            if index not in seen_indexes:
+                hit.rerank_score = None
+                reranked_hits.append(hit)
+
+        return reranked_hits
 
     @staticmethod
     def _extract_reply(payload: dict[str, object]) -> str:
