@@ -54,3 +54,91 @@ export type AdminDocumentCreateRequest = {
   workspace_id?: string | null;
   permission_scope?: string | null;
 };
+
+export type AdminUserData = {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  roles: string[];
+  workspace_ids: string[];
+};
+
+export type AdminUserCreateRequest = {
+  email: string;
+  display_name: string;
+  password: string;
+  is_active?: boolean;
+  roles?: string[];
+  workspace_slugs?: string[];
+};
+
+export type AdminUserUpdateRequest = {
+  display_name?: string | null;
+  password?: string | null;
+  is_active?: boolean | null;
+  roles?: string[] | null;
+  workspace_slugs?: string[] | null;
+};
+
+export type AdminRoleData = {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminRoleCreateRequest = {
+  name: string;
+  description?: string | null;
+  permissions?: string[];
+};
+
+export type AdminRoleUpdateRequest = {
+  name?: string | null;
+  description?: string | null;
+  permissions?: string[] | null;
+};
+
+export type AdminPermissionData = {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminPermissionCreateRequest = {
+  name: string;
+  description?: string | null;
+};
+
+export type AdminPermissionUpdateRequest = {
+  name?: string | null;
+  description?: string | null;
+};
+
+export type AdminWorkspaceData = {
+  id: string;
+  slug: string;
+  name: string;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminWorkspaceCreateRequest = {
+  slug: string;
+  name: string;
+  is_default?: boolean;
+};
+
+export type AdminWorkspaceUpdateRequest = {
+  slug?: string | null;
+  name?: string | null;
+  is_default?: boolean | null;
+};
