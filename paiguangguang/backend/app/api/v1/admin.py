@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.core.rate_limit import RateLimitConfig, get_rate_limiter
 from app.db.session import get_db_session
 from app.schemas.admin import (
     AdminDocumentCreateRequest,
@@ -30,6 +32,18 @@ from app.services.rag_ingestion import RagIngestionService, get_rag_ingestion_se
 from app.services.rbac import RBACService, get_rbac_service
 
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
+
+
+def _apply_rate_limit(operation: str, key: str) -> None:
+    settings = get_settings()
+    get_rate_limiter().check(
+        key,
+        RateLimitConfig(
+            max_requests=settings.rag_rate_limit_max_requests,
+            window_seconds=settings.rag_rate_limit_window_seconds,
+        ),
+        operation=operation,
+    )
 
 
 def _require_permission(
@@ -400,13 +414,16 @@ def delete_document(
 @router.post("/documents/{document_id}/reindex", response_model=ApiResponse[AdminDocumentData])
 def reindex_document(
     document_id: str,
+    http_request: Request,
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rag_service: RagIngestionService = Depends(get_rag_ingestion_service),
     rbac_service: RBACService = Depends(get_rbac_service),
 ) -> ApiResponse[AdminDocumentData]:
+    del http_request
     _require_permission(service, session, current_user, "document.reindex", rbac_service)
+    _apply_rate_limit("Document reindex", f"rag:reindex:{current_user.id}")
     try:
         return ApiResponse(data=service.reindex_document(session, document_id, rag_service=rag_service))
     except KeyError as exc:

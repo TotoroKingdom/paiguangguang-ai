@@ -13,6 +13,8 @@ from app.schemas.rag import (
     RagIngestionJobData,
 )
 from app.core.config import get_settings
+from app.core.errors import ExternalModelError, ServiceTimeoutError
+from app.core.logging import log_event
 from app.storage.chroma_store import ChromaRagStore, get_chroma_rag_store
 from app.storage.rag_documents import (
     RagChunkRecord,
@@ -22,6 +24,7 @@ from app.storage.rag_documents import (
     get_rag_document_repository,
 )
 from app.services.rag_cache import get_rag_cache_adapter, invalidate_document_cache
+from app.ai.embeddings import EmbeddingConfigurationError, EmbeddingProviderError, EmbeddingProviderTimeoutError
 
 
 def normalize_text(text: str) -> str:
@@ -147,6 +150,12 @@ class RagIngestionService:
                 index_status="pending",
             )
         )
+        log_event(
+            "rag_ingestion.registered",
+            document_id=doc_id,
+            text_length=len(normalized_text),
+            title=request.title,
+        )
         return self._document_to_data(document)
 
     def get_document(self, document_id: str) -> RagDocumentData:
@@ -183,9 +192,9 @@ class RagIngestionService:
                 )
             )
 
+        lifecycle_version = self._next_lifecycle_version(doc_id, request.reindex)
         if request.reindex:
             self.purge_document_artifacts(doc_id)
-        lifecycle_version = self._next_lifecycle_version(doc_id, request.reindex)
 
         self.repository.update_document_lifecycle(
             doc_id,
@@ -208,6 +217,14 @@ class RagIngestionService:
                 chunk_size=request.chunk_size,
                 chunk_overlap=request.chunk_overlap,
             )
+        )
+        log_event(
+            "rag_ingestion.started",
+            document_id=doc_id,
+            job_id=job_id,
+            is_reindex=request.reindex,
+            chunk_size=request.chunk_size,
+            chunk_overlap=request.chunk_overlap,
         )
 
         try:
@@ -248,14 +265,21 @@ class RagIngestionService:
                 embedding_status="in_progress",
             )
             if self.vector_store and chunks:
-                self.vector_store.index_ingestion(
-                    self.collection_name,
-                    doc_id=doc_id,
-                    title=title,
-                    content_hash=content_hash,
-                    chunks=chunks,
-                    lifecycle_version=lifecycle_version,
-                )
+                try:
+                    self.vector_store.index_ingestion(
+                        self.collection_name,
+                        doc_id=doc_id,
+                        title=title,
+                        content_hash=content_hash,
+                        chunks=chunks,
+                        lifecycle_version=lifecycle_version,
+                    )
+                except EmbeddingProviderTimeoutError as exc:
+                    raise ServiceTimeoutError("Embedding", getattr(self.vector_store.embedding_provider, "timeout_seconds", 0.0), str(exc)) from exc
+                except (EmbeddingProviderError, EmbeddingConfigurationError) as exc:
+                    raise ExternalModelError("Embedding", str(exc)) from exc
+                except Exception as exc:
+                    raise ExternalModelError("Embedding", str(exc)) from exc
             self.repository.update_document_lifecycle(
                 doc_id,
                 status="indexed",
@@ -268,6 +292,13 @@ class RagIngestionService:
                 completed_at=datetime.now(timezone.utc),
             )
             document = self.repository.get_document(doc_id)
+            log_event(
+                "rag_ingestion.completed",
+                document_id=doc_id,
+                job_id=job_id,
+                chunk_count=len(chunks),
+                lifecycle_version=lifecycle_version,
+            )
             return RagIngestData(
                 doc_id=doc_id,
                 title=title,
@@ -295,6 +326,13 @@ class RagIngestionService:
                 status="failed",
                 failure_reason=str(exc),
                 completed_at=datetime.now(timezone.utc),
+            )
+            log_event(
+                "rag_ingestion.failed",
+                document_id=doc_id,
+                job_id=job_id,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
             )
             raise
 
