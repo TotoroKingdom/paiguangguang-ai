@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, text as sa_text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -20,7 +20,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("1"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=sa_text("1"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -98,7 +98,7 @@ class Workspace(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("0"))
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -146,3 +146,77 @@ class WorkspaceMembership(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
     user: Mapped[User] = relationship(back_populates="workspace_memberships", lazy="selectin")
     workspace: Mapped[Workspace] = relationship(back_populates="memberships", lazy="selectin")
+
+
+class RagDocument(Base):
+    __tablename__ = "rag_documents"
+    __table_args__ = (UniqueConstraint("document_id", name="uq_rag_documents_document_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    document_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    permission_scope: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="registered")
+    parse_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    chunk_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    embedding_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    index_status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+    )
+
+
+class RagChunk(Base):
+    __tablename__ = "rag_chunks"
+    __table_args__ = (UniqueConstraint("chunk_id", name="uq_rag_chunks_chunk_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    chunk_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    start_char: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_char: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_metadata: Mapped[dict[str, object]] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+    )
+
+
+class RagIngestionJob(Base):
+    __tablename__ = "rag_ingestion_jobs"
+    __table_args__ = (UniqueConstraint("job_id", name="uq_rag_ingestion_jobs_job_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    job_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    document_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="pending")
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_reindex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_text("0"))
+    chunk_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    chunk_overlap: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+    )

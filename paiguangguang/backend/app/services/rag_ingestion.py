@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
+from uuid import uuid4
 
 from app.schemas.rag import (
     RagChunkData,
@@ -15,7 +17,7 @@ from app.storage.rag_documents import (
     RagChunkRecord,
     RagDocumentRecord,
     RagDocumentRepository,
-    RagIngestionRecord,
+    RagIngestionJobRecord,
     get_rag_document_repository,
 )
 
@@ -57,10 +59,13 @@ def chunk_text(text: str, *, chunk_size: int, chunk_overlap: int) -> list[RagChu
             chunks.append(
                 RagChunkRecord(
                     chunk_id="",
-                    index=index,
+                    document_id="",
+                    chunk_index=index,
                     start_char=start,
                     end_char=end,
                     text=chunk_text_value,
+                    page_number=1,
+                    metadata={"chunk_index": index, "start_char": start, "end_char": end},
                 )
             )
             index += 1
@@ -90,10 +95,15 @@ class RagIngestionService:
         doc_id = make_document_id(content_hash)
         self.repository.upsert_document(
             RagDocumentRecord(
-                doc_id=doc_id,
+                document_id=doc_id,
                 title=request.title.strip() if request.title else None,
                 text=normalized_text,
                 content_hash=content_hash,
+                status="registered",
+                parse_status="pending",
+                chunk_status="pending",
+                embedding_status="pending",
+                index_status="pending",
             )
         )
         return RagDocumentData(
@@ -104,6 +114,8 @@ class RagIngestionService:
         )
 
     def ingest_document(self, request: RagIngestRequest) -> RagIngestData:
+        job_id = f"job_{uuid4().hex[:16]}"
+        started_at = datetime.now(timezone.utc)
         if request.doc_id:
             document = self.repository.get_document(request.doc_id)
             title = document.title
@@ -117,62 +129,123 @@ class RagIngestionService:
             title = request.title.strip() if request.title else None
             self.repository.upsert_document(
                 RagDocumentRecord(
-                    doc_id=doc_id,
+                    document_id=doc_id,
                     title=title,
                     text=text,
                     content_hash=content_hash,
+                    status="registered",
+                    parse_status="pending",
+                    chunk_status="pending",
+                    embedding_status="pending",
+                    index_status="pending",
                 )
             )
 
-        chunk_records = chunk_text(
-            text,
-            chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
+        self.repository.update_document_lifecycle(
+            doc_id,
+            status="parsing",
+            parse_status="in_progress",
+            chunk_status="pending",
+            embedding_status="pending",
+            index_status="pending",
         )
-        chunks = [
-            RagChunkRecord(
-                chunk_id=f"{doc_id}-chunk-{chunk.index:04d}",
-                index=chunk.index,
-                start_char=chunk.start_char,
-                end_char=chunk.end_char,
-                text=chunk.text,
+        self.repository.create_ingestion_job(
+            RagIngestionJobRecord(
+                job_id=job_id,
+                document_id=doc_id,
+                status="running",
+                failure_reason=None,
+                started_at=started_at,
+                completed_at=None,
+                retry_count=0,
+                is_reindex=False,
+                chunk_size=request.chunk_size,
+                chunk_overlap=request.chunk_overlap,
             )
-            for chunk in chunk_records
-        ]
-        ingestion = RagIngestionRecord(
-            doc_id=doc_id,
-            title=title,
-            chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
-            chunks=chunks,
         )
-        self.repository.upsert_ingestion(ingestion)
-        if self.vector_store and chunks:
-            self.vector_store.index_ingestion(
-                self.collection_name,
-                doc_id=doc_id,
-                title=title,
-                content_hash=content_hash,
-                chunks=chunks,
+
+        try:
+            self.repository.update_document_lifecycle(
+                doc_id,
+                status="chunking",
+                parse_status="completed",
+                chunk_status="in_progress",
             )
-        return RagIngestData(
-            doc_id=doc_id,
-            title=title,
-            chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap,
-            text_length=len(text),
-            chunk_count=len(chunks),
-            chunks=[
-                RagChunkData(
-                    chunk_id=chunk.chunk_id,
-                    index=chunk.index,
+            chunk_records = chunk_text(
+                text,
+                chunk_size=request.chunk_size,
+                chunk_overlap=request.chunk_overlap,
+            )
+            chunks = [
+                RagChunkRecord(
+                    chunk_id=f"{doc_id}-chunk-{chunk.chunk_index:04d}",
+                    document_id=doc_id,
+                    chunk_index=chunk.chunk_index,
                     start_char=chunk.start_char,
                     end_char=chunk.end_char,
                     text=chunk.text,
+                    page_number=chunk.page_number,
+                    metadata={
+                        "chunk_index": chunk.chunk_index,
+                        "start_char": chunk.start_char,
+                        "end_char": chunk.end_char,
+                    },
                 )
-                for chunk in chunks
-            ],
-        )
+                for chunk in chunk_records
+            ]
+            self.repository.replace_chunks(doc_id, chunks)
+            self.repository.update_document_lifecycle(
+                doc_id,
+                status="embedding",
+                chunk_status="completed",
+                embedding_status="in_progress",
+            )
+            if self.vector_store and chunks:
+                self.vector_store.index_ingestion(
+                    self.collection_name,
+                    doc_id=doc_id,
+                    title=title,
+                    content_hash=content_hash,
+                    chunks=chunks,
+                )
+            self.repository.update_document_lifecycle(
+                doc_id,
+                status="indexed",
+                embedding_status="completed",
+                index_status="completed",
+            )
+            self.repository.update_ingestion_job(
+                job_id,
+                status="completed",
+                completed_at=datetime.now(timezone.utc),
+            )
+            return RagIngestData(
+                doc_id=doc_id,
+                title=title,
+                chunk_size=request.chunk_size,
+                chunk_overlap=request.chunk_overlap,
+                text_length=len(text),
+                chunk_count=len(chunks),
+                chunks=[
+                    RagChunkData(
+                        chunk_id=chunk.chunk_id,
+                        index=chunk.index,
+                        start_char=chunk.start_char,
+                        end_char=chunk.end_char,
+                        text=chunk.text,
+                    )
+                    for chunk in chunks
+                ],
+            )
+        except Exception as exc:
+            self.repository.mark_document_failed(doc_id, str(exc))
+            self.repository.update_ingestion_job(
+                job_id,
+                status="failed",
+                failure_reason=str(exc),
+                completed_at=datetime.now(timezone.utc),
+            )
+            raise
 
 
 _RAG_INGESTION_SERVICE = RagIngestionService()
