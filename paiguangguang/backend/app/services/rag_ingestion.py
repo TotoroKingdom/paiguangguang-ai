@@ -10,6 +10,7 @@ from app.schemas.rag import (
     RagDocumentData,
     RagIngestData,
     RagIngestRequest,
+    RagIngestionJobData,
 )
 from app.core.config import get_settings
 from app.storage.chroma_store import ChromaRagStore, get_chroma_rag_store
@@ -89,11 +90,49 @@ class RagIngestionService:
         self.vector_store = (vector_store or get_chroma_rag_store()) if index_to_vector_store else None
         self.collection_name = collection_name or settings.rag_collection_name
 
+    @staticmethod
+    def _document_to_data(document: RagDocumentRecord) -> RagDocumentData:
+        return RagDocumentData(
+            doc_id=document.document_id,
+            title=document.title,
+            text_length=len(document.text),
+            content_hash=document.content_hash,
+            owner_user_id=document.owner_user_id,
+            workspace_id=document.workspace_id,
+            permission_scope=document.permission_scope,
+            status=document.status,
+            parse_status=document.parse_status,
+            chunk_status=document.chunk_status,
+            embedding_status=document.embedding_status,
+            index_status=document.index_status,
+            is_deleted=document.is_deleted,
+            error_message=document.error_message,
+            created_at=document.created_at,
+            updated_at=document.updated_at,
+        )
+
+    @staticmethod
+    def _job_to_data(job: RagIngestionJobRecord) -> RagIngestionJobData:
+        return RagIngestionJobData(
+            job_id=job.job_id,
+            document_id=job.document_id,
+            status=job.status,
+            failure_reason=job.failure_reason,
+            started_at=job.started_at,
+            completed_at=job.completed_at,
+            retry_count=job.retry_count,
+            is_reindex=job.is_reindex,
+            chunk_size=job.chunk_size,
+            chunk_overlap=job.chunk_overlap,
+            created_at=job.created_at,
+            updated_at=job.updated_at,
+        )
+
     def register_document(self, request: RagDocumentCreateRequest) -> RagDocumentData:
         normalized_text = normalize_text(request.text)
         content_hash = make_content_hash(request.title, normalized_text)
         doc_id = make_document_id(content_hash)
-        self.repository.upsert_document(
+        document = self.repository.upsert_document(
             RagDocumentRecord(
                 document_id=doc_id,
                 title=request.title.strip() if request.title else None,
@@ -106,12 +145,13 @@ class RagIngestionService:
                 index_status="pending",
             )
         )
-        return RagDocumentData(
-            doc_id=doc_id,
-            title=request.title.strip() if request.title else None,
-            text_length=len(normalized_text),
-            content_hash=content_hash,
-        )
+        return self._document_to_data(document)
+
+    def get_document(self, document_id: str) -> RagDocumentData:
+        return self._document_to_data(self.repository.get_document(document_id))
+
+    def get_ingestion_job(self, job_id: str) -> RagIngestionJobData:
+        return self._job_to_data(self.repository.get_ingestion_job(job_id))
 
     def ingest_document(self, request: RagIngestRequest) -> RagIngestData:
         job_id = f"job_{uuid4().hex[:16]}"
@@ -143,7 +183,7 @@ class RagIngestionService:
 
         self.repository.update_document_lifecycle(
             doc_id,
-            status="parsing",
+            status="reindexing" if request.reindex else "parsing",
             parse_status="in_progress",
             chunk_status="pending",
             embedding_status="pending",
@@ -158,7 +198,7 @@ class RagIngestionService:
                 started_at=started_at,
                 completed_at=None,
                 retry_count=0,
-                is_reindex=False,
+                is_reindex=request.reindex,
                 chunk_size=request.chunk_size,
                 chunk_overlap=request.chunk_overlap,
             )
@@ -214,11 +254,12 @@ class RagIngestionService:
                 embedding_status="completed",
                 index_status="completed",
             )
-            self.repository.update_ingestion_job(
+            job = self.repository.update_ingestion_job(
                 job_id,
                 status="completed",
                 completed_at=datetime.now(timezone.utc),
             )
+            document = self.repository.get_document(doc_id)
             return RagIngestData(
                 doc_id=doc_id,
                 title=title,
@@ -236,6 +277,8 @@ class RagIngestionService:
                     )
                     for chunk in chunks
                 ],
+                document=self._document_to_data(document),
+                job=self._job_to_data(job),
             )
         except Exception as exc:
             self.repository.mark_document_failed(doc_id, str(exc))
