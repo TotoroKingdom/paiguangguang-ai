@@ -13,12 +13,13 @@ from app.db.models import User
 from app.main import app
 from app.schemas.rag import RagQueryRequest
 from app.services.auth import AuthService, get_auth_service
+from app.services.hybrid_retrieval import HybridRetrievalService
 from app.services.rag_query import RagQueryService, get_rag_query_service
 from app.services.rbac import RBACService, get_rbac_service
 from app.db.session import get_db_session
 
 
-class FakeVectorStore:
+class FakeSearchStore:
     def __init__(self, hits):
         self.hits = list(hits)
         self.calls: list[dict[str, object]] = []
@@ -54,6 +55,14 @@ class FakeVectorStore:
         return hits[:top_k]
 
 
+class FakeVectorStore(FakeSearchStore):
+    pass
+
+
+class FakeKeywordRetriever(FakeSearchStore):
+    pass
+
+
 def _create_session(tmp_path, filename: str) -> Session:
     engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / filename).as_posix()}")
     Base.metadata.create_all(bind=engine)
@@ -61,11 +70,16 @@ def _create_session(tmp_path, filename: str) -> Session:
     return session_factory()
 
 
-def _build_query_service(hits, handler):
+def _build_query_service(vector_hits, keyword_hits, handler):
     transport = httpx.MockTransport(handler)
     client = DeepSeekClient(api_key="test-key", transport=transport)
-    vector_store = FakeVectorStore(hits)
-    return RagQueryService(vector_store=vector_store, client=client), vector_store
+    vector_store = FakeVectorStore(vector_hits)
+    keyword_retriever = FakeKeywordRetriever(keyword_hits)
+    retrieval_service = HybridRetrievalService(
+        vector_store=vector_store,
+        keyword_retriever=keyword_retriever,
+    )
+    return RagQueryService(retrieval_service=retrieval_service, client=client), vector_store, keyword_retriever
 
 
 def _build_test_client(
@@ -101,7 +115,11 @@ def test_rag_query_requires_authentication(tmp_path) -> None:
     session = _create_session(tmp_path, "rag-query-auth.sqlite3")
     auth_service = AuthService()
 
-    service, _vector_store = _build_query_service([], lambda request: httpx.Response(200, json={}))
+    service, _vector_store, _keyword_retriever = _build_query_service(
+        [],
+        [],
+        lambda request: httpx.Response(200, json={}),
+    )
     client = _build_test_client(session, auth_service, service)
 
     try:
@@ -130,7 +148,11 @@ def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
 
     _create_user(session, auth_service, email="reader@example.com", password="Secret123!")
 
-    service, _vector_store = _build_query_service([], lambda request: httpx.Response(200, json={}))
+    service, _vector_store, _keyword_retriever = _build_query_service(
+        [],
+        [],
+        lambda request: httpx.Response(200, json={}),
+    )
     client = _build_test_client(session, auth_service, service, rbac_service)
 
     try:
@@ -192,6 +214,8 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
         chunk_index=1,
         text="Alpha project notes explain the workflow.",
         score=0.91,
+        start_char=0,
+        end_char=40,
         metadata={
             "doc_id": "doc-alpha",
             "chunk_id": "doc-alpha-chunk-0001",
@@ -215,6 +239,8 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
         chunk_index=2,
         text="Admin-only deployment notes.",
         score=0.72,
+        start_char=41,
+        end_char=80,
         metadata={
             "doc_id": "doc-admin",
             "chunk_id": "doc-admin-chunk-0002",
@@ -231,7 +257,11 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
         },
     )
 
-    service, vector_store = _build_query_service([accessible_hit, inaccessible_hit], handler)
+    service, vector_store, keyword_retriever = _build_query_service(
+        [accessible_hit, inaccessible_hit],
+        [accessible_hit],
+        handler,
+    )
     client = _build_test_client(session, auth_service, service, rbac_service)
 
     try:
@@ -269,8 +299,9 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert source["page_number"] == 3
     assert source["chunk_index"] == 1
     assert source["text"] == "Alpha project notes explain the workflow."
-    assert source["score"] == 0.91
+    assert source["score"] > 0
     assert source["rerank_score"] is None
+    assert source["route_scores"] == {"vector": 0.91, "keyword": 0.91}
     assert source["metadata"]["workspace_id"] == defaults.default_workspace.id
     assert source["metadata"]["permission_scope"] == "workspace"
     assert source["metadata"]["lifecycle_version"] == 4
@@ -281,6 +312,14 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
             "query_text": "How is the project deployed?",
             "top_k": 2,
             "access_context": vector_store.calls[0]["access_context"],
+        }
+    ]
+    assert keyword_retriever.calls == [
+        {
+            "collection_name": "portfolio_knowledge",
+            "query_text": "How is the project deployed?",
+            "top_k": 2,
+            "access_context": keyword_retriever.calls[0]["access_context"],
         }
     ]
     access_context = vector_store.calls[0]["access_context"]
@@ -313,7 +352,7 @@ def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
             },
         )
 
-    service, _vector_store = _build_query_service([], handler)
+    service, _vector_store, _keyword_retriever = _build_query_service([], [], handler)
 
     result = service.query(
         RagQueryRequest(
