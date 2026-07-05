@@ -10,6 +10,7 @@ from app.storage.chroma_store import (
     RagSearchHit,
     get_chroma_rag_store,
 )
+from app.services.query_rewrite import QueryRewriteService, get_query_rewrite_service
 from app.services.rbac import RBACService, get_rbac_service
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -46,10 +47,12 @@ class RagQueryService:
         self,
         vector_store: ChromaRagStore | None = None,
         client: DeepSeekClient | None = None,
+        rewrite_service: QueryRewriteService | None = None,
     ) -> None:
         settings = get_settings()
         self.vector_store = vector_store or get_chroma_rag_store()
         self.client = client or DeepSeekClient(settings)
+        self.rewrite_service = rewrite_service or get_query_rewrite_service()
         self.default_collection_name = settings.rag_collection_name
 
     def query(
@@ -80,8 +83,9 @@ class RagQueryService:
             )
             for hit in hits
         ]
+        rewrite = self.rewrite_service.rewrite(request.question)
         answer = self._ask_model(request.question, hits)
-        return RagQueryData(answer=answer, sources=sources)
+        return RagQueryData(answer=answer, sources=sources, rewrite=rewrite)
 
     def query_for_user(
         self,
