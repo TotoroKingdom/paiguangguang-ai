@@ -25,16 +25,25 @@ type ApiEnvelope<T> = {
   } | null;
 };
 
-export async function postJson<TResponse, TBody extends Record<string, unknown>>(
+type RequestOptions = {
+  token?: string | null;
+};
+
+async function requestJson<TResponse>(
   path: string,
-  body: TBody
+  init: RequestInit,
+  options?: RequestOptions
 ): Promise<TResponse> {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  const token = options?.token?.trim();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(`${getBackendBaseUrl()}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
+    ...init,
+    headers
   });
 
   const payload = (await response.json()) as ApiEnvelope<TResponse>;
@@ -50,23 +59,23 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
   return payload.data;
 }
 
-export async function getJson<TResponse>(path: string): Promise<TResponse> {
-  const response = await fetch(`${getBackendBaseUrl()}${path}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json"
-    }
-  });
+export async function postJson<TResponse, TBody extends Record<string, unknown>>(
+  path: string,
+  body: TBody,
+  options?: RequestOptions
+): Promise<TResponse> {
+  return requestJson<TResponse>(path, {
+    method: "POST",
+    body: JSON.stringify(body)
+  }, options);
+}
 
-  const payload = (await response.json()) as ApiEnvelope<TResponse>;
-
-  if (!response.ok || !payload.success || !payload.data) {
-    throw new ApiError(
-      payload.error?.message || "Request failed",
-      response.status,
-      payload.error?.code || "REQUEST_FAILED"
-    );
-  }
-
-  return payload.data;
+export async function getJson<TResponse>(path: string, options?: RequestOptions): Promise<TResponse> {
+  return requestJson<TResponse>(
+    path,
+    {
+      method: "GET"
+    },
+    options
+  );
 }

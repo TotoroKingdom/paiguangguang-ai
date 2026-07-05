@@ -1,5 +1,5 @@
 import { PageShell } from "@/components/page-shell";
-import { KnowledgeAgentWorkspace } from "@/features/knowledge-agent/knowledge-agent-workspace";
+import { KnowledgeAgentShell } from "@/features/knowledge-agent/knowledge-agent-shell";
 
 export default function KnowledgeAgentPage() {
   return (
@@ -21,7 +21,7 @@ export default function KnowledgeAgentPage() {
         </div>
       </PageShell>
 
-      <KnowledgeAgentWorkspace />
+      <KnowledgeAgentShell />
     </div>
   );
 }

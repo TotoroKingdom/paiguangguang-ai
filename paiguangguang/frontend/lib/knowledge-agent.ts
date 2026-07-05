@@ -1,4 +1,5 @@
 import { postJson } from "@/lib/api";
+import { getStoredAuthToken } from "@/lib/auth";
 import type {
   KnowledgeDocumentCreateRequest,
   KnowledgeDocumentData,
@@ -16,11 +17,15 @@ export function getDefaultKnowledgeCollection() {
 }
 
 export function registerKnowledgeDocument(request: KnowledgeDocumentCreateRequest) {
-  return postJson<KnowledgeDocumentData, KnowledgeDocumentCreateRequest>("/api/v1/rag/documents", request);
+  return postJson<KnowledgeDocumentData, KnowledgeDocumentCreateRequest>("/api/v1/rag/documents", request, {
+    token: getStoredAuthToken(),
+  });
 }
 
 export function ingestKnowledgeDocument(request: KnowledgeIngestRequest) {
-  return postJson<KnowledgeIngestData, KnowledgeIngestRequest>("/api/v1/rag/ingest", request);
+  return postJson<KnowledgeIngestData, KnowledgeIngestRequest>("/api/v1/rag/ingest", request, {
+    token: getStoredAuthToken(),
+  });
 }
 
 export async function ingestKnowledgeText(
@@ -41,5 +46,7 @@ export async function ingestKnowledgeText(
 }
 
 export function queryKnowledgeAgent(request: KnowledgeQueryRequest) {
-  return postJson<KnowledgeQueryData, KnowledgeQueryRequest>("/api/v1/rag/query", request);
+  return postJson<KnowledgeQueryData, KnowledgeQueryRequest>("/api/v1/rag/query", request, {
+    token: getStoredAuthToken(),
+  });
 }
