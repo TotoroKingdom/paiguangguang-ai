@@ -90,8 +90,13 @@ class RagQueryRequest(BaseModel):
 class RagSourceData(BaseModel):
     doc_id: str
     chunk_id: str
+    title: str | None = None
+    page_number: int | None = None
+    chunk_index: int = 0
     text: str
     score: float
+    rerank_score: float | None = None
+    metadata: dict[str, object] = Field(default_factory=dict)
 
 
 class RagQueryData(BaseModel):

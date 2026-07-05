@@ -45,8 +45,13 @@ export type KnowledgeQueryRequest = {
 export type KnowledgeSourceData = {
   doc_id: string;
   chunk_id: string;
+  title: string | null;
+  page_number: number | null;
+  chunk_index: number;
   text: string;
   score: number;
+  rerank_score: number | null;
+  metadata: Record<string, unknown>;
 };
 
 export type KnowledgeQueryData = {
