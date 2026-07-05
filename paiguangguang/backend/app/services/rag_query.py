@@ -5,6 +5,7 @@ from app.ai.rerank import RerankProvider, get_rerank_provider
 from app.core.config import get_settings
 from app.db.models import User
 from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
+from app.services.context_assembler import ContextAssembler, ContextAssemblyResult, get_context_assembler
 from app.storage.chroma_store import RagSearchAccessContext
 from app.services.hybrid_retrieval import HybridRetrievalHit, HybridRetrievalService, get_hybrid_retrieval_service
 from app.services.query_rewrite import QueryRewriteService, get_query_rewrite_service
@@ -22,27 +23,11 @@ def build_rag_system_prompt() -> str:
         "If the context is insufficient, say so clearly.\n"
         "When helpful, mention source identifiers in the form [doc_id / chunk_id]."
     )
-
-
-def build_context_block(hits: list[HybridRetrievalHit]) -> str:
-    if not hits:
-        return "No relevant context was retrieved."
-
-    lines: list[str] = []
-    for index, hit in enumerate(hits, start=1):
-        title = f" | title={hit.title}" if hit.title else ""
-        page = f" | page={hit.page_number}" if hit.page_number is not None else ""
-        lines.append(
-            f"[{index}] doc_id={hit.doc_id} | chunk_id={hit.chunk_id} | score={hit.score:.4f}{title}{page}\n"
-            f"{hit.text}"
-        )
-    return "\n\n".join(lines)
-
-
 class RagQueryService:
     def __init__(
         self,
         retrieval_service: HybridRetrievalService | None = None,
+        context_assembler: ContextAssembler | None = None,
         client: DeepSeekClient | None = None,
         rewrite_service: QueryRewriteService | None = None,
         rerank_provider: RerankProvider | None = None,
@@ -50,6 +35,7 @@ class RagQueryService:
         settings = get_settings()
         self.client = client or DeepSeekClient(settings)
         self.retrieval_service = retrieval_service or get_hybrid_retrieval_service()
+        self.context_assembler = context_assembler or get_context_assembler()
         self.rewrite_service = rewrite_service or get_query_rewrite_service()
         self.rerank_provider = rerank_provider if rerank_provider is not None else get_rerank_provider(settings)
         self.default_collection_name = settings.rag_collection_name
@@ -70,6 +56,7 @@ class RagQueryService:
             rewrite_queries=rewrite.rewritten_queries,
         )
         hits = self._apply_rerank(request.question, hits)
+        assembly = self.context_assembler.assemble(hits)
 
         sources = [
             RagSourceData(
@@ -84,9 +71,9 @@ class RagQueryService:
                 route_scores=dict(hit.route_scores),
                 metadata=dict(hit.metadata),
             )
-            for hit in hits
+            for hit in assembly.selected_sources
         ]
-        answer = self._ask_model(request.question, hits)
+        answer = self._ask_model(request.question, assembly)
         return RagQueryData(answer=answer, sources=sources, rewrite=rewrite)
 
     def query_for_user(
@@ -133,15 +120,14 @@ class RagQueryService:
         default_workspace_id = session.scalar(select(Workspace.id).where(Workspace.is_default.is_(True)))
         return default_workspace_id if isinstance(default_workspace_id, str) else None
 
-    def _ask_model(self, question: str, hits: list[HybridRetrievalHit]) -> str:
-        context_block = build_context_block(hits)
+    def _ask_model(self, question: str, assembly: ContextAssemblyResult) -> str:
         messages = [
             {"role": "system", "content": build_rag_system_prompt()},
             {
                 "role": "user",
                 "content": (
                     f"Question:\n{question}\n\n"
-                    f"Retrieved context:\n{context_block}\n\n"
+                    f"Retrieved context:\n{assembly.context_text}\n\n"
                     "Write a concise answer grounded in the context. "
                     "If the context does not contain the answer, say that clearly."
                 ),

@@ -13,7 +13,9 @@ from app.db.models import User
 from app.main import app
 from app.schemas.rag import RagQueryRequest
 from app.ai.rerank import RerankResult
+from app.services.context_assembler import ContextAssemblyResult
 from app.services.auth import AuthService, get_auth_service
+from app.services.hybrid_retrieval import HybridRetrievalHit
 from app.services.hybrid_retrieval import HybridRetrievalService
 from app.services.rag_query import RagQueryService, get_rag_query_service
 from app.services.rbac import RBACService, get_rbac_service
@@ -81,6 +83,27 @@ class FakeRerankProvider:
         return results
 
 
+class FakeContextAssembler:
+    def __init__(self, result: ContextAssemblyResult | None = None) -> None:
+        self.result = result
+        self.calls: list[list[HybridRetrievalHit]] = []
+
+    def assemble(self, hits):
+        self.calls.append(list(hits))
+        if self.result is not None:
+            return self.result
+        context_text = "\n\n".join(
+            f"[{index}] doc_id={hit.doc_id} | chunk_id={hit.chunk_id}\n{hit.text}"
+            for index, hit in enumerate(hits, start=1)
+        )
+        return ContextAssemblyResult(
+            context_text=context_text or "No relevant context was retrieved.",
+            selected_sources=list(hits),
+            total_characters=len(context_text),
+            truncated=False,
+        )
+
+
 def _create_session(tmp_path, filename: str) -> Session:
     engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / filename).as_posix()}")
     Base.metadata.create_all(bind=engine)
@@ -88,7 +111,7 @@ def _create_session(tmp_path, filename: str) -> Session:
     return session_factory()
 
 
-def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=None):
+def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=None, context_assembler=None):
     transport = httpx.MockTransport(handler)
     client = DeepSeekClient(api_key="test-key", transport=transport)
     vector_store = FakeVectorStore(vector_hits)
@@ -100,12 +123,14 @@ def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=Non
     return (
         RagQueryService(
             retrieval_service=retrieval_service,
+            context_assembler=context_assembler,
             client=client,
             rerank_provider=rerank_provider,
         ),
         vector_store,
         keyword_retriever,
         rerank_provider,
+        context_assembler,
     )
 
 
@@ -142,7 +167,7 @@ def test_rag_query_requires_authentication(tmp_path) -> None:
     session = _create_session(tmp_path, "rag-query-auth.sqlite3")
     auth_service = AuthService()
 
-    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
         [],
         [],
         lambda request: httpx.Response(200, json={}),
@@ -175,7 +200,7 @@ def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
 
     _create_user(session, auth_service, email="reader@example.com", password="Secret123!")
 
-    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
         [],
         [],
         lambda request: httpx.Response(200, json={}),
@@ -289,7 +314,7 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
             "Alpha project notes explain the workflow.": 0.8,
         }
     )
-    service, vector_store, keyword_retriever, _rerank_provider = _build_query_service(
+    service, vector_store, keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
         [accessible_hit, inaccessible_hit],
         [accessible_hit],
         handler,
@@ -394,7 +419,7 @@ def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
             },
         )
 
-    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service([], [], handler)
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service([], [], handler)
 
     result = service.query(
         RagQueryRequest(
@@ -486,7 +511,7 @@ def test_rag_query_applies_rerank_before_prompt_context(tmp_path) -> None:
             "Beta deployment notes.": 0.9,
         }
     )
-    service, _vector_store, _keyword_retriever, _rerank_provider = _build_query_service(
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
         [alpha_hit, beta_hit],
         [alpha_hit, beta_hit],
         handler,
@@ -520,3 +545,108 @@ def test_rag_query_applies_rerank_before_prompt_context(tmp_path) -> None:
     assert body["sources"][1]["rerank_score"] == 0.2
     assert "doc_id=doc-beta" in captured_bodies[0]
     assert captured_bodies[0].index("doc_id=doc-beta") < captured_bodies[0].index("doc_id=doc-alpha")
+
+
+def test_rag_query_uses_context_assembler_output(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-query-context-assembler.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    user = _create_user(session, auth_service, email="context@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, user.id, "user")
+    rbac_service.add_user_to_workspace(session, user.id, defaults.default_workspace.slug)
+
+    captured_bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_bodies.append(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Context assembler controls the prompt payload.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    source_hit = SimpleNamespace(
+        doc_id="doc-context",
+        chunk_id="doc-context-chunk-0001",
+        title="Context Notes",
+        page_number=4,
+        chunk_index=1,
+        text="Context assembler source chunk.",
+        score=0.77,
+        start_char=0,
+        end_char=31,
+        metadata={
+            "doc_id": "doc-context",
+            "chunk_id": "doc-context-chunk-0001",
+            "title": "Context Notes",
+            "page_number": 4,
+            "chunk_index": 1,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "start_char": 0,
+            "end_char": 31,
+        },
+    )
+    context_assembler = FakeContextAssembler(
+        ContextAssemblyResult(
+            context_text="CUSTOM CONTEXT BLOCK",
+            selected_sources=[
+                HybridRetrievalHit(
+                    doc_id=source_hit.doc_id,
+                    chunk_id=source_hit.chunk_id,
+                    title=source_hit.title,
+                    page_number=source_hit.page_number,
+                    chunk_index=source_hit.chunk_index,
+                    text=source_hit.text,
+                    score=source_hit.score,
+                    start_char=source_hit.start_char,
+                    end_char=source_hit.end_char,
+                    metadata=dict(source_hit.metadata),
+                    rerank_score=None,
+                    route_scores={"vector": 0.77},
+                )
+            ],
+            total_characters=len("CUSTOM CONTEXT BLOCK"),
+            truncated=False,
+        )
+    )
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
+        [source_hit],
+        [source_hit],
+        handler,
+        context_assembler=context_assembler,
+    )
+    client = _build_test_client(session, auth_service, service, rbac_service)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "context@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "How is the context assembled?",
+                "collection": "portfolio_knowledge",
+                "top_k": 1,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert response.status_code == 200
+    assert context_assembler.calls and context_assembler.calls[0][0].chunk_id == source_hit.chunk_id
+    assert "CUSTOM CONTEXT BLOCK" in captured_bodies[0]
+    assert context_assembler.calls[0][0].text == source_hit.text
