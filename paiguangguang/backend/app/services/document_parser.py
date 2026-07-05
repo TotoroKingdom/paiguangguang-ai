@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pypdf import PdfReader
 
+from app.core.config import get_settings
+
 
 DEFAULT_MAX_FILE_SIZE = 10 * 1024 * 1024
 SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
@@ -45,8 +47,9 @@ class ParsedDocument:
 
 
 class DocumentParser:
-    def __init__(self, *, max_file_size: int = DEFAULT_MAX_FILE_SIZE) -> None:
-        self.max_file_size = max_file_size
+    def __init__(self, *, max_file_size: int | None = None) -> None:
+        settings = get_settings()
+        self.max_file_size = max_file_size if max_file_size is not None else settings.document_max_file_size_bytes
 
     def parse(self, file_name: str, content: bytes) -> ParsedDocument:
         if len(content) > self.max_file_size:

@@ -11,6 +11,10 @@ class DeepSeekError(RuntimeError):
     pass
 
 
+class DeepSeekTimeoutError(DeepSeekError):
+    pass
+
+
 class DeepSeekClient:
     def __init__(
         self,
@@ -69,11 +73,18 @@ class DeepSeekClient:
         if extra:
             payload.update(extra)
 
-        response = self._client.post(
-            "/v1/chat/completions",
-            headers=self._auth_headers(),
-            json=payload,
-        )
+        try:
+            response = self._client.post(
+                "/v1/chat/completions",
+                headers=self._auth_headers(),
+                json=payload,
+            )
+        except httpx.TimeoutException as exc:
+            raise DeepSeekTimeoutError(
+                f"DeepSeek request timed out after {self.timeout_seconds:.1f} seconds"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise DeepSeekError(f"DeepSeek request failed: {exc}") from exc
 
         try:
             response.raise_for_status()

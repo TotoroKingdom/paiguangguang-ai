@@ -181,19 +181,19 @@ def test_failed_ingestion_records_failure_and_leaves_document_inspectable() -> N
 
     assert ingest_response.status_code == 502
     assert ingest_response.json()["success"] is False
-    assert ingest_response.json()["error"]["code"] == "HTTP_ERROR"
+    assert ingest_response.json()["error"]["code"] == "EXTERNAL_MODEL_ERROR"
     assert "Vector indexing failed" in ingest_response.json()["error"]["message"]
 
     assert document_response.status_code == 200
     document_body = document_response.json()["data"]
     assert document_body["status"] == "failed"
-    assert document_body["error_message"] == "Vector indexing failed"
+    assert document_body["error_message"] == "Embedding failed: Vector indexing failed"
     assert document_body["is_deleted"] is False
 
     assert job_response.status_code == 200
     job_body = job_response.json()["data"]
     assert job_body["status"] == "failed"
-    assert job_body["failure_reason"] == "Vector indexing failed"
+    assert job_body["failure_reason"] == "Embedding failed: Vector indexing failed"
     assert job_body["completed_at"] is not None
 
 

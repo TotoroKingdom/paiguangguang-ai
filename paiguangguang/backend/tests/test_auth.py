@@ -76,14 +76,14 @@ def test_auth_login_me_and_invalid_token(monkeypatch, tmp_path) -> None:
 
     missing_token_response = client.get("/api/v1/auth/me")
     assert missing_token_response.status_code == 401
-    assert missing_token_response.json()["error"]["code"] == "HTTP_ERROR"
+    assert missing_token_response.json()["error"]["code"] == "AUTHENTICATION_ERROR"
 
     invalid_token_response = client.get(
         "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalid-token"},
     )
     assert invalid_token_response.status_code == 401
-    assert invalid_token_response.json()["error"]["code"] == "HTTP_ERROR"
+    assert invalid_token_response.json()["error"]["code"] == "AUTHENTICATION_ERROR"
 
     app.dependency_overrides.clear()
     session.close()

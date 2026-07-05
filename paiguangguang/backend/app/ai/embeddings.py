@@ -24,6 +24,10 @@ class EmbeddingProviderError(RuntimeError):
     pass
 
 
+class EmbeddingProviderTimeoutError(EmbeddingProviderError):
+    pass
+
+
 class EmbeddingConfigurationError(ValueError):
     pass
 
@@ -136,15 +140,22 @@ class DashScopeEmbeddingProvider:
         if not texts:
             return []
 
-        response = self._client.post(
-            "/embeddings",
-            headers=self._auth_headers(),
-            json={
-                "model": self.model,
-                "input": list(texts),
-                "encoding_format": "float",
-            },
-        )
+        try:
+            response = self._client.post(
+                "/embeddings",
+                headers=self._auth_headers(),
+                json={
+                    "model": self.model,
+                    "input": list(texts),
+                    "encoding_format": "float",
+                },
+            )
+        except httpx.TimeoutException as exc:
+            raise EmbeddingProviderTimeoutError(
+                f"DashScope embedding request timed out after {self.timeout_seconds:.1f} seconds"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise EmbeddingProviderError(f"DashScope embedding request failed: {exc}") from exc
 
         try:
             response.raise_for_status()

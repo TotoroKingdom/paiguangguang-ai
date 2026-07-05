@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import asdict
 from time import perf_counter
 
-from app.ai.deepseek import DeepSeekClient, DeepSeekError
-from app.ai.rerank import RerankProvider, get_rerank_provider
+from app.ai.deepseek import DeepSeekClient, DeepSeekError, DeepSeekTimeoutError
+from app.ai.embeddings import EmbeddingProviderError, EmbeddingProviderTimeoutError
+from app.ai.rerank import RerankProvider, RerankProviderError, RerankProviderTimeoutError, get_rerank_provider
 from app.core.config import get_settings
+from app.core.errors import ExternalModelError, RetrievalFailureError, ServiceTimeoutError
+from app.core.logging import log_event
 from app.db.models import User
 from app.schemas.rag import (
     RagQueryData,
@@ -82,27 +85,69 @@ class RagQueryService:
     ) -> RagQueryData:
         started_at = perf_counter()
         collection_name = request.collection or self.default_collection_name
-        rewrite = self.rewrite_service.rewrite(request.question, cache_bypass=cache_bypass)
-        trace = self._get_retrieval_trace(
-            collection_name,
-            request=request,
-            rewrite=rewrite,
-            access_context=access_context,
+        log_event(
+            "rag_query.started",
+            question=request.question,
+            collection=collection_name,
+            top_k=request.top_k,
+            include_debug=request.include_debug,
             cache_bypass=cache_bypass,
+            access_user_id=getattr(access_context, "user_id", None),
+            workspace_id=getattr(access_context, "workspace_id", None),
         )
-        hits = trace.fusion_hits
-        fusion_hits = list(hits)
-        hits = self._apply_rerank(request.question, hits)
-        assembly = self.context_assembler.assemble(hits)
+        try:
+            rewrite = self.rewrite_service.rewrite(request.question, cache_bypass=cache_bypass)
+            trace = self._get_retrieval_trace(
+                collection_name,
+                request=request,
+                rewrite=rewrite,
+                access_context=access_context,
+                cache_bypass=cache_bypass,
+            )
+            hits = trace.fusion_hits
+            fusion_hits = list(hits)
+            hits = self._apply_rerank(request.question, hits)
+            assembly = self.context_assembler.assemble(hits)
 
-        cached_result = self._load_answer_cache(
-            request=request,
-            rewrite=rewrite,
-            access_context=access_context,
-            assembly=assembly,
-            cache_bypass=cache_bypass,
-        )
-        if cached_result is not None:
+            cached_result = self._load_answer_cache(
+                request=request,
+                rewrite=rewrite,
+                access_context=access_context,
+                assembly=assembly,
+                cache_bypass=cache_bypass,
+            )
+            if cached_result is not None:
+                debug = self._build_debug_data(
+                    request,
+                    rewrite=rewrite,
+                    trace=trace,
+                    fusion_hits=fusion_hits,
+                    reranked_hits=hits,
+                    assembly=assembly,
+                    latency_ms=int((perf_counter() - started_at) * 1000),
+                    model_usage={},
+                )
+                result = RagQueryData(
+                    answer=cached_result.answer,
+                    sources=cached_result.sources,
+                    rewrite=rewrite,
+                    debug=debug,
+                )
+                log_event(
+                    "rag_query.cache_hit",
+                    collection=collection_name,
+                    question=request.question,
+                    source_count=len(result.sources),
+                    access_user_id=getattr(access_context, "user_id", None),
+                )
+                return result
+
+            answer, model_usage = self._ask_model(request.question, assembly)
+
+            sources = [
+                self._hit_to_source_data(hit)
+                for hit in assembly.selected_sources
+            ]
             debug = self._build_debug_data(
                 request,
                 rewrite=rewrite,
@@ -111,41 +156,58 @@ class RagQueryService:
                 reranked_hits=hits,
                 assembly=assembly,
                 latency_ms=int((perf_counter() - started_at) * 1000),
-                model_usage={},
+                model_usage=model_usage,
             )
-            return RagQueryData(
-                answer=cached_result.answer,
-                sources=cached_result.sources,
+            result = RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
+            self._store_answer_cache(
+                request=request,
                 rewrite=rewrite,
-                debug=debug,
+                access_context=access_context,
+                assembly=assembly,
+                result=result,
+                cache_bypass=cache_bypass,
             )
-
-        answer, model_usage = self._ask_model(request.question, assembly)
-
-        sources = [
-            self._hit_to_source_data(hit)
-            for hit in assembly.selected_sources
-        ]
-        debug = self._build_debug_data(
-            request,
-            rewrite=rewrite,
-            trace=trace,
-            fusion_hits=fusion_hits,
-            reranked_hits=hits,
-            assembly=assembly,
-            latency_ms=int((perf_counter() - started_at) * 1000),
-            model_usage=model_usage,
-        )
-        result = RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
-        self._store_answer_cache(
-            request=request,
-            rewrite=rewrite,
-            access_context=access_context,
-            assembly=assembly,
-            result=result,
-            cache_bypass=cache_bypass,
-        )
-        return result
+            log_event(
+                "rag_query.completed",
+                collection=collection_name,
+                question=request.question,
+                source_count=len(result.sources),
+                latency_ms=int((perf_counter() - started_at) * 1000),
+                access_user_id=getattr(access_context, "user_id", None),
+                workspace_id=getattr(access_context, "workspace_id", None),
+            )
+            return result
+        except (EmbeddingProviderTimeoutError, RerankProviderTimeoutError, DeepSeekTimeoutError) as exc:
+            log_event(
+                "rag_query.timeout",
+                collection=collection_name,
+                question=request.question,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+            )
+            if isinstance(exc, DeepSeekTimeoutError):
+                raise ServiceTimeoutError("DeepSeek answer generation", self.client.timeout_seconds, str(exc)) from exc
+            raise ServiceTimeoutError("Retrieval or rerank", 0.0, str(exc)) from exc
+        except (EmbeddingProviderError, RerankProviderError, DeepSeekError) as exc:
+            log_event(
+                "rag_query.failed",
+                collection=collection_name,
+                question=request.question,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+            )
+            if isinstance(exc, DeepSeekError):
+                raise ExternalModelError("DeepSeek answer generation", str(exc)) from exc
+            raise RetrievalFailureError(str(exc)) from exc
+        except Exception as exc:
+            log_event(
+                "rag_query.failed",
+                collection=collection_name,
+                question=request.question,
+                error=str(exc),
+                error_type=exc.__class__.__name__,
+            )
+            raise RetrievalFailureError(str(exc)) from exc
 
     def query_for_user(
         self,
@@ -430,7 +492,12 @@ class RagQueryService:
         )
         if cache_key is not None:
             self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
-            self._remember_answer_cache_keys(cache_key, result)
+            self._remember_result_cache_keys(cache_key, result)
+
+    def _remember_result_cache_keys(self, cache_key: str, result: RagQueryData) -> None:
+        document_ids = {source.doc_id for source in result.sources}
+        for document_id in document_ids:
+            remember_document_cache_keys(self.cache_adapter, document_id, [cache_key])
 
     def purge_document_cache(self, document_id: str) -> None:
         invalidate_document_cache(self.cache_adapter, document_id)

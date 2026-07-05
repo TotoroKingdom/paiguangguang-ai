@@ -39,6 +39,9 @@ class Settings:
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     embedding_model: str = "text-embedding-v1"
     embedding_timeout_seconds: float = 30.0
+    document_max_file_size_bytes: int = 10 * 1024 * 1024
+    rag_rate_limit_max_requests: int = 30
+    rag_rate_limit_window_seconds: int = 60
     redis_url: str = ""
     chroma_path: str = "./chroma"
     rag_collection_name: str = "portfolio_knowledge"
@@ -71,6 +74,9 @@ def get_settings() -> Settings:
         ),
         embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-v1"),
         embedding_timeout_seconds=float(os.getenv("EMBEDDING_TIMEOUT_SECONDS", "30")),
+        document_max_file_size_bytes=int(os.getenv("DOCUMENT_MAX_FILE_SIZE_BYTES", str(10 * 1024 * 1024))),
+        rag_rate_limit_max_requests=int(os.getenv("RAG_RATE_LIMIT_MAX_REQUESTS", "30")),
+        rag_rate_limit_window_seconds=int(os.getenv("RAG_RATE_LIMIT_WINDOW_SECONDS", "60")),
         redis_url=os.getenv("REDIS_URL", ""),
         chroma_path=os.getenv("CHROMA_PATH", "./chroma"),
         rag_collection_name=os.getenv("RAG_COLLECTION_NAME", "portfolio_knowledge"),

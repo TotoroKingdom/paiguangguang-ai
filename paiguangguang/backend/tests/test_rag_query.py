@@ -189,7 +189,7 @@ def test_rag_query_requires_authentication(tmp_path) -> None:
 
     assert response.status_code == 401
     assert response.json()["success"] is False
-    assert response.json()["error"]["code"] == "HTTP_ERROR"
+    assert response.json()["error"]["code"] == "AUTHENTICATION_ERROR"
 
 
 def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:

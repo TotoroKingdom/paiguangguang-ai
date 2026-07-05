@@ -24,6 +24,10 @@ class RerankProviderError(RuntimeError):
     pass
 
 
+class RerankProviderTimeoutError(RerankProviderError):
+    pass
+
+
 class RerankConfigurationError(ValueError):
     pass
 
@@ -88,11 +92,18 @@ class DashScopeRerankProvider:
         if top_n is not None:
             payload["top_n"] = top_n
 
-        response = self._client.post(
-            "/reranks",
-            headers=self._auth_headers(),
-            json=payload,
-        )
+        try:
+            response = self._client.post(
+                "/reranks",
+                headers=self._auth_headers(),
+                json=payload,
+            )
+        except httpx.TimeoutException as exc:
+            raise RerankProviderTimeoutError(
+                f"DashScope rerank request timed out after {self.timeout_seconds:.1f} seconds"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise RerankProviderError(f"DashScope rerank request failed: {exc}") from exc
 
         try:
             response.raise_for_status()

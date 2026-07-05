@@ -1,11 +1,17 @@
-from fastapi import FastAPI
+from __future__ import annotations
+
+import logging
+
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.core.errors import ExternalModelError, RetrievalFailureError, ServiceRateLimitError, ServiceTimeoutError
+
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 settings = get_settings()
 
@@ -30,14 +36,85 @@ def root() -> dict[str, str]:
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
     detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    code = "HTTP_ERROR"
+    if exc.status_code == 401:
+        code = "AUTHENTICATION_ERROR"
+    elif exc.status_code == 403:
+        code = "PERMISSION_DENIED"
+    elif exc.status_code == 429:
+        code = "RATE_LIMITED"
+    elif exc.status_code in {408, 504}:
+        code = "TIMEOUT_ERROR"
+    elif exc.status_code == 502:
+        code = "EXTERNAL_MODEL_ERROR"
     return JSONResponse(
         status_code=exc.status_code,
         content={
             "success": False,
             "data": None,
             "error": {
-                "code": "HTTP_ERROR",
+                "code": code,
                 "message": detail,
+            },
+        },
+    )
+
+
+@app.exception_handler(ServiceTimeoutError)
+async def service_timeout_handler(request: Request, exc: ServiceTimeoutError) -> JSONResponse:
+    return JSONResponse(
+        status_code=504,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "TIMEOUT_ERROR",
+                "message": exc.message,
+            },
+        },
+    )
+
+
+@app.exception_handler(ServiceRateLimitError)
+async def service_rate_limit_handler(request: Request, exc: ServiceRateLimitError) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "RATE_LIMITED",
+                "message": exc.message,
+            },
+        },
+    )
+
+
+@app.exception_handler(RetrievalFailureError)
+async def retrieval_failure_handler(request: Request, exc: RetrievalFailureError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "RETRIEVAL_ERROR",
+                "message": exc.message,
+            },
+        },
+    )
+
+
+@app.exception_handler(ExternalModelError)
+async def external_model_error_handler(request: Request, exc: ExternalModelError) -> JSONResponse:
+    return JSONResponse(
+        status_code=502,
+        content={
+            "success": False,
+            "data": None,
+            "error": {
+                "code": "EXTERNAL_MODEL_ERROR",
+                "message": exc.message,
             },
         },
     )
