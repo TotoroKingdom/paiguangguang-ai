@@ -55,6 +55,7 @@ export type KnowledgeQueryRequest = {
   question: string;
   collection: string;
   top_k: number;
+  include_debug?: boolean;
 };
 
 export type KnowledgeSourceData = {
@@ -66,12 +67,41 @@ export type KnowledgeSourceData = {
   text: string;
   score: number;
   rerank_score: number | null;
+  route_scores: Record<string, number>;
   metadata: Record<string, unknown>;
+};
+
+export type KnowledgeQueryRewriteMetadata = {
+  enabled: boolean;
+  model: string | null;
+  status: string;
+  fallback_reason: string | null;
+  rewritten_query_count: number;
+};
+
+export type KnowledgeQueryRewriteData = {
+  original_question: string;
+  rewritten_queries: string[];
+  metadata: KnowledgeQueryRewriteMetadata;
 };
 
 export type KnowledgeQueryData = {
   answer: string;
   sources: KnowledgeSourceData[];
+  rewrite?: KnowledgeQueryRewriteData | null;
+  debug?: KnowledgeQueryDebugData | null;
+};
+
+export type KnowledgeQueryDebugData = {
+  rewrites: KnowledgeQueryRewriteData | null;
+  vector_hits: KnowledgeSourceData[];
+  keyword_hits: KnowledgeSourceData[];
+  fusion: KnowledgeSourceData[];
+  rerank: KnowledgeSourceData[];
+  selected_context: KnowledgeSourceData[];
+  citations: KnowledgeSourceData[];
+  latency_ms: number;
+  model_usage: Record<string, unknown>;
 };
 
 export type KnowledgeIngestResult = {

@@ -85,6 +85,7 @@ class RagQueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     collection: str = Field(min_length=1, max_length=128)
     top_k: int = Field(default=5, ge=1, le=20)
+    include_debug: bool = False
 
 
 class RagQueryRewriteMetadata(BaseModel):
@@ -118,6 +119,20 @@ class RagQueryData(BaseModel):
     answer: str
     sources: list[RagSourceData]
     rewrite: RagQueryRewriteData | None = None
+    debug: RagQueryDebugData | None = None
+
+
+class RagQueryDebugData(BaseModel):
+    rewrites: RagQueryRewriteData | None = None
+    vector_hits: list[RagSourceData] = Field(default_factory=list)
+    keyword_hits: list[RagSourceData] = Field(default_factory=list)
+    fusion: list[RagSourceData] = Field(default_factory=list)
+    rerank: list[RagSourceData] = Field(default_factory=list)
+    selected_context: list[RagSourceData] = Field(default_factory=list)
+    citations: list[RagSourceData] = Field(default_factory=list)
+    latency_ms: int
+    model_usage: dict[str, object] = Field(default_factory=dict)
 
 
 RagIngestData.model_rebuild()
+RagQueryData.model_rebuild()
