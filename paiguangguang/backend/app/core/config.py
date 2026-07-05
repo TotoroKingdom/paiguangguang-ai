@@ -23,6 +23,11 @@ class Settings:
     deepseek_api_key: str = ""
     deepseek_chat_model: str = "deepseek-chat"
     deepseek_timeout_seconds: float = 30.0
+    embedding_provider: str = "hash"
+    dashscope_api_key: str = ""
+    dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    embedding_model: str = "text-embedding-v1"
+    embedding_timeout_seconds: float = 30.0
     redis_url: str = ""
     chroma_path: str = "./chroma"
     rag_collection_name: str = "portfolio_knowledge"
@@ -42,6 +47,14 @@ def get_settings() -> Settings:
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+        embedding_provider=os.getenv("EMBEDDING_PROVIDER", "hash"),
+        dashscope_api_key=os.getenv("DASHSCOPE_API_KEY", ""),
+        dashscope_base_url=os.getenv(
+            "DASHSCOPE_BASE_URL",
+            "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        ),
+        embedding_model=os.getenv("EMBEDDING_MODEL", "text-embedding-v1"),
+        embedding_timeout_seconds=float(os.getenv("EMBEDDING_TIMEOUT_SECONDS", "30")),
         redis_url=os.getenv("REDIS_URL", ""),
         chroma_path=os.getenv("CHROMA_PATH", "./chroma"),
         rag_collection_name=os.getenv("RAG_COLLECTION_NAME", "portfolio_knowledge"),

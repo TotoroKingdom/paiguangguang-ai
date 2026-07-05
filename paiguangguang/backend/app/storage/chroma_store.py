@@ -6,7 +6,7 @@ from typing import Sequence
 
 import chromadb
 
-from app.ai.embeddings import EmbeddingProvider, HashEmbeddingProvider
+from app.ai.embeddings import EmbeddingProvider, get_embedding_provider
 from app.core.config import get_settings
 from app.storage.rag_documents import RagChunkRecord
 
@@ -31,7 +31,7 @@ class ChromaRagStore:
     ) -> None:
         settings = get_settings()
         self.client = client or chromadb.PersistentClient(path=settings.chroma_path)
-        self.embedding_provider = embedding_provider or HashEmbeddingProvider()
+        self.embedding_provider = embedding_provider or get_embedding_provider(settings)
         self._lock = Lock()
 
     def _collection(self, collection_name: str):
