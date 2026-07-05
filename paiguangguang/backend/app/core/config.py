@@ -16,6 +16,9 @@ class Settings:
     api_v1_prefix: str = "/api/v1"
     database_url: str = ""
     test_database_url: str = ""
+    jwt_secret_key: str = "change-me-in-development-secret-key"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_api_key: str = ""
     deepseek_chat_model: str = "deepseek-chat"
@@ -32,6 +35,9 @@ def get_settings() -> Settings:
     return Settings(
         database_url=os.getenv("DATABASE_URL", ""),
         test_database_url=os.getenv("TEST_DATABASE_URL", ""),
+        jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),
+        jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
+        jwt_access_token_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60")),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
