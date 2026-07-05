@@ -3,9 +3,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import re
 from threading import Lock
 from typing import Iterator
-from sqlalchemy import delete, select
+from sqlalchemy import case, delete, func, literal, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -13,10 +14,70 @@ from app.db.models import RagChunk as RagChunkModel
 from app.db.models import RagDocument as RagDocumentModel
 from app.db.models import RagIngestionJob as RagIngestionJobModel
 from app.db.session import build_session_factory
+from app.storage.rag_search import (
+    RagSearchAccessContext,
+    RagSearchHit,
+    is_rag_search_accessible,
+    normalize_rag_search_metadata,
+)
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+_KEYWORD_TERM_RE = re.compile(r"[A-Za-z0-9_./:-]+")
+
+
+def _normalize_query_text(query_text: str) -> str:
+    return " ".join(query_text.lower().split()).strip()
+
+
+def _keyword_terms(query_text: str) -> list[str]:
+    normalized = _normalize_query_text(query_text)
+    if not normalized:
+        return []
+
+    terms: list[str] = [normalized]
+    for term in _KEYWORD_TERM_RE.findall(normalized):
+        if len(term) < 2 or term in terms:
+            continue
+        terms.append(term)
+    return terms
+
+
+def _escape_like_term(term: str) -> str:
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _needs_exact_fallback(term: str) -> bool:
+    return " " in term or len(term) >= 8 or not term.isalpha()
+
+
+def _keyword_score(query_text: str, text: str) -> float:
+    normalized_query = _normalize_query_text(query_text)
+    normalized_text = _normalize_query_text(text)
+    if not normalized_query or not normalized_text:
+        return 0.0
+
+    score = 0.0
+    if normalized_query in normalized_text:
+        score += 2.5
+
+    query_terms = [term for term in _KEYWORD_TERM_RE.findall(normalized_query) if len(term) >= 2]
+    if not query_terms:
+        return score
+
+    text_tokens = set(_KEYWORD_TERM_RE.findall(normalized_text))
+    for term in query_terms:
+        if term in normalized_text:
+            score += 1.0 if term.isalnum() else 1.25
+        elif term in text_tokens:
+            score += 0.75
+
+    overlap = sum(1 for term in query_terms if term in text_tokens)
+    score += overlap / max(len(query_terms), 1)
+    return score
 
 
 @dataclass(frozen=True)
@@ -386,6 +447,134 @@ class RagDocumentRepository:
 
         with self._lock:
             return list(self._chunks.get(document_id, []))
+
+    def search_keyword(
+        self,
+        collection_name: str,
+        query_text: str,
+        *,
+        top_k: int = 5,
+        access_context: RagSearchAccessContext | None = None,
+    ) -> list[RagSearchHit]:
+        del collection_name
+        normalized_query = query_text.strip()
+        if not normalized_query:
+            return []
+
+        if self.uses_database:
+            with self._session() as session:
+                assert session is not None
+                rows = self._keyword_search_rows(session, normalized_query)
+                hits = self._rows_to_keyword_hits(rows, normalized_query, access_context)
+        else:
+            hits = self._keyword_search_in_memory(normalized_query, access_context)
+
+        hits.sort(key=lambda hit: (-hit.score, hit.chunk_index, hit.doc_id, hit.chunk_id))
+        return hits[:top_k]
+
+    def _keyword_search_in_memory(
+        self,
+        query_text: str,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        hits: list[RagSearchHit] = []
+        with self._lock:
+            documents = dict(self._documents)
+            chunk_groups = {document_id: list(chunks) for document_id, chunks in self._chunks.items()}
+
+        for document_id in sorted(chunk_groups):
+            document = documents.get(document_id)
+            if document is None:
+                continue
+            for chunk in sorted(chunk_groups[document_id], key=lambda item: item.chunk_index):
+                hits.extend(self._build_keyword_hits(query_text, document, chunk, access_context))
+        return hits
+
+    def _keyword_search_rows(self, session: Session, query_text: str):
+        dialect_name = session.get_bind().dialect.name if session.get_bind() is not None else ""
+        stmt = (
+            select(RagChunkModel, RagDocumentModel)
+            .join(RagDocumentModel, RagChunkModel.document_id == RagDocumentModel.document_id)
+            .order_by(RagChunkModel.document_id.asc(), RagChunkModel.chunk_index.asc())
+        )
+        if dialect_name == "postgresql":
+            query_terms = _keyword_terms(query_text)
+            if query_terms:
+                tsvector = func.to_tsvector(literal("simple"), RagChunkModel.text)
+                tsquery = func.websearch_to_tsquery(literal("simple"), query_text)
+                match_conditions = [tsvector.op("@@")(tsquery)]
+                for term in query_terms:
+                    if _needs_exact_fallback(term):
+                        match_conditions.append(
+                            func.lower(RagChunkModel.text).like(
+                                f"%{_escape_like_term(term)}%",
+                                escape="\\",
+                            )
+                        )
+                stmt = stmt.where(or_(*match_conditions))
+        return session.execute(stmt).all()
+
+    def _rows_to_keyword_hits(
+        self,
+        rows,
+        query_text: str,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        hits: list[RagSearchHit] = []
+        for chunk, document in rows:
+            hits.extend(self._build_keyword_hits(query_text, document, chunk, access_context))
+        return hits
+
+    @staticmethod
+    def _build_keyword_hits(
+        query_text: str,
+        document: RagDocumentModel | RagDocumentRecord,
+        chunk: RagChunkModel | RagChunkRecord,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        chunk_metadata = dict(
+            getattr(chunk, "chunk_metadata", None)
+            or getattr(chunk, "metadata", None)
+            or {}
+        )
+        metadata = normalize_rag_search_metadata(
+            chunk.chunk_id,
+            {
+                "doc_id": getattr(document, "document_id", getattr(document, "doc_id", "")),
+                "title": getattr(document, "title", None),
+                "page_number": getattr(chunk, "page_number", None),
+                "chunk_index": getattr(chunk, "chunk_index", getattr(chunk, "index", 0)),
+                "start_char": getattr(chunk, "start_char", 0),
+                "end_char": getattr(chunk, "end_char", 0),
+                "permission_scope": getattr(document, "permission_scope", None),
+                "workspace_id": getattr(document, "workspace_id", None),
+                "owner_user_id": getattr(document, "owner_user_id", None),
+                "content_hash": getattr(document, "content_hash", None),
+                "lifecycle_version": chunk_metadata.get("lifecycle_version", 1),
+                **chunk_metadata,
+            },
+        )
+        if not is_rag_search_accessible(metadata, access_context):
+            return []
+
+        score = _keyword_score(query_text, getattr(chunk, "text", ""))
+        if score <= 0:
+            return []
+
+        return [
+            RagSearchHit(
+                doc_id=str(metadata["doc_id"]),
+                chunk_id=str(chunk.chunk_id),
+                title=metadata["title"],
+                page_number=metadata["page_number"],
+                chunk_index=metadata["chunk_index"],
+                text=str(getattr(chunk, "text", "")),
+                score=score,
+                start_char=metadata["start_char"],
+                end_char=metadata["end_char"],
+                metadata=metadata,
+            )
+        ]
 
     def create_ingestion_job(self, job: RagIngestionJobRecord) -> RagIngestionJobRecord:
         if self.uses_database:
