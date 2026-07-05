@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -13,6 +15,18 @@ class RagDocumentData(BaseModel):
     title: str | None
     text_length: int
     content_hash: str
+    owner_user_id: str | None = None
+    workspace_id: str | None = None
+    permission_scope: str | None = None
+    status: str
+    parse_status: str
+    chunk_status: str
+    embedding_status: str
+    index_status: str
+    is_deleted: bool
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class RagIngestRequest(BaseModel):
@@ -21,6 +35,7 @@ class RagIngestRequest(BaseModel):
     text: str | None = Field(default=None, min_length=1, max_length=200_000)
     chunk_size: int = Field(default=800, ge=1, le=4000)
     chunk_overlap: int = Field(default=120, ge=0, le=1000)
+    reindex: bool = False
 
     @model_validator(mode="after")
     def ensure_source(self) -> "RagIngestRequest":
@@ -47,6 +62,23 @@ class RagIngestData(BaseModel):
     text_length: int
     chunk_count: int
     chunks: list[RagChunkData]
+    document: RagDocumentData
+    job: "RagIngestionJobData"
+
+
+class RagIngestionJobData(BaseModel):
+    job_id: str
+    document_id: str
+    status: str
+    failure_reason: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    retry_count: int
+    is_reindex: bool
+    chunk_size: int | None = None
+    chunk_overlap: int | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class RagQueryRequest(BaseModel):
@@ -65,3 +97,6 @@ class RagSourceData(BaseModel):
 class RagQueryData(BaseModel):
     answer: str
     sources: list[RagSourceData]
+
+
+RagIngestData.model_rebuild()

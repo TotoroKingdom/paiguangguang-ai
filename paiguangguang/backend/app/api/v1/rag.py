@@ -7,6 +7,7 @@ from app.schemas.rag import (
     RagDocumentData,
     RagIngestData,
     RagIngestRequest,
+    RagIngestionJobData,
     RagQueryData,
     RagQueryRequest,
 )
@@ -25,6 +26,18 @@ def register_document(
     return ApiResponse(data=result)
 
 
+@router.get("/documents/{document_id}", response_model=ApiResponse[RagDocumentData])
+def get_document(
+    document_id: str,
+    service: RagIngestionService = Depends(get_rag_ingestion_service),
+) -> ApiResponse[RagDocumentData]:
+    try:
+        result = service.get_document(document_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Document {exc.args[0]} not found") from exc
+    return ApiResponse(data=result)
+
+
 @router.post("/ingest", response_model=ApiResponse[RagIngestData])
 def ingest_document(
     request: RagIngestRequest,
@@ -34,7 +47,21 @@ def ingest_document(
         result = service.ingest_document(request)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=f"Document {exc.args[0]} not found") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    return ApiResponse(data=result)
+
+
+@router.get("/ingestion-jobs/{job_id}", response_model=ApiResponse[RagIngestionJobData])
+def get_ingestion_job(
+    job_id: str,
+    service: RagIngestionService = Depends(get_rag_ingestion_service),
+) -> ApiResponse[RagIngestionJobData]:
+    try:
+        result = service.get_ingestion_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"Job {exc.args[0]} not found") from exc
     return ApiResponse(data=result)
 
 
