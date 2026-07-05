@@ -64,10 +64,14 @@ export async function postJson<TResponse, TBody extends Record<string, unknown>>
   body: TBody,
   options?: RequestOptions
 ): Promise<TResponse> {
-  return requestJson<TResponse>(path, {
-    method: "POST",
-    body: JSON.stringify(body)
-  }, options);
+  return requestJson<TResponse>(
+    path,
+    {
+      method: "POST",
+      body: JSON.stringify(body)
+    },
+    options
+  );
 }
 
 export async function getJson<TResponse>(path: string, options?: RequestOptions): Promise<TResponse> {
@@ -75,6 +79,41 @@ export async function getJson<TResponse>(path: string, options?: RequestOptions)
     path,
     {
       method: "GET"
+    },
+    options
+  );
+}
+
+export async function postEmptyJson<TResponse>(path: string, options?: RequestOptions): Promise<TResponse> {
+  return requestJson<TResponse>(
+    path,
+    {
+      method: "POST"
+    },
+    options
+  );
+}
+
+export async function patchJson<TResponse, TBody extends Record<string, unknown>>(
+  path: string,
+  body: TBody,
+  options?: RequestOptions
+): Promise<TResponse> {
+  return requestJson<TResponse>(
+    path,
+    {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    },
+    options
+  );
+}
+
+export async function deleteJson<TResponse>(path: string, options?: RequestOptions): Promise<TResponse> {
+  return requestJson<TResponse>(
+    path,
+    {
+      method: "DELETE"
     },
     options
   );
