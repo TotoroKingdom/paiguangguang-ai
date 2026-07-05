@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageShell } from "@/components/page-shell";
 import { KnowledgeAgentShell } from "@/features/knowledge-agent/knowledge-agent-shell";
 
@@ -18,6 +20,9 @@ export default function KnowledgeAgentPage() {
         </div>
         <div className="border-l-4 border-clay bg-paper px-4 py-3">
           Review doc IDs, chunk IDs, and scores in the citation rail.
+        </div>
+        <div className="border-l-4 border-ink bg-paper px-4 py-3">
+          Authorized admins can open the debug inspector at <Link href="/agents/knowledge/debug" className="underline">/agents/knowledge/debug</Link>.
         </div>
       </PageShell>
 

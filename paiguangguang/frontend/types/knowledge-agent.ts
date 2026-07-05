@@ -102,6 +102,7 @@ export type KnowledgeQueryDebugData = {
   citations: KnowledgeSourceData[];
   latency_ms: number;
   model_usage: Record<string, unknown>;
+  cache_status?: string | null;
 };
 
 export type KnowledgeIngestResult = {
