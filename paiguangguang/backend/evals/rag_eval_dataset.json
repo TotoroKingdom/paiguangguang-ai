@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "corpus": [
+    {
+      "doc_id": "doc-alpha-deploy",
+      "title": "Alpha Deployment Notes",
+      "permission_scope": "workspace",
+      "page_number": 1,
+      "chunks": [
+        {
+          "chunk_id": "doc-alpha-deploy-chunk-0001",
+          "chunk_index": 1,
+          "page_number": 1,
+          "text": "The project deploys from a single Next.js frontend and FastAPI backend. Run the frontend build before publishing the site.",
+          "metadata": {
+            "topic": "deployment",
+            "workspace_id": "workspace-alpha"
+          }
+        },
+        {
+          "chunk_id": "doc-alpha-deploy-chunk-0002",
+          "chunk_index": 2,
+          "page_number": 1,
+          "text": "Production deployment relies on a backend API hosted with the frontend and a health check at /api/v1/health.",
+          "metadata": {
+            "topic": "operations",
+            "workspace_id": "workspace-alpha"
+          }
+        }
+      ]
+    },
+    {
+      "doc_id": "doc-beta-rbac",
+      "title": "Beta RBAC Reference",
+      "permission_scope": "workspace",
+      "page_number": 2,
+      "chunks": [
+        {
+          "chunk_id": "doc-beta-rbac-chunk-0001",
+          "chunk_index": 1,
+          "page_number": 2,
+          "text": "The knowledge.query permission gates RAG search. Users with the document_admin role can inspect documents and jobs.",
+          "metadata": {
+            "topic": "rbac",
+            "workspace_id": "workspace-alpha"
+          }
+        },
+        {
+          "chunk_id": "doc-beta-rbac-chunk-0002",
+          "chunk_index": 2,
+          "page_number": 2,
+          "text": "The system_admin role can manage users, roles, permissions, and the default workspace.",
+          "metadata": {
+            "topic": "rbac",
+            "workspace_id": "workspace-alpha"
+          }
+        }
+      ]
+    },
+    {
+      "doc_id": "doc-secret-runbook",
+      "title": "Secret Runbook",
+      "permission_scope": "admin",
+      "page_number": 3,
+      "chunks": [
+        {
+          "chunk_id": "doc-secret-runbook-chunk-0001",
+          "chunk_index": 1,
+          "page_number": 3,
+          "text": "Use the internal override flag only during maintenance windows.",
+          "metadata": {
+            "topic": "private",
+            "workspace_id": "workspace-alpha"
+          }
+        }
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "deployment-overview",
+      "question": "How is the project deployed?",
+      "expected_documents": ["doc-alpha-deploy"],
+      "expected_chunks": ["doc-alpha-deploy-chunk-0001", "doc-alpha-deploy-chunk-0002"],
+      "expected_pages": [1],
+      "answer_notes": "Should describe the Next.js frontend plus FastAPI backend deployment flow.",
+      "citation_expectations": {
+        "must_include_doc_ids": ["doc-alpha-deploy"],
+        "must_include_chunk_ids": ["doc-alpha-deploy-chunk-0001"],
+        "must_not_include_doc_ids": ["doc-secret-runbook"],
+        "must_include_pages": [1]
+      }
+    },
+    {
+      "id": "rbac-query",
+      "question": "What permission is required to query the knowledge base?",
+      "expected_documents": ["doc-beta-rbac"],
+      "expected_chunks": ["doc-beta-rbac-chunk-0001"],
+      "expected_pages": [2],
+      "answer_notes": "Should mention the knowledge.query permission and the document_admin/system_admin roles.",
+      "citation_expectations": {
+        "must_include_doc_ids": ["doc-beta-rbac"],
+        "must_include_chunk_ids": ["doc-beta-rbac-chunk-0001"],
+        "must_not_include_doc_ids": ["doc-secret-runbook"],
+        "must_include_pages": [2]
+      }
+    },
+    {
+      "id": "admin-scope-safety",
+      "question": "What is in the internal maintenance runbook?",
+      "expected_documents": ["doc-secret-runbook"],
+      "expected_chunks": ["doc-secret-runbook-chunk-0001"],
+      "expected_pages": [3],
+      "answer_notes": "This case is used to verify that admin-only content can be excluded from non-admin retrieval traces.",
+      "citation_expectations": {
+        "must_include_doc_ids": ["doc-secret-runbook"],
+        "must_include_chunk_ids": ["doc-secret-runbook-chunk-0001"],
+        "must_include_pages": [3]
+      }
+    }
+  ]
+}
