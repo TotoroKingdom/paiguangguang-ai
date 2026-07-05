@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.core.config import get_settings
+from app.db.models import User
 from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
 from app.storage.chroma_store import (
     ChromaRagStore,
@@ -9,6 +10,11 @@ from app.storage.chroma_store import (
     RagSearchHit,
     get_chroma_rag_store,
 )
+from app.services.rbac import RBACService, get_rbac_service
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from app.db.models import Workspace, WorkspaceMembership
+from fastapi import HTTPException, status
 
 
 def build_rag_system_prompt() -> str:
@@ -27,8 +33,9 @@ def build_context_block(hits: list[RagSearchHit]) -> str:
     lines: list[str] = []
     for index, hit in enumerate(hits, start=1):
         title = f" | title={hit.title}" if hit.title else ""
+        page = f" | page={hit.page_number}" if hit.page_number is not None else ""
         lines.append(
-            f"[{index}] doc_id={hit.doc_id} | chunk_id={hit.chunk_id} | score={hit.score:.4f}{title}\n"
+            f"[{index}] doc_id={hit.doc_id} | chunk_id={hit.chunk_id} | score={hit.score:.4f}{title}{page}\n"
             f"{hit.text}"
         )
     return "\n\n".join(lines)
@@ -63,13 +70,62 @@ class RagQueryService:
             RagSourceData(
                 doc_id=hit.doc_id,
                 chunk_id=hit.chunk_id,
+                title=hit.title,
+                page_number=hit.page_number,
+                chunk_index=hit.chunk_index,
                 text=hit.text,
                 score=hit.score,
+                rerank_score=None,
+                metadata=dict(hit.metadata),
             )
             for hit in hits
         ]
         answer = self._ask_model(request.question, hits)
         return RagQueryData(answer=answer, sources=sources)
+
+    def query_for_user(
+        self,
+        request: RagQueryRequest,
+        *,
+        session: Session,
+        user: User,
+        rbac_service: RBACService | None = None,
+    ) -> RagQueryData:
+        rbac_service = rbac_service or get_rbac_service()
+        if not rbac_service.has_permission(session, user.id, "knowledge.query"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="knowledge.query permission required",
+            )
+
+        access_context = self._build_access_context(session, user)
+        return self.query(request, access_context=access_context)
+
+    def _build_access_context(self, session: Session, user: User) -> RagSearchAccessContext:
+        workspace_id = self._resolve_workspace_id(session, user)
+        role_names = {role.name for role in user.roles}
+        is_system_admin = "system_admin" in role_names
+        allowed_scopes = ("workspace", "admin") if role_names & {"document_admin", "system_admin"} else ("workspace",)
+        return RagSearchAccessContext(
+            workspace_id=workspace_id,
+            user_id=user.id,
+            is_system_admin=is_system_admin,
+            allowed_permission_scopes=allowed_scopes,
+            allow_legacy_metadata=True,
+        )
+
+    @staticmethod
+    def _resolve_workspace_id(session: Session, user: User) -> str | None:
+        membership_workspace_id = session.scalar(
+            select(WorkspaceMembership.workspace_id)
+            .where(WorkspaceMembership.user_id == user.id)
+            .order_by(WorkspaceMembership.created_at.asc())
+        )
+        if isinstance(membership_workspace_id, str) and membership_workspace_id.strip():
+            return membership_workspace_id
+
+        default_workspace_id = session.scalar(select(Workspace.id).where(Workspace.is_default.is_(True)))
+        return default_workspace_id if isinstance(default_workspace_id, str) else None
 
     def _ask_model(self, question: str, hits: list[RagSearchHit]) -> str:
         context_block = build_context_block(hits)

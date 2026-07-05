@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.ai.deepseek import DeepSeekError
 from app.schemas.common import ApiResponse
+from app.db.session import get_db_session
 from app.schemas.rag import (
     RagDocumentCreateRequest,
     RagDocumentData,
@@ -11,8 +12,10 @@ from app.schemas.rag import (
     RagQueryData,
     RagQueryRequest,
 )
+from app.services.auth import get_current_user
 from app.services.rag_ingestion import RagIngestionService, get_rag_ingestion_service
 from app.services.rag_query import RagQueryService, get_rag_query_service
+from app.services.rbac import RBACService, get_rbac_service
 
 router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
 
@@ -69,9 +72,17 @@ def get_ingestion_job(
 def query_knowledge(
     request: RagQueryRequest,
     service: RagQueryService = Depends(get_rag_query_service),
+    session = Depends(get_db_session),
+    current_user = Depends(get_current_user),
+    rbac_service: RBACService = Depends(get_rbac_service),
 ) -> ApiResponse[RagQueryData]:
     try:
-        result = service.query(request)
+        result = service.query_for_user(
+            request,
+            session=session,
+            user=current_user,
+            rbac_service=rbac_service,
+        )
     except (ValueError, DeepSeekError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
