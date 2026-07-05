@@ -16,12 +16,13 @@ class FakeVectorStore:
         self.hits = hits
         self.calls: list[dict[str, object]] = []
 
-    def search(self, collection_name, query_text, *, top_k=5):
+    def search(self, collection_name, query_text, *, top_k=5, access_context=None):
         self.calls.append(
             {
                 "collection_name": collection_name,
                 "query_text": query_text,
                 "top_k": top_k,
+                "access_context": access_context,
             }
         )
         return list(self.hits)
@@ -107,6 +108,7 @@ def test_rag_query_endpoint_returns_answer_and_sources() -> None:
             "collection_name": "portfolio_knowledge",
             "query_text": "How is the project deployed?",
             "top_k": 2,
+            "access_context": None,
         }
     ]
     assert "Retrieved context:" in captured_bodies[0]["messages"][1]["content"]

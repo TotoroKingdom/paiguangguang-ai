@@ -3,7 +3,12 @@ from __future__ import annotations
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.core.config import get_settings
 from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
-from app.storage.chroma_store import ChromaRagStore, RagSearchHit, get_chroma_rag_store
+from app.storage.chroma_store import (
+    ChromaRagStore,
+    RagSearchAccessContext,
+    RagSearchHit,
+    get_chroma_rag_store,
+)
 
 
 def build_rag_system_prompt() -> str:
@@ -40,12 +45,18 @@ class RagQueryService:
         self.client = client or DeepSeekClient(settings)
         self.default_collection_name = settings.rag_collection_name
 
-    def query(self, request: RagQueryRequest) -> RagQueryData:
+    def query(
+        self,
+        request: RagQueryRequest,
+        *,
+        access_context: RagSearchAccessContext | None = None,
+    ) -> RagQueryData:
         collection_name = request.collection or self.default_collection_name
         hits = self.vector_store.search(
             collection_name,
             request.question,
             top_k=request.top_k,
+            access_context=access_context,
         )
 
         sources = [
