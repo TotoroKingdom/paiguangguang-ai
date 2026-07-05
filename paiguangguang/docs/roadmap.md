@@ -42,6 +42,7 @@ cd backend
 python -m pytest
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
+
 ## Current RAG Baseline
 
 The existing Knowledge Agent is the baseline for V2 work. It already demonstrates a runnable RAG flow:
@@ -53,7 +54,7 @@ The existing Knowledge Agent is the baseline for V2 work. It already demonstrate
 - Answer generation with source chunks
 - Frontend answer and source rendering
 
-V2 tasks should upgrade this baseline instead of re-implementing it from scratch.
+Architecture Visualization, mock Browser Agent, mock Office Agent, and task event endpoints are also baseline portfolio modules. V2 tasks should upgrade the Knowledge Agent baseline instead of re-implementing it from scratch.
 
 ## V2: Enterprise Knowledge Base Upgrade
 
@@ -74,7 +75,7 @@ Deliverables:
 - Document lifecycle records with parse, chunk, embedding, index, delete, error, and update state
 - TXT, Markdown, and PDF parsing, including PDF page numbers for citation metadata
 - Background ingestion jobs that update durable status records
-- Alibaba Cloud Model Studio `text-embedding-v1` provider behind a switchable embedding interface
+- Alibaba Cloud Model Studio embedding provider behind a switchable embedding interface
 - Chroma writes with `document_id`, `chunk_id`, `user_id`, `workspace_id`, permission scope, page number, title, and chunk index metadata
 - Permission-filtered RAG retrieval based on the authenticated user
 - Citation-ready source metadata in query responses
@@ -124,7 +125,7 @@ Deliverables:
 - Keyword retrieval for exact terms such as class names, route paths, config keys, version numbers, and identifiers
 - Hybrid retrieval combining vector search and keyword search
 - Reciprocal Rank Fusion (RRF) for multi-route result merging
-- Alibaba Cloud Model Studio `qwen3-rerank` provider behind a switchable rerank interface
+- Rerank provider behind a switchable rerank interface
 - Context assembler with de-duplication, adjacent chunk expansion, token budget control, metadata preservation, and prompt context formatting
 - RAG query debug trace containing rewrite output, vector hits, keyword hits, fusion scores, rerank scores, selected context, and citations
 - Frontend citation/source rendering improvements that expose page, chunk, score, rerank score, and metadata clearly
@@ -202,17 +203,17 @@ npm run lint
 npm run build
 ```
 
-## V3: Agent Workflows + Task Events
+## Future V3: Agent Workflow Enhancements
 
-Goal: extend the portfolio with mock tool-calling agents and visible task execution state after the knowledge base upgrade.
+Goal: improve the existing mock tool-calling agent demos and visible task execution state after the knowledge base upgrade.
 
 Deliverables:
 
-- Browser Agent mock workflow API and UI
-- Office Agent mock workflow API and UI
-- Agent step traces with structured output
-- Redis-backed task state if long-running execution is introduced
-- SSE task event endpoint
+- Browser Agent workflow improvements
+- Office Agent workflow improvements
+- Richer agent step traces with structured output
+- Redis-backed task state if long-running execution needs more durable state
+- SSE task event improvements
 - Optional LangGraph orchestration for agent state flow
 
 Not included:
