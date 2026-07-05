@@ -8,7 +8,7 @@ This is not a static resume site. It should behave like a mini AI product where 
 
 ## 2. Unified Module Scope
 
-The project contains five modules:
+The project contains six modules:
 
 | Module | Route | Phase | Purpose |
 | --- | --- | --- | --- |
@@ -47,13 +47,13 @@ Knowledge Agent requirements:
 - Authenticated document upload and document lifecycle management
 - TXT, Markdown, and PDF parsing
 - Fixed-size chunking for the current baseline, with metadata preserved for later retrieval quality work
-- Real embedding generation through a switchable provider, defaulting to Alibaba Cloud Model Studio `text-embedding-v1`
-- Chroma vector retrieval with document, chunk, user, workspace, permission, page, title, and chunk index metadata
+- Real embedding generation through a switchable provider
+- Vector retrieval with document, chunk, user, workspace, permission, page, title, and chunk index metadata
 - Permission-filtered retrieval based on RBAC
 - Context assembly with citation-ready source metadata
 - DeepSeek answer generation grounded in retrieved context
-- V2.2 query rewrite, hybrid retrieval, RRF fusion, `qwen3-rerank`, and improved context assembly
-- V2.3 local evaluation, Redis cache, debug views, delete/reindex synchronization, and stability controls
+- V2.2 retrieval quality improvements such as query rewrite, hybrid retrieval, fusion, rerank, and improved context assembly
+- V2.3 evaluation, cache, debug views, delete/reindex synchronization, and stability controls
 
 Browser Agent requirements:
 
@@ -87,6 +87,7 @@ Backend:
 AI Layer:
 
 - DeepSeek API using OpenAI-compatible chat format
+- Switchable embedding and rerank providers for Knowledge Agent
 - LangGraph in V3 only
 - Prompt templates per module
 
@@ -94,8 +95,7 @@ Storage:
 
 - Chroma for vector storage starting in V2
 - Neon Postgres for users, RBAC, workspaces, document lifecycle, chunks, and ingestion jobs starting in V2.1
-- Redis for RAG cache starting in V2.3
-- Redis for long-running task state and event streaming starting in V3
+- Redis for cache and task/event state only in phases that explicitly introduce it
 - No relational database in V1; V2.1 explicitly introduces Postgres for the knowledge base
 
 ## 6. Non-Goals

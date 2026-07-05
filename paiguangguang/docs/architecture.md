@@ -47,7 +47,7 @@ flowchart LR
 | Services | Business orchestration for chat, RAG, agents, tasks, and architecture graph data |
 | AI Layer | DeepSeek client, Alibaba embedding/rerank providers, prompts, RAG pipeline, LangGraph workflows in V3 |
 | Tools | Mock browser search, mock office tools, retrieval tools |
-| Storage | Chroma vector database, Neon Postgres knowledge base state, Redis RAG cache in V2.3, Redis task state/events in V3 |
+| Storage | Chroma vector database, Neon Postgres knowledge base state, Redis RAG cache in V2.3, Redis task/event state for agent workflows when configured |
 
 ## 3. Directory Structure
 
@@ -56,10 +56,12 @@ paiguangguang/
   frontend/
     app/
       page.tsx
+      admin/
       agents/
       architecture/
     components/
     features/
+      admin/
       portfolio-chat/
       knowledge-agent/
       browser-agent/
@@ -78,10 +80,13 @@ paiguangguang/
       schemas/
       services/
       ai/
+      db/
       storage/
       tools/
       workers/
       utils/
+    alembic/
+    evals/
     tests/
 
   docs/
@@ -148,10 +153,7 @@ SSE endpoints may stream event payloads and do not need the JSON envelope per ev
 | Method | Path | Phase | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/v1/health` | V1 | Health check |
-| `GET` | `/api/v1/modules` | V1 | List enabled portfolio modules |
-| `GET` | `/api/v1/projects` | V1 | Return static project/profile data |
 | `POST` | `/api/v1/chat/portfolio` | V1 | Portfolio Chat request |
-| `GET` | `/api/v1/chat/sessions/{session_id}` | V1 | Read chat history |
 | `POST` | `/api/v1/auth/login` | V2.1 | Login and return JWT access token |
 | `GET` | `/api/v1/auth/me` | V2.1 | Return the authenticated user |
 | `POST` | `/api/v1/rag/documents` | V2.1 | Upload or register a document with lifecycle state |
@@ -160,17 +162,17 @@ SSE endpoints may stream event payloads and do not need the JSON envelope per ev
 | `GET` | `/api/v1/rag/ingestion-jobs/{job_id}` | V2.1 | Read ingestion job state |
 | `POST` | `/api/v1/rag/query` | V2.1-V2.3 | Retrieve permitted context and answer with citations, optional debug trace in V2.2 |
 | `GET` | `/api/v1/rag/collections` | V2.1 | List Chroma collections |
-| `GET` | `/api/v1/admin/users` | V2.1 | Manage users |
-| `GET` | `/api/v1/admin/roles` | V2.1 | Manage roles |
-| `GET` | `/api/v1/admin/permissions` | V2.1 | Manage permissions |
-| `GET` | `/api/v1/admin/workspaces` | V2.1 | Manage workspace records |
-| `GET` | `/api/v1/admin/documents` | V2.1 | Manage document lifecycle |
-| `GET` | `/api/v1/admin/ingestion-jobs` | V2.1 | Manage ingestion jobs |
+| `GET/POST/PATCH/DELETE` | `/api/v1/admin/users` | V2.1 | Manage users |
+| `GET/POST/PATCH/DELETE` | `/api/v1/admin/roles` | V2.1 | Manage roles |
+| `GET/POST/PATCH/DELETE` | `/api/v1/admin/permissions` | V2.1 | Manage permissions |
+| `GET/POST/PATCH/DELETE` | `/api/v1/admin/workspaces` | V2.1 | Manage workspace records |
+| `GET/POST/PATCH/DELETE` | `/api/v1/admin/documents` | V2.1 | Manage document lifecycle and delete/reindex actions |
+| `GET/PATCH` | `/api/v1/admin/ingestion-jobs` | V2.1 | Manage ingestion jobs |
 | `GET` | `/api/v1/architecture/graphs/system` | Baseline | Return React Flow nodes and edges |
-| `POST` | `/api/v1/agents/browser/run` | V3 | Run mock Browser Agent workflow |
-| `POST` | `/api/v1/agents/office/run` | V3 | Run mock Office Agent workflow |
-| `GET` | `/api/v1/tasks/{task_id}` | V3 | Read long-running task state |
-| `GET` | `/api/v1/tasks/{task_id}/events` | V3 | Stream task events with SSE |
+| `POST` | `/api/v1/agents/browser/run` | Baseline | Run mock Browser Agent workflow |
+| `POST` | `/api/v1/agents/office/run` | Baseline | Run mock Office Agent workflow |
+| `GET` | `/api/v1/tasks/{task_id}` | Baseline | Read long-running task state |
+| `GET` | `/api/v1/tasks/{task_id}/events` | Baseline | Stream task events with SSE |
 
 ## 7. Request and Response Contracts
 
@@ -198,8 +200,7 @@ RAG query request:
 {
   "question": "string",
   "collection": "string",
-  "top_k": 5,
-  "include_debug": false
+  "top_k": 5
 }
 ```
 
@@ -217,11 +218,28 @@ RAG query data:
       "chunk_index": 0,
       "text": "string",
       "score": 0.0,
-      "rerank_score": 0.0,
+      "rerank_score": null,
       "metadata": {}
     }
-  ],
-  "debug": {}
+  ]
+}
+```
+
+V2.2 optional debug extension:
+
+```json
+{
+  "include_debug": true,
+  "debug": {
+    "rewrites": [],
+    "vector_hits": [],
+    "keyword_hits": [],
+    "fusion": [],
+    "rerank": [],
+    "selected_context": [],
+    "latency_ms": 0,
+    "model_usage": {}
+  }
 }
 ```
 
@@ -247,7 +265,7 @@ Agent run data:
 - V2.1 adds Postgres, JWT auth, RBAC, document lifecycle, real embeddings, Chroma metadata, permission-filtered RAG, citations, and admin management.
 - V2.2 adds query rewrite, hybrid retrieval, RRF fusion, rerank, improved context assembly, and optional query debug traces.
 - V2.3 adds local eval, Redis RAG cache, RAG debug UI, delete/reindex synchronization, and stability controls.
-- V3 adds LangGraph-style orchestration, Redis-backed task state, SSE events, and mock tools.
+- Existing mock agent and task event endpoints are baseline portfolio demos. Future V3 work may extend those workflows with LangGraph-style orchestration and richer task execution behavior.
 - Frontend must call backend through `frontend/lib` API helpers, not direct scattered fetch calls.
 - Backend route handlers should stay thin and delegate logic to services.
 
