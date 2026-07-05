@@ -45,7 +45,7 @@ flowchart LR
 | Auth and RBAC | JWT login, current user, role/permission checks, default workspace membership |
 | Admin APIs | User, role, permission, workspace, document, and ingestion job management |
 | Services | Business orchestration for chat, RAG, agents, tasks, and architecture graph data |
-| AI Layer | DeepSeek client, Alibaba embedding/rerank providers, prompts, RAG pipeline, LangGraph workflows in V3 |
+| AI Layer | DeepSeek client, Alibaba embedding/rerank providers, prompts, RAG pipeline, and future LangGraph workflow support |
 | Tools | Mock browser search, mock office tools, retrieval tools |
 | Storage | Chroma vector database, Neon Postgres knowledge base state, Redis RAG cache in V2.3, Redis task/event state for agent workflows when configured |
 
@@ -117,7 +117,7 @@ paiguangguang/
 | `backend/app/db` | SQLAlchemy models, sessions, repositories, and Alembic metadata for Postgres |
 | `backend/app/storage` | Chroma and Redis adapters |
 | `backend/app/tools` | Agent-callable mock tools |
-| `backend/app/workers` | Long-running task runners used in V3 |
+| `backend/app/workers` | Long-running task runners for task and agent workflows |
 
 ## 5. API Conventions
 
@@ -276,6 +276,6 @@ Agent run data:
 - Authentication and RBAC checks must happen before RAG retrieval so unauthorized chunks are never returned or exposed in debug traces.
 - RAG quality depends on chunking, metadata, and source tracing, so V2 tasks must keep deterministic chunk IDs and citation metadata.
 - Chroma persistence paths and embedding behavior must be testable locally, with fake embeddings used in unit tests where possible.
-- Redis cache should not be introduced before V2.3, and Redis task state/SSE should remain V3 agent-workflow scope.
+- Redis cache should not be introduced before V2.3, and Redis task state/SSE should remain agent-workflow scope rather than RAG V2 scope.
 - Frontend and backend response shapes must stay aligned through `frontend/types` and `backend/app/schemas`.
 - Agent demos must show steps and tool outputs, not only final answers, otherwise the portfolio loses its engineering proof.

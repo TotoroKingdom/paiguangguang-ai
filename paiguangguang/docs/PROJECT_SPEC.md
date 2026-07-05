@@ -15,11 +15,11 @@ The project contains six modules:
 | Portfolio Chat | `/` and chat panel | V1 | Chat with static personal/project profile data |
 | Knowledge Agent | `/agents/knowledge` | V2.1-V2.3 | Enterprise knowledge base with authenticated RAG, document management, retrieval quality, citations, eval, cache, and debug tooling |
 | Knowledge Admin | `/admin` | V2.1-V2.3 | Manage users, roles, permissions, workspaces, documents, ingestion jobs, and RAG debugging |
-| Browser Agent | `/agents/browser` | V3 | Mock web research workflow showing planning, tool calls, and synthesis |
-| Office Agent | `/agents/office` | V3 | Mock office automation workflow showing structured tool execution |
+| Browser Agent | `/agents/browser` | Baseline / Future V3 | Mock web research workflow showing planning, tool calls, and synthesis, with future workflow enhancements |
+| Office Agent | `/agents/office` | Baseline / Future V3 | Mock office automation workflow showing structured tool execution, with future workflow enhancements |
 | Architecture Visualization | `/architecture` | Baseline | Interactive system and AI workflow visualization |
 
-Portfolio Chat is the lightweight V1 assistant. Knowledge Agent is the main V2 product track. Browser Agent and Office Agent are separate tool-calling demos.
+Portfolio Chat is the lightweight V1 assistant. Knowledge Agent is the main V2 product track. Browser Agent and Office Agent are existing tool-calling demos that can be enhanced in future V3 work.
 
 ## 3. Page Requirements
 
