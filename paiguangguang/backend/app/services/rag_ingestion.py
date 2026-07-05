@@ -21,6 +21,7 @@ from app.storage.rag_documents import (
     RagIngestionJobRecord,
     get_rag_document_repository,
 )
+from app.services.rag_cache import get_rag_cache_adapter, invalidate_document_cache
 
 
 def normalize_text(text: str) -> str:
@@ -88,6 +89,7 @@ class RagIngestionService:
         settings = get_settings()
         self.repository = repository or get_rag_document_repository()
         self.vector_store = (vector_store or get_chroma_rag_store()) if index_to_vector_store else None
+        self.cache_adapter = get_rag_cache_adapter(settings)
         self.collection_name = collection_name or settings.rag_collection_name
 
     @staticmethod
@@ -181,6 +183,10 @@ class RagIngestionService:
                 )
             )
 
+        if request.reindex:
+            self.purge_document_artifacts(doc_id)
+        lifecycle_version = self._next_lifecycle_version(doc_id, request.reindex)
+
         self.repository.update_document_lifecycle(
             doc_id,
             status="reindexing" if request.reindex else "parsing",
@@ -229,6 +235,7 @@ class RagIngestionService:
                         "chunk_index": chunk.chunk_index,
                         "start_char": chunk.start_char,
                         "end_char": chunk.end_char,
+                        "lifecycle_version": lifecycle_version,
                     },
                 )
                 for chunk in chunk_records
@@ -247,6 +254,7 @@ class RagIngestionService:
                     title=title,
                     content_hash=content_hash,
                     chunks=chunks,
+                    lifecycle_version=lifecycle_version,
                 )
             self.repository.update_document_lifecycle(
                 doc_id,
@@ -289,6 +297,28 @@ class RagIngestionService:
                 completed_at=datetime.now(timezone.utc),
             )
             raise
+
+    def purge_document_artifacts(self, document_id: str) -> None:
+        if self.vector_store is not None:
+            self.vector_store.delete_document(self.collection_name, doc_id=document_id)
+        invalidate_document_cache(self.cache_adapter, document_id)
+
+    def _next_lifecycle_version(self, document_id: str, is_reindex: bool) -> int:
+        if not is_reindex:
+            return 1
+
+        try:
+            chunks = self.repository.get_chunks(document_id)
+        except KeyError:
+            return 1
+
+        versions = [
+            int(chunk.metadata.get("lifecycle_version", 1))
+            for chunk in chunks
+            if isinstance(chunk.metadata.get("lifecycle_version", 1), int)
+            or str(chunk.metadata.get("lifecycle_version", 1)).isdigit()
+        ]
+        return (max(versions) if versions else 0) + 1
 
 
 _RAG_INGESTION_SERVICE = RagIngestionService()

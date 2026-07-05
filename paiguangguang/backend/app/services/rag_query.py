@@ -19,7 +19,9 @@ from app.services.rag_cache import (
     RAG_KNOWLEDGE_BASE_VERSION,
     RAG_RETRIEVAL_STRATEGY_VERSION,
     build_authorized_cache_key,
+    invalidate_document_cache,
     get_rag_cache_adapter,
+    remember_document_cache_keys,
 )
 from app.storage.chroma_store import RagSearchAccessContext
 from app.services.hybrid_retrieval import (
@@ -243,6 +245,7 @@ class RagQueryService:
             if isinstance(cached, dict):
                 trace = self._trace_from_payload(cached)
                 if trace is not None:
+                    self._remember_trace_cache_keys(cache_key, trace)
                     return trace
 
         trace = self.retrieval_service.search_with_trace(
@@ -254,6 +257,7 @@ class RagQueryService:
         )
         if cache_key is not None:
             self.cache_adapter.set(cache_key, self._trace_to_payload(trace))
+            self._remember_trace_cache_keys(cache_key, trace)
         return trace
 
     def _apply_rerank(self, question: str, hits: list[HybridRetrievalHit]) -> list[HybridRetrievalHit]:
@@ -426,6 +430,10 @@ class RagQueryService:
         )
         if cache_key is not None:
             self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
+            self._remember_answer_cache_keys(cache_key, result)
+
+    def purge_document_cache(self, document_id: str) -> None:
+        invalidate_document_cache(self.cache_adapter, document_id)
 
     def _build_debug_data(
         self,
@@ -453,6 +461,16 @@ class RagQueryService:
             latency_ms=latency_ms,
             model_usage=dict(model_usage),
         )
+
+    def _remember_trace_cache_keys(self, cache_key: str, trace: HybridRetrievalTrace) -> None:
+        document_ids = {hit.doc_id for hit in (*trace.vector_hits, *trace.keyword_hits, *trace.fusion_hits)}
+        for document_id in document_ids:
+            remember_document_cache_keys(self.cache_adapter, document_id, [cache_key])
+
+    def _remember_answer_cache_keys(self, cache_key: str, result: RagQueryData) -> None:
+        document_ids = {source.doc_id for source in result.sources}
+        for document_id in document_ids:
+            remember_document_cache_keys(self.cache_adapter, document_id, [cache_key])
 
     @staticmethod
     def _extract_reply(payload: dict[str, object]) -> str:

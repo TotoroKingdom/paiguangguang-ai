@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas.rag import RagDocumentCreateRequest, RagIngestRequest
 from app.services.rag_ingestion import RagIngestionService, chunk_text
+from app.services.rag_cache import build_authorized_cache_key, remember_document_cache_keys
 from app.storage.rag_documents import RagDocumentRepository
+from app.storage.cache import InMemoryCacheAdapter
 from app.services.rag_ingestion import get_rag_ingestion_service
 
 
@@ -14,9 +16,10 @@ class ObservingVectorStore:
         self.repository = repository
         self.fail = fail
         self.calls: list[dict[str, object]] = []
+        self.delete_calls: list[dict[str, object]] = []
         self.during_status: dict[str, object] | None = None
 
-    def index_ingestion(self, collection_name, *, doc_id, title, content_hash, chunks):
+    def index_ingestion(self, collection_name, *, doc_id, title, content_hash, chunks, lifecycle_version=1):
         document = self.repository.get_document(doc_id)
         job = self.repository.get_latest_ingestion_job_for_document(doc_id)
         self.during_status = {
@@ -39,6 +42,9 @@ class ObservingVectorStore:
         if self.fail:
             raise RuntimeError("Vector indexing failed")
         return len(chunks)
+
+    def delete_document(self, collection_name, *, doc_id):
+        self.delete_calls.append({"collection_name": collection_name, "doc_id": doc_id})
 
 
 def test_chunk_text_is_deterministic() -> None:
@@ -251,6 +257,83 @@ def test_reindex_creates_new_job_without_changing_document_id() -> None:
     assert reindex_job_response.status_code == 200
     assert reindex_job_response.json()["data"]["status"] == "completed"
     assert reindex_job_response.json()["data"]["is_reindex"] is True
+
+
+def test_reindex_clears_old_vector_entries_and_bumps_lifecycle_version() -> None:
+    repository = RagDocumentRepository()
+    vector_store = ObservingVectorStore(repository)
+    service = RagIngestionService(repository=repository, vector_store=vector_store)  # type: ignore[arg-type]
+
+    registration = service.register_document(
+        RagDocumentCreateRequest(
+            title="Versioned Notes",
+            text="Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau.",
+        )
+    )
+
+    first = service.ingest_document(
+        RagIngestRequest(
+            doc_id=registration.doc_id,
+            chunk_size=30,
+            chunk_overlap=5,
+        )
+    )
+    second = service.ingest_document(
+        RagIngestRequest(
+            doc_id=registration.doc_id,
+            chunk_size=30,
+            chunk_overlap=5,
+            reindex=True,
+        )
+    )
+
+    assert first.chunk_count == second.chunk_count
+    assert vector_store.delete_calls == [{"collection_name": service.collection_name, "doc_id": registration.doc_id}]
+    assert vector_store.calls[-1]["chunks"][0].metadata["lifecycle_version"] == 2
+    assert repository.get_chunks(registration.doc_id)[0].metadata["lifecycle_version"] == 2
+
+
+def test_purge_document_artifacts_invalidates_document_cache_entries() -> None:
+    repository = RagDocumentRepository()
+    vector_store = ObservingVectorStore(repository)
+    service = RagIngestionService(repository=repository, vector_store=vector_store)  # type: ignore[arg-type]
+    cache = InMemoryCacheAdapter()
+    service.cache_adapter = cache
+
+    registration = service.register_document(
+        RagDocumentCreateRequest(
+            title="Cache Notes",
+            text="Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau.",
+        )
+    )
+
+    answer_key = build_authorized_cache_key(
+        "rag:answer",
+        access_context=type("Ctx", (), {"workspace_id": "workspace-1", "user_id": "user-1", "allowed_permission_scopes": ("workspace",)})(),
+        knowledge_base_version="portfolio-knowledge-base",
+        retrieval_strategy_version="rewrite-hybrid-rerank-v1",
+        model_version="deepseek-chat",
+        payload={"question": "What is the doc about?"},
+    )
+    retrieval_key = build_authorized_cache_key(
+        "rag:retrieval",
+        access_context=type("Ctx", (), {"workspace_id": "workspace-1", "user_id": "user-1", "allowed_permission_scopes": ("workspace",)})(),
+        knowledge_base_version="portfolio-knowledge-base",
+        retrieval_strategy_version="rewrite-hybrid-rerank-v1",
+        model_version="deepseek-chat",
+        payload={"question": "What is the doc about?"},
+    )
+    assert answer_key is not None
+    assert retrieval_key is not None
+    cache.set(answer_key, {"answer": "cached"})
+    cache.set(retrieval_key, {"fusion_hits": []})
+    remember_document_cache_keys(cache, registration.doc_id, [answer_key, retrieval_key])
+
+    service.purge_document_artifacts(registration.doc_id)
+
+    assert cache.get(answer_key) is None
+    assert cache.get(retrieval_key) is None
+    assert vector_store.delete_calls == [{"collection_name": service.collection_name, "doc_id": registration.doc_id}]
 
 
 def test_rag_validation_error_is_enveloped() -> None:

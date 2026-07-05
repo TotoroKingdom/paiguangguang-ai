@@ -85,6 +85,10 @@ class ChromaRagStore:
         )
         return len(chunks)
 
+    def delete_document(self, collection_name: str, *, doc_id: str) -> None:
+        collection = self._collection(collection_name)
+        collection.delete(where={"doc_id": doc_id})
+
     def search(
         self,
         collection_name: str,
