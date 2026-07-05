@@ -1,13 +1,26 @@
 from __future__ import annotations
 
+from time import perf_counter
+
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.ai.rerank import RerankProvider, get_rerank_provider
 from app.core.config import get_settings
 from app.db.models import User
-from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
+from app.schemas.rag import (
+    RagQueryData,
+    RagQueryDebugData,
+    RagQueryRequest,
+    RagQueryRewriteData,
+    RagSourceData,
+)
 from app.services.context_assembler import ContextAssembler, ContextAssemblyResult, get_context_assembler
 from app.storage.chroma_store import RagSearchAccessContext
-from app.services.hybrid_retrieval import HybridRetrievalHit, HybridRetrievalService, get_hybrid_retrieval_service
+from app.services.hybrid_retrieval import (
+    HybridRetrievalHit,
+    HybridRetrievalService,
+    HybridRetrievalTrace,
+    get_hybrid_retrieval_service,
+)
 from app.services.query_rewrite import QueryRewriteService, get_query_rewrite_service
 from app.services.rbac import RBACService, get_rbac_service
 from sqlalchemy import select
@@ -46,35 +59,37 @@ class RagQueryService:
         *,
         access_context: RagSearchAccessContext | None = None,
     ) -> RagQueryData:
+        started_at = perf_counter()
         collection_name = request.collection or self.default_collection_name
         rewrite = self.rewrite_service.rewrite(request.question)
-        hits = self.retrieval_service.search(
+        trace = self.retrieval_service.search_with_trace(
             collection_name,
             rewrite.original_question,
             top_k=request.top_k,
             access_context=access_context,
             rewrite_queries=rewrite.rewritten_queries,
         )
+        hits = trace.fusion_hits
+        fusion_hits = list(hits)
         hits = self._apply_rerank(request.question, hits)
         assembly = self.context_assembler.assemble(hits)
+        answer, model_usage = self._ask_model(request.question, assembly)
 
         sources = [
-            RagSourceData(
-                doc_id=hit.doc_id,
-                chunk_id=hit.chunk_id,
-                title=hit.title,
-                page_number=hit.page_number,
-                chunk_index=hit.chunk_index,
-                text=hit.text,
-                score=hit.score,
-                rerank_score=hit.rerank_score,
-                route_scores=dict(hit.route_scores),
-                metadata=dict(hit.metadata),
-            )
+            self._hit_to_source_data(hit)
             for hit in assembly.selected_sources
         ]
-        answer = self._ask_model(request.question, assembly)
-        return RagQueryData(answer=answer, sources=sources, rewrite=rewrite)
+        debug = self._build_debug_data(
+            request,
+            rewrite=rewrite,
+            trace=trace,
+            fusion_hits=fusion_hits,
+            reranked_hits=hits,
+            assembly=assembly,
+            latency_ms=int((perf_counter() - started_at) * 1000),
+            model_usage=model_usage,
+        )
+        return RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
 
     def query_for_user(
         self,
@@ -120,7 +135,7 @@ class RagQueryService:
         default_workspace_id = session.scalar(select(Workspace.id).where(Workspace.is_default.is_(True)))
         return default_workspace_id if isinstance(default_workspace_id, str) else None
 
-    def _ask_model(self, question: str, assembly: ContextAssemblyResult) -> str:
+    def _ask_model(self, question: str, assembly: ContextAssemblyResult) -> tuple[str, dict[str, object]]:
         messages = [
             {"role": "system", "content": build_rag_system_prompt()},
             {
@@ -135,7 +150,7 @@ class RagQueryService:
         ]
 
         result = self.client.chat_completions(messages)
-        return self._extract_reply(result)
+        return self._extract_reply(result), self._extract_usage(result)
 
     def _apply_rerank(self, question: str, hits: list[HybridRetrievalHit]) -> list[HybridRetrievalHit]:
         if self.rerank_provider is None or not hits:
@@ -163,6 +178,48 @@ class RagQueryService:
         return reranked_hits
 
     @staticmethod
+    def _hit_to_source_data(hit: HybridRetrievalHit) -> RagSourceData:
+        return RagSourceData(
+            doc_id=hit.doc_id,
+            chunk_id=hit.chunk_id,
+            title=hit.title,
+            page_number=hit.page_number,
+            chunk_index=hit.chunk_index,
+            text=hit.text,
+            score=hit.score,
+            rerank_score=hit.rerank_score,
+            route_scores=dict(hit.route_scores),
+            metadata=dict(hit.metadata),
+        )
+
+    def _build_debug_data(
+        self,
+        request: RagQueryRequest,
+        *,
+        rewrite: RagQueryRewriteData | None,
+        trace: HybridRetrievalTrace,
+        fusion_hits: list[HybridRetrievalHit],
+        reranked_hits: list[HybridRetrievalHit],
+        assembly: ContextAssemblyResult,
+        latency_ms: int,
+        model_usage: dict[str, object],
+    ) -> RagQueryDebugData | None:
+        if not request.include_debug:
+            return None
+
+        return RagQueryDebugData(
+            rewrites=rewrite,
+            vector_hits=[self._hit_to_source_data(hit) for hit in trace.vector_hits],
+            keyword_hits=[self._hit_to_source_data(hit) for hit in trace.keyword_hits],
+            fusion=[self._hit_to_source_data(hit) for hit in fusion_hits],
+            rerank=[self._hit_to_source_data(hit) for hit in reranked_hits],
+            selected_context=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
+            citations=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
+            latency_ms=latency_ms,
+            model_usage=dict(model_usage),
+        )
+
+    @staticmethod
     def _extract_reply(payload: dict[str, object]) -> str:
         choices = payload.get("choices")
         if not isinstance(choices, list) or not choices:
@@ -181,6 +238,20 @@ class RagQueryService:
             raise DeepSeekError("DeepSeek returned an empty reply")
 
         return content.strip()
+
+    @staticmethod
+    def _extract_usage(payload: dict[str, object]) -> dict[str, object]:
+        usage = payload.get("usage")
+        if isinstance(usage, dict):
+            result = dict(usage)
+            model = payload.get("model")
+            if isinstance(model, str) and model.strip():
+                result.setdefault("model", model.strip())
+            return result
+        model = payload.get("model")
+        if isinstance(model, str) and model.strip():
+            return {"model": model.strip()}
+        return {}
 
 
 _RAG_QUERY_SERVICE = RagQueryService()

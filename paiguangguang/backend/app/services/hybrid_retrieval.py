@@ -51,6 +51,14 @@ class HybridRetrievalHit:
         self.end_char = max(self.end_char, hit.end_char)
 
 
+@dataclass(frozen=True)
+class HybridRetrievalTrace:
+    queries: list[str]
+    vector_hits: list[HybridRetrievalHit]
+    keyword_hits: list[HybridRetrievalHit]
+    fusion_hits: list[HybridRetrievalHit]
+
+
 class HybridRetrievalService:
     def __init__(
         self,
@@ -72,37 +80,66 @@ class HybridRetrievalService:
         access_context: RagSearchAccessContext | None = None,
         rewrite_queries: Sequence[str] = (),
     ) -> list[HybridRetrievalHit]:
+        return self.search_with_trace(
+            collection_name,
+            query_text,
+            top_k=top_k,
+            access_context=access_context,
+            rewrite_queries=rewrite_queries,
+        ).fusion_hits
+
+    def search_with_trace(
+        self,
+        collection_name: str,
+        query_text: str,
+        *,
+        top_k: int = 5,
+        access_context: RagSearchAccessContext | None = None,
+        rewrite_queries: Sequence[str] = (),
+    ) -> HybridRetrievalTrace:
         queries = self._build_queries(query_text, rewrite_queries)
         if not queries:
-            return []
+            return HybridRetrievalTrace(queries=[], vector_hits=[], keyword_hits=[], fusion_hits=[])
 
         candidates: dict[tuple[str, str], HybridRetrievalHit] = {}
+        vector_hits: list[HybridRetrievalHit] = []
+        keyword_hits: list[HybridRetrievalHit] = []
         for query in queries:
+            vector_route_hits = self.vector_store.search(
+                collection_name,
+                query,
+                top_k=top_k,
+                access_context=access_context,
+            )
+            keyword_route_hits = self.keyword_retriever.search(
+                collection_name,
+                query,
+                top_k=top_k,
+                access_context=access_context,
+            )
+            vector_hits.extend(self._clone_hit(hit, "vector") for hit in vector_route_hits)
+            keyword_hits.extend(self._clone_hit(hit, "keyword") for hit in keyword_route_hits)
             self._merge_route_hits(
                 candidates,
                 "vector",
-                self.vector_store.search(
-                    collection_name,
-                    query,
-                    top_k=top_k,
-                    access_context=access_context,
-                ),
+                vector_route_hits,
             )
             self._merge_route_hits(
                 candidates,
                 "keyword",
-                self.keyword_retriever.search(
-                    collection_name,
-                    query,
-                    top_k=top_k,
-                    access_context=access_context,
-                ),
+                keyword_route_hits,
             )
 
-        return sorted(
+        fusion_hits = sorted(
             candidates.values(),
             key=lambda hit: (-hit.score, hit.doc_id, hit.chunk_id),
         )[:top_k]
+        return HybridRetrievalTrace(
+            queries=queries,
+            vector_hits=vector_hits,
+            keyword_hits=keyword_hits,
+            fusion_hits=fusion_hits,
+        )
 
     def _merge_route_hits(
         self,
@@ -119,6 +156,12 @@ class HybridRetrievalService:
             else:
                 candidate.merge_search_hit(hit, route_name=route_name)
             candidate.score += 1.0 / (self.rrf_k + rank)
+
+    @staticmethod
+    def _clone_hit(hit: RagSearchHit, route_name: str) -> HybridRetrievalHit:
+        cloned = HybridRetrievalHit.from_search_hit(hit, route_name=route_name)
+        cloned.score = hit.score
+        return cloned
 
     @staticmethod
     def _build_queries(query_text: str, rewrite_queries: Sequence[str]) -> list[str]:

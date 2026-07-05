@@ -220,6 +220,7 @@ def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
                 "question": "How is the project deployed?",
                 "collection": "portfolio_knowledge",
                 "top_k": 2,
+                "include_debug": True,
             },
         )
     finally:
@@ -335,6 +336,7 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
                 "question": "How is the project deployed?",
                 "collection": "portfolio_knowledge",
                 "top_k": 2,
+                "include_debug": True,
             },
         )
     finally:
@@ -346,6 +348,24 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert body["success"] is True
     assert body["data"]["answer"] == "Use the retrieval context and cite the source chunks."
     assert len(body["data"]["sources"]) == 1
+    assert body["data"]["debug"]["rewrites"]["original_question"] == "How is the project deployed?"
+    assert len(body["data"]["debug"]["vector_hits"]) == 1
+    assert len(body["data"]["debug"]["keyword_hits"]) == 1
+    assert len(body["data"]["debug"]["fusion"]) == 1
+    assert len(body["data"]["debug"]["rerank"]) == 1
+    assert len(body["data"]["debug"]["selected_context"]) == 1
+    assert len(body["data"]["debug"]["citations"]) == 1
+    assert body["data"]["debug"]["latency_ms"] >= 0
+    assert body["data"]["debug"]["model_usage"] == {}
+    assert [item["doc_id"] for item in body["data"]["debug"]["vector_hits"]] == ["doc-alpha"]
+    assert [item["doc_id"] for item in body["data"]["debug"]["keyword_hits"]] == [
+        "doc-alpha",
+    ]
+    assert [item["doc_id"] for item in body["data"]["debug"]["fusion"]] == ["doc-alpha"]
+    assert [item["doc_id"] for item in body["data"]["debug"]["rerank"]] == ["doc-alpha"]
+    assert [item["doc_id"] for item in body["data"]["debug"]["selected_context"]] == ["doc-alpha"]
+    assert [item["doc_id"] for item in body["data"]["debug"]["citations"]] == ["doc-alpha"]
+    assert "doc-admin" not in str(body["data"]["debug"])
     assert body["data"]["rewrite"]["original_question"] == "How is the project deployed?"
     assert body["data"]["rewrite"]["rewritten_queries"] == []
     assert body["data"]["rewrite"]["metadata"]["status"] == "disabled"
@@ -398,6 +418,7 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert "Retrieved context:" in captured_bodies[0]
     assert "doc_id=doc-alpha" in captured_bodies[0]
     assert "page=3" in captured_bodies[0]
+    assert "doc-admin" not in captured_bodies[0]
 
 
 def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
@@ -431,6 +452,7 @@ def test_rag_query_service_returns_sources_without_auth_wrapper() -> None:
 
     assert result.answer == "I could not find relevant project context."
     assert result.sources == []
+    assert result.debug is None
     assert captured_bodies == [{}]
 
 
