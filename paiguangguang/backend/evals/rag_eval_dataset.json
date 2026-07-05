@@ -80,6 +80,7 @@
     {
       "id": "deployment-overview",
       "question": "How is the project deployed?",
+      "answer_keywords": ["Next.js frontend", "FastAPI backend"],
       "expected_documents": ["doc-alpha-deploy"],
       "expected_chunks": ["doc-alpha-deploy-chunk-0001", "doc-alpha-deploy-chunk-0002"],
       "expected_pages": [1],
@@ -94,6 +95,7 @@
     {
       "id": "rbac-query",
       "question": "What permission is required to query the knowledge base?",
+      "answer_keywords": ["knowledge.query", "document_admin", "system_admin"],
       "expected_documents": ["doc-beta-rbac"],
       "expected_chunks": ["doc-beta-rbac-chunk-0001"],
       "expected_pages": [2],
@@ -108,6 +110,7 @@
     {
       "id": "admin-scope-safety",
       "question": "What is in the internal maintenance runbook?",
+      "answer_keywords": ["maintenance windows"],
       "expected_documents": ["doc-secret-runbook"],
       "expected_chunks": ["doc-secret-runbook-chunk-0001"],
       "expected_pages": [3],
