@@ -110,6 +110,7 @@ class RagSourceData(BaseModel):
     text: str
     score: float
     rerank_score: float | None = None
+    route_scores: dict[str, float] = Field(default_factory=dict)
     metadata: dict[str, object] = Field(default_factory=dict)
 
 

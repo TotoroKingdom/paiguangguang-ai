@@ -4,12 +4,8 @@ from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.core.config import get_settings
 from app.db.models import User
 from app.schemas.rag import RagQueryData, RagQueryRequest, RagSourceData
-from app.storage.chroma_store import (
-    ChromaRagStore,
-    RagSearchAccessContext,
-    RagSearchHit,
-    get_chroma_rag_store,
-)
+from app.storage.chroma_store import RagSearchAccessContext
+from app.services.hybrid_retrieval import HybridRetrievalHit, HybridRetrievalService, get_hybrid_retrieval_service
 from app.services.query_rewrite import QueryRewriteService, get_query_rewrite_service
 from app.services.rbac import RBACService, get_rbac_service
 from sqlalchemy import select
@@ -27,7 +23,7 @@ def build_rag_system_prompt() -> str:
     )
 
 
-def build_context_block(hits: list[RagSearchHit]) -> str:
+def build_context_block(hits: list[HybridRetrievalHit]) -> str:
     if not hits:
         return "No relevant context was retrieved."
 
@@ -45,13 +41,13 @@ def build_context_block(hits: list[RagSearchHit]) -> str:
 class RagQueryService:
     def __init__(
         self,
-        vector_store: ChromaRagStore | None = None,
+        retrieval_service: HybridRetrievalService | None = None,
         client: DeepSeekClient | None = None,
         rewrite_service: QueryRewriteService | None = None,
     ) -> None:
         settings = get_settings()
-        self.vector_store = vector_store or get_chroma_rag_store()
         self.client = client or DeepSeekClient(settings)
+        self.retrieval_service = retrieval_service or get_hybrid_retrieval_service()
         self.rewrite_service = rewrite_service or get_query_rewrite_service()
         self.default_collection_name = settings.rag_collection_name
 
@@ -62,11 +58,13 @@ class RagQueryService:
         access_context: RagSearchAccessContext | None = None,
     ) -> RagQueryData:
         collection_name = request.collection or self.default_collection_name
-        hits = self.vector_store.search(
+        rewrite = self.rewrite_service.rewrite(request.question)
+        hits = self.retrieval_service.search(
             collection_name,
-            request.question,
+            rewrite.original_question,
             top_k=request.top_k,
             access_context=access_context,
+            rewrite_queries=rewrite.rewritten_queries,
         )
 
         sources = [
@@ -79,11 +77,11 @@ class RagQueryService:
                 text=hit.text,
                 score=hit.score,
                 rerank_score=None,
+                route_scores=dict(hit.route_scores),
                 metadata=dict(hit.metadata),
             )
             for hit in hits
         ]
-        rewrite = self.rewrite_service.rewrite(request.question)
         answer = self._ask_model(request.question, hits)
         return RagQueryData(answer=answer, sources=sources, rewrite=rewrite)
 
@@ -131,7 +129,7 @@ class RagQueryService:
         default_workspace_id = session.scalar(select(Workspace.id).where(Workspace.is_default.is_(True)))
         return default_workspace_id if isinstance(default_workspace_id, str) else None
 
-    def _ask_model(self, question: str, hits: list[RagSearchHit]) -> str:
+    def _ask_model(self, question: str, hits: list[HybridRetrievalHit]) -> str:
         context_block = build_context_block(hits)
         messages = [
             {"role": "system", "content": build_rag_system_prompt()},
