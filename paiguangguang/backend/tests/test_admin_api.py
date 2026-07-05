@@ -52,6 +52,28 @@ def _create_user(auth_service: AuthService, session: Session, *, email: str, pas
     )
 
 
+class TrackingVectorStore:
+    def __init__(self) -> None:
+        self.index_calls: list[dict[str, object]] = []
+        self.delete_calls: list[dict[str, object]] = []
+
+    def index_ingestion(self, collection_name, *, doc_id, title, content_hash, chunks, lifecycle_version=1):
+        self.index_calls.append(
+            {
+                "collection_name": collection_name,
+                "doc_id": doc_id,
+                "title": title,
+                "content_hash": content_hash,
+                "chunk_ids": [chunk.chunk_id for chunk in chunks],
+                "lifecycle_version": lifecycle_version,
+            }
+        )
+        return len(chunks)
+
+    def delete_document(self, collection_name, *, doc_id):
+        self.delete_calls.append({"collection_name": collection_name, "doc_id": doc_id})
+
+
 def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) -> None:
     session, session_factory = _create_session(tmp_path, "admin-api.sqlite3")
     auth_service = AuthService()
@@ -64,9 +86,10 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
     rbac_service.add_user_to_workspace(session, admin_user.id, defaults.default_workspace.slug)
     rbac_service.add_user_to_workspace(session, normal_user.id, defaults.default_workspace.slug)
 
+    vector_store = TrackingVectorStore()
     rag_service = RagIngestionService(
         repository=RagDocumentRepository(session_factory=session_factory),
-        index_to_vector_store=False,
+        vector_store=vector_store,  # type: ignore[arg-type]
     )
     app = _build_test_app(session, auth_service, rbac_service, rag_service)
     client = TestClient(app)
@@ -248,6 +271,10 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         )
         assert reindex_response.status_code == 200
         assert reindex_response.json()["data"]["status"] == "indexed"
+        assert vector_store.delete_calls == [
+            {"collection_name": rag_service.collection_name, "doc_id": created_document["doc_id"]}
+        ]
+        assert vector_store.index_calls[-1]["lifecycle_version"] == 1
 
         documents_response = client.get("/api/v1/admin/documents", headers=headers)
         assert documents_response.status_code == 200
@@ -259,6 +286,10 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         )
         assert document_delete_response.status_code == 200
         assert document_delete_response.json()["data"]["is_deleted"] is True
+        assert vector_store.delete_calls[-1] == {
+            "collection_name": rag_service.collection_name,
+            "doc_id": created_document["doc_id"],
+        }
 
         jobs_response = client.get("/api/v1/admin/ingestion-jobs", headers=headers)
         assert jobs_response.status_code == 200

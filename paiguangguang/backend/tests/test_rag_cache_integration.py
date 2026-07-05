@@ -302,3 +302,65 @@ def test_rag_query_cache_isolated_by_access_context() -> None:
     assert len(captured_bodies) == 2
     assert len(vector_store.calls) == 2
     assert len(keyword_retriever.calls) == 2
+
+
+def test_rag_query_cache_entries_can_be_purged_by_document_id() -> None:
+    cache = InMemoryCacheAdapter()
+    captured_bodies: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_bodies.append(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Cache entries are registered per document and can be purged.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    accessible_hit = _make_hit(
+        doc_id="doc-alpha",
+        chunk_id="doc-alpha-chunk-0001",
+        text="Alpha project deployment notes.",
+        score=0.9,
+        workspace_id="workspace-1",
+        permission_scope="workspace",
+    )
+    vector_store = FakeSearchStore([accessible_hit])
+    keyword_retriever = FakeSearchStore([accessible_hit])
+    retrieval_service = HybridRetrievalService(vector_store=vector_store, keyword_retriever=keyword_retriever)
+    query_service = RagQueryService(
+        retrieval_service=retrieval_service,
+        context_assembler=FakeContextAssembler(),
+        client=DeepSeekClient(api_key="test-key", transport=httpx.MockTransport(handler)),
+        rewrite_service=QueryRewriteService(enabled=False, cache_adapter=cache),
+        cache_adapter=cache,
+    )
+
+    access_context = RagSearchAccessContext(
+        workspace_id="workspace-1",
+        user_id="user-1",
+        allowed_permission_scopes=("workspace",),
+        allow_legacy_metadata=True,
+    )
+    request = RagQueryRequest(
+        question="How is the project deployed?",
+        collection="portfolio_knowledge",
+        top_k=1,
+    )
+
+    first = query_service.query(request, access_context=access_context)
+    query_service.purge_document_cache("doc-alpha")
+    second = query_service.query(request, access_context=access_context)
+
+    assert first.answer == "Cache entries are registered per document and can be purged."
+    assert second.answer == first.answer
+    assert len(captured_bodies) == 2
+    assert len(vector_store.calls) == 2
+    assert len(keyword_retriever.calls) == 2

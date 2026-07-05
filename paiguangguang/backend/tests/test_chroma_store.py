@@ -175,6 +175,35 @@ def test_chroma_store_filters_results_by_access_context() -> None:
     assert {hit.doc_id for hit in admin_hits} == {"doc-workspace", "doc-admin"}
 
 
+def test_chroma_store_can_delete_all_chunks_for_a_document() -> None:
+    client = chromadb.EphemeralClient()
+    store = ChromaRagStore(client=client, embedding_provider=FakeEmbeddingProvider())
+    collection_name = "portfolio_knowledge_delete"
+
+    store.index_ingestion(
+        collection_name,
+        doc_id="doc-delete",
+        title="Delete Notes",
+        content_hash="hash-delete",
+        chunks=[
+            RagChunkRecord(
+                chunk_id="doc-delete-chunk-0000",
+                index=0,
+                start_char=0,
+                end_char=20,
+                text="Alpha delete target",
+            )
+        ],
+    )
+
+    before_delete = store.search(collection_name, "alpha delete", top_k=1)
+    store.delete_document(collection_name, doc_id="doc-delete")
+    after_delete = store.search(collection_name, "alpha delete", top_k=1)
+
+    assert len(before_delete) == 1
+    assert after_delete == []
+
+
 def test_chroma_store_legacy_metadata_fallback_is_safe() -> None:
     client = chromadb.EphemeralClient()
     store = ChromaRagStore(client=client, embedding_provider=FakeEmbeddingProvider())

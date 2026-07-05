@@ -457,6 +457,7 @@ class AdminService:
         document.status = "deleted"
         document.is_deleted = True
         session.commit()
+        self.rag_service.purge_document_artifacts(document_id)
         session.refresh(document)
         return _document_to_admin_data(document)
 
