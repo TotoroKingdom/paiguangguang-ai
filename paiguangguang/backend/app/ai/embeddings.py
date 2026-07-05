@@ -4,7 +4,11 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
+
+import httpx
+
+from app.core.config import Settings, get_settings
 
 
 class EmbeddingProvider(Protocol):
@@ -12,6 +16,14 @@ class EmbeddingProvider(Protocol):
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         ...
+
+
+class EmbeddingProviderError(RuntimeError):
+    pass
+
+
+class EmbeddingConfigurationError(ValueError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -38,3 +50,105 @@ class HashEmbeddingProvider:
         if not norm:
             return vector
         return [value / norm for value in vector]
+
+
+class DashScopeEmbeddingProvider:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        model: str | None = None,
+        timeout_seconds: float | None = None,
+        transport: httpx.BaseTransport | None = None,
+    ) -> None:
+        self.settings = settings or get_settings()
+        self.api_key = api_key if api_key is not None else self.settings.dashscope_api_key
+        self.base_url = (base_url or self.settings.dashscope_base_url).rstrip("/")
+        self.model = model or self.settings.embedding_model
+        self.timeout_seconds = timeout_seconds or self.settings.embedding_timeout_seconds
+        if not self.api_key:
+            raise EmbeddingConfigurationError(
+                "DASHSCOPE_API_KEY is required when EMBEDDING_PROVIDER=dashscope"
+            )
+        self._client = httpx.Client(
+            base_url=self.base_url,
+            timeout=self.timeout_seconds,
+            transport=transport,
+        )
+
+    def close(self) -> None:
+        self._client.close()
+
+    def __enter__(self) -> "DashScopeEmbeddingProvider":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+    @property
+    def dimension(self) -> int:
+        return 0
+
+    def _auth_headers(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        response = self._client.post(
+            "/embeddings",
+            headers=self._auth_headers(),
+            json={
+                "model": self.model,
+                "input": list(texts),
+                "encoding_format": "float",
+            },
+        )
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = exc.response.text.strip()
+            raise EmbeddingProviderError(
+                f"DashScope embedding request failed with HTTP {exc.response.status_code}: {detail}"
+            ) from exc
+
+        data = response.json()
+        if not isinstance(data, dict):
+            raise EmbeddingProviderError("DashScope returned an invalid JSON payload")
+
+        payload = data.get("data")
+        if not isinstance(payload, list):
+            raise EmbeddingProviderError("DashScope returned an invalid embedding payload")
+
+        indexed_embeddings: dict[int, list[float]] = {}
+        for item in payload:
+            if not isinstance(item, dict):
+                continue
+            index = item.get("index")
+            embedding = item.get("embedding")
+            if isinstance(index, int) and isinstance(embedding, list):
+                indexed_embeddings[index] = [float(value) for value in embedding]
+
+        embeddings: list[list[float]] = []
+        for index in range(len(texts)):
+            if index not in indexed_embeddings:
+                raise EmbeddingProviderError("DashScope response did not include every embedding")
+            embeddings.append(indexed_embeddings[index])
+        return embeddings
+
+
+def get_embedding_provider(settings: Settings | None = None) -> EmbeddingProvider:
+    resolved_settings = settings or get_settings()
+    provider_name = resolved_settings.embedding_provider.strip().lower()
+    if provider_name in {"", "hash", "fake", "deterministic"}:
+        return HashEmbeddingProvider()
+    if provider_name in {"dashscope", "aliyun", "alibaba"}:
+        return DashScopeEmbeddingProvider(settings=resolved_settings)
+    raise EmbeddingConfigurationError(f"Unknown embedding provider: {resolved_settings.embedding_provider}")
