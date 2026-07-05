@@ -9,6 +9,8 @@ from typing import Any, Protocol, Sequence
 import httpx
 
 from app.core.config import Settings, get_settings
+from app.storage.cache import CacheAdapter
+from app.services.rag_cache import build_shared_cache_key
 
 
 class EmbeddingProvider(Protocol):
@@ -50,6 +52,39 @@ class HashEmbeddingProvider:
         if not norm:
             return vector
         return [value / norm for value in vector]
+
+
+@dataclass
+class CachingEmbeddingProvider:
+    provider: EmbeddingProvider
+    cache_adapter: CacheAdapter
+    model_version: str
+    namespace: str = "embedding"
+    cache_bypass: bool = False
+
+    @property
+    def dimension(self) -> int:
+        return getattr(self.provider, "dimension", 0)
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        if not texts:
+            return []
+
+        if self.cache_bypass:
+            return self.provider.embed(texts)
+
+        cache_key = build_shared_cache_key(
+            self.namespace,
+            model_version=self.model_version,
+            payload={"texts": list(texts), "dimension": self.dimension},
+        )
+        cached = self.cache_adapter.get(cache_key)
+        if isinstance(cached, list):
+            return [[float(value) for value in embedding] for embedding in cached if isinstance(embedding, list)]
+
+        embeddings = self.provider.embed(texts)
+        self.cache_adapter.set(cache_key, embeddings)
+        return embeddings
 
 
 class DashScopeEmbeddingProvider:

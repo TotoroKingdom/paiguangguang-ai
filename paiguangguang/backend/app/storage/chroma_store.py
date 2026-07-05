@@ -5,7 +5,7 @@ from typing import Sequence
 
 import chromadb
 
-from app.ai.embeddings import EmbeddingProvider, get_embedding_provider
+from app.ai.embeddings import CachingEmbeddingProvider, EmbeddingProvider, get_embedding_provider
 from app.core.config import get_settings
 from app.storage.rag_documents import RagChunkRecord
 from app.storage.rag_search import (
@@ -14,6 +14,7 @@ from app.storage.rag_search import (
     is_rag_search_accessible,
     normalize_rag_search_metadata,
 )
+from app.services.rag_cache import get_rag_cache_adapter
 
 
 class ChromaRagStore:
@@ -24,7 +25,15 @@ class ChromaRagStore:
     ) -> None:
         settings = get_settings()
         self.client = client or chromadb.PersistentClient(path=settings.chroma_path)
-        self.embedding_provider = embedding_provider or get_embedding_provider(settings)
+        provider = embedding_provider or get_embedding_provider(settings)
+        if isinstance(provider, CachingEmbeddingProvider):
+            self.embedding_provider = provider
+        else:
+            self.embedding_provider = CachingEmbeddingProvider(
+                provider=provider,
+                cache_adapter=get_rag_cache_adapter(settings),
+                model_version=getattr(provider, "model", provider.__class__.__name__),
+            )
         self._lock = Lock()
 
     def _collection(self, collection_name: str):
