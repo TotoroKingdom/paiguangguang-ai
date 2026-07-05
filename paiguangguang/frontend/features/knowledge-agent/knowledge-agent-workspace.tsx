@@ -33,11 +33,11 @@ function makeNoticePrefix(kind: "success" | "error" | "info") {
 }
 
 function formatScore(score: number) {
-  return `${Math.round(score * 100)}%`;
+  return score.toFixed(3);
 }
 
-function formatNullableScore(score: number | null) {
-  return score === null ? "n/a" : formatScore(score);
+function formatRouteScore(score: number) {
+  return score.toFixed(3);
 }
 
 function truncateText(text: string, limit = 220) {
@@ -91,40 +91,106 @@ function formatMetadata(metadata: Record<string, unknown>) {
     .join("\n");
 }
 
-function SourceCard({ source, index }: { source: KnowledgeSourceData; index: number }) {
+function getSourceStatus(answer: string, sources: KnowledgeSourceData[], hasQueried: boolean) {
+  const normalizedAnswer = answer.trim().toLowerCase();
+
+  if (!sources.length) {
+    if (!hasQueried && !normalizedAnswer) {
+      return {
+        tone: "idle" as const,
+        title: "No retrieval yet",
+        description: "Run a query to show the supporting chunks returned by the retrieval layer.",
+      };
+    }
+
+    return {
+      tone: "warning" as const,
+      title: "Empty retrieval",
+      description: "The model answered without returning supporting chunks for citation.",
+    };
+  }
+
+  if (
+    normalizedAnswer.includes("insufficient") ||
+    normalizedAnswer.includes("could not find") ||
+    normalizedAnswer.includes("not enough") ||
+    normalizedAnswer.includes("no relevant context")
+  ) {
+    return {
+      tone: "warning" as const,
+      title: "Insufficient context",
+      description: "Retrieved chunks were not strong enough to fully answer the question.",
+    };
+  }
+
+  return null;
+}
+
+function ScoreBadge({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: "neutral" | "tide" | "clay";
+}) {
+  const className =
+    tone === "tide"
+      ? "border-tide/20 bg-tide/10 text-tide"
+      : tone === "clay"
+        ? "border-clay/20 bg-clay/10 text-clay"
+        : "border-ink/10 bg-paper text-ink";
+
   return (
-    <li className="rounded-2xl border border-ink/10 bg-paper/80 p-4 shadow-sm">
+    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}>
+      {label}: {value}
+    </span>
+  );
+}
+
+function SourceCard({ source, index }: { source: KnowledgeSourceData; index: number }) {
+  const routeScores = Object.entries(source.route_scores)
+    .filter(([, value]) => Number.isFinite(value))
+    .sort(([left], [right]) => {
+      const order = new Map([
+        ["fusion", 0],
+        ["vector", 1],
+        ["keyword", 2],
+      ]);
+      return (order.get(left) ?? 10) - (order.get(right) ?? 10) || left.localeCompare(right);
+    });
+
+  return (
+    <li className="rounded-2xl border border-ink/10 bg-paper/80 p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <p className="text-sm font-semibold text-ink">
-            Source {index + 1} <span className="text-ink/45">-</span> {formatScore(source.score)}
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-ink">Source {index + 1}</p>
+            <ScoreBadge label="Fusion" value={formatScore(source.score)} tone="tide" />
+            {source.rerank_score !== null ? (
+              <ScoreBadge label="Rerank" value={formatRouteScore(source.rerank_score)} tone="clay" />
+            ) : null}
+          </div>
+          <p className="truncate text-xs uppercase tracking-wide text-ink/55">{source.doc_id}</p>
+          <p className="text-sm font-medium leading-6 text-ink/80">{source.title ?? "Untitled source"}</p>
+          <p className="text-xs leading-5 text-ink/55">
+            page {source.page_number ?? "n/a"} · chunk {source.chunk_index} · {source.chunk_id}
           </p>
-          <p className="text-xs uppercase tracking-wide text-ink/55">{source.doc_id}</p>
-          <p className="text-sm font-medium text-ink/80">{source.title ?? "Untitled source"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full border border-tide/20 bg-tide/10 px-3 py-1 text-xs font-semibold text-tide">
-            {source.chunk_id}
-          </span>
-          <span className="rounded-full border border-ink/10 bg-white px-3 py-1 text-xs font-semibold text-ink">
-            page {source.page_number ?? "n/a"}
-          </span>
+          {routeScores.map(([label, value]) => (
+            <ScoreBadge key={label} label={label} value={formatRouteScore(value)} />
+          ))}
         </div>
       </div>
-      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-clay">Chunk index</dt>
-          <dd className="text-sm text-ink">{source.chunk_index}</dd>
-        </div>
-        <div>
-          <dt className="text-xs font-semibold uppercase tracking-wide text-clay">Rerank</dt>
-          <dd className="text-sm text-ink">{formatNullableScore(source.rerank_score)}</dd>
-        </div>
-      </dl>
-      <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-ink/75">{truncateText(source.text)}</p>
-      <pre className="mt-4 overflow-x-auto rounded-xl border border-ink/10 bg-white/70 p-3 text-xs leading-6 text-ink/65">
-        {formatMetadata(source.metadata)}
-      </pre>
+      <p className="mt-4 whitespace-pre-wrap text-sm leading-7 text-ink/75">{truncateText(source.text, 180)}</p>
+      <details className="mt-4 rounded-xl border border-ink/10 bg-white/70 p-3">
+        <summary className="cursor-pointer list-none text-xs font-semibold uppercase tracking-wide text-clay">
+          Metadata
+        </summary>
+        <pre className="mt-3 overflow-x-auto text-xs leading-6 text-ink/65">{formatMetadata(source.metadata)}</pre>
+      </details>
     </li>
   );
 }
@@ -249,6 +315,7 @@ export function KnowledgeAgentWorkspace() {
   } | null>(null);
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<KnowledgeSourceData[]>([]);
+  const [hasQueried, setHasQueried] = useState(false);
   const [notice, setNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>({
     kind: "info",
     text: "Load a document, index it into Chroma, and then ask a question.",
@@ -407,6 +474,7 @@ export function KnowledgeAgentWorkspace() {
         top_k: topK,
       });
 
+      setHasQueried(true);
       setAnswer(result.answer);
       setSources(result.sources);
       setNotice({
@@ -450,6 +518,7 @@ export function KnowledgeAgentWorkspace() {
     setQuestion(defaultQuestion);
     setAnswer("");
     setSources([]);
+    setHasQueried(false);
     setQueryError(null);
     setNotice({
       kind: "info",
@@ -462,6 +531,8 @@ export function KnowledgeAgentWorkspace() {
       setQuestion(text);
     }
   }
+
+  const sourceStatus = getSourceStatus(answer, sources, hasQueried);
 
   const canInteract = status === "authenticated";
 
@@ -748,17 +819,25 @@ export function KnowledgeAgentWorkspace() {
               </div>
 
               <div className="mt-5">
-                {sources.length ? (
+                {sourceStatus ? (
+                  <div
+                    className={[
+                      "rounded-2xl border px-4 py-4 text-sm leading-7",
+                      sourceStatus.tone === "warning"
+                        ? "border-clay/25 bg-clay/10 text-ink"
+                        : "border-ink/10 bg-paper/70 text-ink/60",
+                    ].join(" ")}
+                  >
+                    <p className="font-semibold text-ink">{sourceStatus.title}</p>
+                    <p className="mt-1">{sourceStatus.description}</p>
+                  </div>
+                ) : sources.length ? (
                   <ul className="space-y-3">
                     {sources.map((source, index) => (
                       <SourceCard key={`${source.doc_id}-${source.chunk_id}`} source={source} index={index} />
                     ))}
                   </ul>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-ink/15 bg-paper/70 p-5 text-sm leading-7 text-ink/60">
-                    No citations yet. Run a query to show the supporting chunks returned by the retrieval layer.
-                  </div>
-                )}
+                ) : null}
               </div>
             </section>
           </aside>
@@ -767,3 +846,4 @@ export function KnowledgeAgentWorkspace() {
     </AuthGate>
   );
 }
+
