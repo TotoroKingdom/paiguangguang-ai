@@ -13,19 +13,21 @@ The project contains five modules:
 | Module | Route | Phase | Purpose |
 | --- | --- | --- | --- |
 | Portfolio Chat | `/` and chat panel | V1 | Chat with static personal/project profile data |
-| Knowledge Agent | `/agents/knowledge` | V2 | Enterprise-style RAG demo with upload, retrieval, and citations |
+| Knowledge Agent | `/agents/knowledge` | V2.1-V2.3 | Enterprise knowledge base with authenticated RAG, document management, retrieval quality, citations, eval, cache, and debug tooling |
+| Knowledge Admin | `/admin` | V2.1-V2.3 | Manage users, roles, permissions, workspaces, documents, ingestion jobs, and RAG debugging |
 | Browser Agent | `/agents/browser` | V3 | Mock web research workflow showing planning, tool calls, and synthesis |
 | Office Agent | `/agents/office` | V3 | Mock office automation workflow showing structured tool execution |
-| Architecture Visualization | `/architecture` | V2 | Interactive system and AI workflow visualization |
+| Architecture Visualization | `/architecture` | Baseline | Interactive system and AI workflow visualization |
 
-Portfolio Chat is the lightweight V1 assistant. Knowledge Agent is the full RAG implementation. Browser Agent and Office Agent are separate tool-calling demos.
+Portfolio Chat is the lightweight V1 assistant. Knowledge Agent is the main V2 product track. Browser Agent and Office Agent are separate tool-calling demos.
 
 ## 3. Page Requirements
 
 | Route | Required Experience |
 | --- | --- |
 | `/` | Hero section with interactive Agent Workflow and RAG Pipeline previews, plus entry points to all modules |
-| `/agents/knowledge` | Document upload, query input, answer panel, source/citation display |
+| `/agents/knowledge` | Authenticated document upload, query input, answer panel, source/citation display, and retrieval errors |
+| `/admin` | Authenticated admin workspace for users, roles, permissions, workspaces, documents, ingestion jobs, delete/reindex actions, and RAG debug views |
 | `/agents/browser` | Research prompt input, visible plan, mock search steps, final answer |
 | `/agents/office` | Workflow input, visible tool steps, structured result |
 | `/architecture` | React Flow graph with clickable nodes and detail panel |
@@ -42,13 +44,16 @@ User Input -> Planner or Prompt Layer -> Tool/Retrieval Layer -> LLM Response ->
 
 Knowledge Agent requirements:
 
-- Document upload
-- Text extraction
-- Fixed-size chunking for MVP
-- Embedding generation
-- Chroma vector retrieval
-- Context assembly
-- Answer with citations
+- Authenticated document upload and document lifecycle management
+- TXT, Markdown, and PDF parsing
+- Fixed-size chunking for the current baseline, with metadata preserved for later retrieval quality work
+- Real embedding generation through a switchable provider, defaulting to Alibaba Cloud Model Studio `text-embedding-v1`
+- Chroma vector retrieval with document, chunk, user, workspace, permission, page, title, and chunk index metadata
+- Permission-filtered retrieval based on RBAC
+- Context assembly with citation-ready source metadata
+- DeepSeek answer generation grounded in retrieved context
+- V2.2 query rewrite, hybrid retrieval, RRF fusion, `qwen3-rerank`, and improved context assembly
+- V2.3 local evaluation, Redis cache, debug views, delete/reindex synchronization, and stability controls
 
 Browser Agent requirements:
 
@@ -88,14 +93,16 @@ AI Layer:
 Storage:
 
 - Chroma for vector storage starting in V2
+- Neon Postgres for users, RBAC, workspaces, document lifecycle, chunks, and ingestion jobs starting in V2.1
+- Redis for RAG cache starting in V2.3
 - Redis for long-running task state and event streaming starting in V3
-- No relational database in MVP unless a future task explicitly adds one
+- No relational database in V1; V2.1 explicitly introduces Postgres for the knowledge base
 
 ## 6. Non-Goals
 
 - No local model training
 - No local LLM hosting
-- No production authentication in MVP
+- No external hosted authentication provider in V2.1
 - No complex distributed system
 - No real browser automation in MVP Browser Agent
 - No real Office file mutation in MVP Office Agent
