@@ -1,10 +1,20 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
 from app.schemas.rag import RagDocumentData, RagIngestionJobData
+
+DataT = TypeVar("DataT")
+
+
+class AdminPagedData(BaseModel, Generic[DataT]):
+    items: list[DataT]
+    total: int
+    page: int
+    page_size: int
 
 
 class AdminUserCreateRequest(BaseModel):
