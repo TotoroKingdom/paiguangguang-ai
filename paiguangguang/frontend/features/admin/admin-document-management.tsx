@@ -12,6 +12,8 @@ import {
   listAdminIngestionJobs,
   reindexAdminDocument,
 } from "@/lib/admin";
+import { AdminDataTable, type AdminDataTableColumn } from "@/features/admin/admin-data-table";
+import { AdminPagination } from "@/features/admin/admin-pagination";
 import type { AdminDocumentData, AdminIngestionJobData } from "@/types/admin";
 
 type PageState = "loading" | "ready" | "empty" | "forbidden" | "error";
@@ -108,15 +110,31 @@ export function AdminDocumentManagement() {
     action: null,
     docId: null,
   });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [sortBy, setSortBy] = useState("updated_at");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [total, setTotal] = useState(0);
 
   async function loadData(preferredDocumentId?: string | null) {
     setPageState("loading");
     setErrorMessage(null);
 
     try {
-      const [nextDocuments, nextJobs] = await Promise.all([listAdminDocuments(), listAdminIngestionJobs()]);
+      const [nextDocuments, nextJobs] = await Promise.all([
+        listAdminDocuments({
+          page,
+          pageSize,
+          sortBy,
+          sortOrder,
+        }),
+        listAdminIngestionJobs(),
+      ]);
       setDocuments(nextDocuments);
       setJobs(nextJobs);
+      setTotal(nextDocuments.total);
+      setPage(nextDocuments.page);
+      setPageSize(nextDocuments.page_size);
 
       const fallbackId =
         preferredDocumentId && nextDocuments.some((document) => document.doc_id === preferredDocumentId)
@@ -134,7 +152,7 @@ export function AdminDocumentManagement() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!selectedDocumentId) {
@@ -178,6 +196,93 @@ export function AdminDocumentManagement() {
   const selectedJobs = selectedDocumentId ? jobs.filter((job) => job.document_id === selectedDocumentId) : [];
   const selectedJob = selectedJobs[0] ?? null;
   const chunkPreview = buildChunkPreview(selectedDocumentSummary, selectedJob);
+  const documentColumns: AdminDataTableColumn<AdminDocumentData>[] = [
+    {
+      key: "title",
+      header: "Document",
+      sortable: true,
+      sortKey: "title",
+      render: (document) => (
+        <div className="grid gap-1">
+          <span className="font-semibold text-ink">{document.title ?? document.doc_id}</span>
+          <span className="text-xs text-ink/55">{document.doc_id}</span>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status",
+      sortable: true,
+      sortKey: "status",
+      render: (document) => (
+        <span className={`border px-2.5 py-1 text-xs font-semibold ${statusTone(document.status)}`}>{document.status}</span>
+      ),
+    },
+    {
+      key: "owner",
+      header: "Owner",
+      sortable: true,
+      sortKey: "owner_user_id",
+      render: (document) => <span className="text-sm text-ink/70">{document.owner_user_id ?? "Unassigned"}</span>,
+    },
+    {
+      key: "workspace",
+      header: "Workspace",
+      sortable: true,
+      sortKey: "workspace_id",
+      render: (document) => <span className="text-sm text-ink/70">{document.workspace_id ?? "Unassigned"}</span>,
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      sortable: true,
+      sortKey: "updated_at",
+      render: (document) => <span className="text-sm text-ink/70">{formatDateTime(document.updated_at)}</span>,
+    },
+  ];
+  const jobColumns: AdminDataTableColumn<AdminIngestionJobData>[] = [
+    {
+      key: "job_id",
+      header: "Job",
+      render: (job) => <span className="font-semibold text-ink">{job.job_id}</span>,
+    },
+    {
+      key: "status",
+      header: "Status",
+      render: (job) => (
+        <span className={`border px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>{job.status}</span>
+      ),
+    },
+    {
+      key: "retry_count",
+      header: "Retries",
+      render: (job) => <span className="text-sm text-ink/70">{formatCount(job.retry_count)}</span>,
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      render: (job) => <span className="text-sm text-ink/70">{formatDateTime(job.updated_at)}</span>,
+    },
+  ];
+
+  function handleDocumentSort(nextSortBy: string) {
+    setPage(1);
+    if (sortBy === nextSortBy) {
+      setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortBy === "updated_at" ? "desc" : "asc");
+  }
+
+  function handleDocumentPageChange(nextPage: number) {
+    setPage(nextPage);
+  }
+
+  function handleDocumentPageSizeChange(nextPageSize: number) {
+    setPage(1);
+    setPageSize(nextPageSize);
+  }
 
   async function handleReload() {
     await loadData(selectedDocumentId);
@@ -240,83 +345,32 @@ export function AdminDocumentManagement() {
               Status, owner, workspace, permission scope, update time, and failure reasons are shown for each record.
             </div>
 
-            {errorMessage && pageState === "ready" ? (
-              <div className="mt-4 border border-clay/20 bg-clay/10 p-4 text-sm leading-7 text-ink">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            {pageState === "loading" ? (
-              <div className="mt-5 space-y-3">
-                <div className="h-24 animate-pulse border border-dashed border-ink/15 bg-paper/70" />
-                <div className="h-24 animate-pulse border border-dashed border-ink/15 bg-paper/70" />
-                <div className="h-24 animate-pulse border border-dashed border-ink/15 bg-paper/70" />
-              </div>
-            ) : null}
-
-            {pageState === "forbidden" ? (
-              <div className="mt-5 border border-clay/25 bg-clay/10 p-4 text-sm leading-7 text-ink">
-                You do not have permission to view document management. This page requires the document admin scope.
-              </div>
-            ) : null}
-
-            {pageState === "error" ? (
-              <div className="mt-5 border border-clay/25 bg-clay/10 p-4 text-sm leading-7 text-ink">
-                {errorMessage ?? "Unable to load documents."}
-              </div>
-            ) : null}
-
-            {pageState === "empty" ? (
-              <div className="mt-5 border border-ink/10 bg-paper/70 p-4 text-sm leading-7 text-ink/70">
-                No documents are registered yet.
-              </div>
-            ) : null}
-
-            {pageState === "ready" ? (
-              <div className="mt-5 space-y-3">
-                {visibleDocuments.map((document) => {
-                  const active = document.doc_id === selectedDocumentId;
-                  return (
-                    <button
-                      key={document.doc_id}
-                      type="button"
-                      onClick={() => setSelectedDocumentId(document.doc_id)}
-                      className={[
-                        "block w-full border p-4 text-left transition",
-                        active
-                          ? "border-tide/45 bg-tide/6 shadow-sm"
-                          : "border-ink/10 bg-white/65 hover:border-tide/25 hover:bg-white",
-                      ].join(" ")}
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-base font-semibold text-ink">
-                            {document.title ?? document.doc_id}
-                          </h3>
-                          <p className="mt-1 text-xs font-medium uppercase tracking-wide text-clay">
-                            {document.doc_id}
-                          </p>
-                        </div>
-                        <span className={`border px-2.5 py-1 text-xs font-semibold ${statusTone(document.status)}`}>
-                          {document.status}
-                        </span>
-                      </div>
-                      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-                        <MetaRow label="Owner" value={document.owner_user_id ?? "Unassigned"} />
-                        <MetaRow label="Workspace" value={document.workspace_id ?? "Unassigned"} />
-                        <MetaRow label="Permission" value={document.permission_scope ?? "Unscoped"} />
-                        <MetaRow label="Updated" value={formatDateTime(document.updated_at)} />
-                      </dl>
-                      {document.error_message ? (
-                        <div className="mt-3 border border-clay/20 bg-clay/10 px-3 py-2 text-sm leading-6 text-ink">
-                          Failure: {document.error_message}
-                        </div>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
+            <div className="mt-5 space-y-3">
+              <AdminDataTable
+                columns={documentColumns}
+                rows={visibleDocuments}
+                state={pageState}
+                loadingMessage="Loading documents..."
+                emptyMessage="No documents are registered yet."
+                forbiddenMessage="You do not have permission to view document management. This page requires the document admin scope."
+                errorMessage={errorMessage}
+                getRowKey={(document) => document.doc_id}
+                activeRowKey={selectedDocumentId}
+                onRowClick={(document) => setSelectedDocumentId(document.doc_id)}
+                sortBy={sortBy}
+                sortOrder={sortOrder}
+                onSort={handleDocumentSort}
+              />
+              {pageState === "ready" ? (
+                <AdminPagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onPageChange={handleDocumentPageChange}
+                  onPageSizeChange={handleDocumentPageSizeChange}
+                />
+              ) : null}
+            </div>
           </div>
 
           <div className="border border-ink/10 bg-white/72 p-5 shadow-sm">
@@ -324,7 +378,7 @@ export function AdminDocumentManagement() {
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="border border-ink/10 bg-paper/75 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-clay">Documents</div>
-                <div className="mt-2 text-2xl font-semibold text-ink">{formatCount(documents.length)}</div>
+                <div className="mt-2 text-2xl font-semibold text-ink">{formatCount(total)}</div>
               </div>
               <div className="border border-ink/10 bg-paper/75 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-clay">Ingestion jobs</div>
@@ -413,44 +467,17 @@ export function AdminDocumentManagement() {
           <div className="grid gap-4 xl:grid-cols-2">
             <div className="border border-ink/10 bg-white/72 p-5 shadow-sm">
               <p className="text-sm font-semibold uppercase tracking-wide text-clay">Ingestion jobs</p>
-              <div className="mt-4 space-y-3">
-                {selectedJobs.length === 0 ? (
-                  <div className="border border-ink/10 bg-paper/70 p-4 text-sm leading-7 text-ink/70">
-                    No ingestion jobs found for the selected document.
-                  </div>
-                ) : (
-                  selectedJobs.map((job) => (
-                    <div key={job.job_id} className="border border-ink/10 bg-paper/75 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-ink">{job.job_id}</div>
-                          <div className="mt-1 text-xs font-medium uppercase tracking-wide text-clay">
-                            Document {job.document_id}
-                          </div>
-                        </div>
-                        <span className={`border px-2.5 py-1 text-xs font-semibold ${statusTone(job.status)}`}>
-                          {job.status}
-                        </span>
-                      </div>
-                      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <MetaRow label="Reindex" value={job.is_reindex ? "Yes" : "No"} />
-                        <MetaRow label="Retry count" value={formatCount(job.retry_count)} />
-                        <MetaRow label="Chunk size" value={job.chunk_size ? formatCount(job.chunk_size) : "Unknown"} />
-                        <MetaRow
-                          label="Chunk overlap"
-                          value={job.chunk_overlap ? formatCount(job.chunk_overlap) : "Unknown"}
-                        />
-                        <MetaRow label="Started" value={formatDateTime(job.started_at)} />
-                        <MetaRow label="Completed" value={formatDateTime(job.completed_at)} />
-                      </dl>
-                      {job.failure_reason ? (
-                        <div className="mt-3 border border-clay/20 bg-clay/10 px-3 py-2 text-sm leading-6 text-ink">
-                          Failure: {job.failure_reason}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))
-                )}
+              <div className="mt-4">
+                <AdminDataTable
+                  columns={jobColumns}
+                  rows={selectedJobs}
+                  state={selectedJobs.length === 0 ? "empty" : "ready"}
+                  loadingMessage="Loading ingestion jobs..."
+                  emptyMessage="No ingestion jobs found for the selected document."
+                  forbiddenMessage="You do not have permission to view document jobs."
+                  errorMessage={null}
+                  getRowKey={(job) => job.job_id}
+                />
               </div>
             </div>
 
