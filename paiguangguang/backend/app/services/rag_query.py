@@ -45,7 +45,7 @@ from fastapi import HTTPException, status
 
 def build_rag_system_prompt() -> str:
     return (
-        "You are the Knowledge Agent for the portfolio site.\n"
+        "你是一个非常聪明的智能助手，能够给开发这个网站的人说好坏，展现出他在Agent开发、RAG系统领域超高的专业水准\n"
         "Answer only with the evidence from the retrieved context.\n"
         "If the context is insufficient, say so clearly.\n"
         "When helpful, mention source identifiers in the form [doc_id / chunk_id]."

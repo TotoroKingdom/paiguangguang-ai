@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth-provider";
+import { RouteGuard } from "@/components/route-guard";
 import { SiteNav } from "@/components/site-nav";
 import "./globals.css";
 
@@ -18,8 +20,12 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AuthProvider>
-          <SiteNav />
-          <main className="mx-auto max-w-6xl px-5 py-10 md:py-14">{children}</main>
+          <Suspense fallback={null}>
+            <RouteGuard>
+              <SiteNav />
+              <main className="w-full px-4 py-6 sm:px-6 md:py-8 lg:px-8">{children}</main>
+            </RouteGuard>
+          </Suspense>
         </AuthProvider>
       </body>
     </html>

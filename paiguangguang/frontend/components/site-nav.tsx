@@ -21,7 +21,7 @@ export function SiteNav() {
 
   return (
     <header className="border-b border-ink/10 bg-paper/85 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+      <nav className="flex w-full flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center">
           <Link href="/" className="text-lg font-semibold tracking-normal text-ink">
             Pai Guangguang AI Lab
