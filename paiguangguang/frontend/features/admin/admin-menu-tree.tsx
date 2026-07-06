@@ -10,11 +10,11 @@ type AdminMenuItem = {
 };
 
 const adminMenuItems: AdminMenuItem[] = [
-  { href: "/admin/documents", label: "Documents", description: "Document lifecycle and ingestion" },
-  { href: "/admin/users", label: "Users", description: "Account access and workspace membership" },
-  { href: "/admin/roles", label: "Roles", description: "Role bundles and assigned permissions" },
-  { href: "/admin/permissions", label: "Permissions", description: "Permission catalog" },
-  { href: "/admin/workspaces", label: "Workspaces", description: "Workspace registry and default flag" },
+  { href: "/admin/documents", label: "文档", description: "文档生命周期与入库" },
+  { href: "/admin/users", label: "用户", description: "账号访问与工作区成员" },
+  { href: "/admin/roles", label: "角色", description: "角色集合与权限分配" },
+  { href: "/admin/permissions", label: "权限", description: "权限目录" },
+  { href: "/admin/workspaces", label: "工作区", description: "工作区注册与默认标记" },
 ];
 
 function isActivePath(pathname: string | null, href: string) {
@@ -25,10 +25,10 @@ export function AdminMenuTree() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label="Admin sections" className="border border-ink/10 bg-white/72 p-4 shadow-sm">
+    <nav aria-label="管理后台分区" className="border border-ink/10 bg-white/72 p-4 shadow-sm">
       <div className="border-b border-ink/10 pb-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-clay">Admin tree</p>
-        <h2 className="mt-2 text-lg font-semibold text-ink">Management areas</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-clay">后台导航</p>
+        <h2 className="mt-2 text-lg font-semibold text-ink">管理分区</h2>
       </div>
       <ul className="mt-4 space-y-2">
         {adminMenuItems.map((item) => {

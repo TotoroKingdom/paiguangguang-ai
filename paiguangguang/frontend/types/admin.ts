@@ -7,6 +7,7 @@ export type AdminPagedResponse<T> = T[] & {
 export type AdminDocumentData = {
   doc_id: string;
   title: string | null;
+  original_filename: string | null;
   text_length: number;
   content_hash: string;
   owner_user_id: string | null;
@@ -40,6 +41,7 @@ export type AdminIngestionJobData = {
 
 export type AdminDocumentUpdateRequest = {
   title?: string | null;
+  original_filename?: string | null;
   text?: string | null;
   owner_user_id?: string | null;
   workspace_id?: string | null;
@@ -55,6 +57,7 @@ export type AdminDocumentUpdateRequest = {
 
 export type AdminDocumentCreateRequest = {
   title?: string | null;
+  original_filename?: string | null;
   text: string;
   owner_user_id?: string | null;
   workspace_id?: string | null;

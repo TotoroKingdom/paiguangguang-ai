@@ -41,6 +41,14 @@ class QueryAwareFakeSearchStore:
             hits = filtered
         return hits[:top_k]
 
+    def search_direct_match(self, collection_name, query_text, *, top_k=5, access_context=None):
+        return self.search(
+            collection_name,
+            query_text,
+            top_k=top_k,
+            access_context=access_context,
+        )
+
 
 def _make_hit(
     doc_id: str,
@@ -88,7 +96,7 @@ def test_hybrid_retrieval_merges_duplicate_candidates_and_is_stable() -> None:
     assert len(first) == 1
     assert first[0].doc_id == "doc-alpha"
     assert first[0].chunk_id == "doc-alpha-chunk-0000"
-    assert first[0].route_scores == {"vector": 0.91, "keyword": 0.91}
+    assert first[0].route_scores == {"vector": 0.91, "bm25": 0.91, "direct": 0.91}
     assert first[0].score == second[0].score
     assert [(hit.doc_id, hit.chunk_id, hit.score) for hit in first] == [
         (hit.doc_id, hit.chunk_id, hit.score) for hit in second
@@ -115,5 +123,5 @@ def test_hybrid_retrieval_keeps_vector_only_and_keyword_only_candidates() -> Non
         ("doc-keyword", "doc-keyword-chunk-0000"),
         ("doc-vector", "doc-vector-chunk-0000"),
     ]
-    assert hits[0].route_scores == {"keyword": 0.88}
+    assert hits[0].route_scores == {"bm25": 0.88, "direct": 0.88}
     assert hits[1].route_scores == {"vector": 0.87}

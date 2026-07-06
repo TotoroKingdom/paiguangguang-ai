@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import get_settings
 from app.db.models import RagChunk as RagChunkModel
 from app.db.models import RagDocument as RagDocumentModel
+from app.db.models import RagKnowledgeBaseState as RagKnowledgeBaseStateModel
 from app.db.models import RagIngestionJob as RagIngestionJobModel
 from app.db.session import build_session_factory
 from app.storage.rag_search import (
@@ -30,6 +31,7 @@ def _utcnow() -> datetime:
 
 
 _KEYWORD_TERM_RE = re.compile(r"[A-Za-z0-9_./:-]+")
+_QUOTED_PHRASE_RE = re.compile(r'"([^"]{2,})"|\'([^\']{2,})\'')
 
 
 def _normalize_query_text(query_text: str) -> str:
@@ -83,12 +85,58 @@ def _keyword_score(query_text: str, text: str) -> float:
     return score
 
 
+def _quoted_phrases(query_text: str) -> list[str]:
+    phrases: list[str] = []
+    for double_quoted, single_quoted in _QUOTED_PHRASE_RE.findall(query_text):
+        phrase = double_quoted or single_quoted
+        if phrase and phrase not in phrases:
+            phrases.append(phrase)
+    return phrases
+
+
+def _direct_match_score(query_text: str, *, title: str | None, original_filename: str | None, text: str) -> float:
+    normalized_query = _normalize_query_text(query_text)
+    normalized_text = _normalize_query_text(text)
+    normalized_title = _normalize_query_text(title or "")
+    normalized_filename = _normalize_query_text(original_filename or "")
+    if not normalized_query:
+        return 0.0
+
+    score = 0.0
+    if normalized_query in normalized_text:
+        score += 4.0
+    if normalized_query in normalized_title or normalized_query in normalized_filename:
+        score += 5.0
+
+    for phrase in _quoted_phrases(query_text):
+        normalized_phrase = _normalize_query_text(phrase)
+        if not normalized_phrase:
+            continue
+        if normalized_phrase in normalized_text:
+            score += 3.0
+        if normalized_phrase in normalized_title or normalized_phrase in normalized_filename:
+            score += 4.0
+
+    for term in _KEYWORD_TERM_RE.findall(normalized_query):
+        if len(term) < 2:
+            continue
+        if term in normalized_filename:
+            score += 2.5
+        if term in normalized_title:
+            score += 1.5
+        if term in normalized_text:
+            score += 1.0
+
+    return score
+
+
 @dataclass(frozen=True)
 class RagDocumentRecord:
     document_id: str
     title: str | None
     text: str
     content_hash: str
+    original_filename: str | None = None
     owner_user_id: str | None = None
     workspace_id: str | None = None
     permission_scope: str | None = None
@@ -181,6 +229,7 @@ class RagDocumentRepository:
         self._documents: dict[str, RagDocumentRecord] = {}
         self._chunks: dict[str, list[RagChunkRecord]] = {}
         self._ingestion_jobs: dict[str, RagIngestionJobRecord] = {}
+        self._knowledge_base_state: dict[str, int] = {}
         self._lock = Lock()
 
     @contextmanager
@@ -208,6 +257,7 @@ class RagDocumentRepository:
         return RagDocumentRecord(
             document_id=model.document_id,
             title=model.title,
+            original_filename=model.original_filename,
             text=model.text,
             content_hash=model.content_hash,
             owner_user_id=model.owner_user_id,
@@ -262,9 +312,14 @@ class RagDocumentRepository:
                     select(RagDocumentModel).where(RagDocumentModel.document_id == document.document_id)
                 )
                 if model is None:
-                    model = RagDocumentModel(document_id=document.document_id, text=document.text, content_hash=document.content_hash)
+                    model = RagDocumentModel(
+                        document_id=document.document_id,
+                        text=document.text,
+                        content_hash=document.content_hash,
+                    )
                     session.add(model)
                 model.title = document.title
+                model.original_filename = document.original_filename
                 model.text = document.text
                 model.content_hash = document.content_hash
                 model.owner_user_id = document.owner_user_id
@@ -349,6 +404,7 @@ class RagDocumentRepository:
             updated = RagDocumentRecord(
                 document_id=document.document_id,
                 title=document.title,
+                original_filename=document.original_filename,
                 text=document.text,
                 content_hash=document.content_hash,
                 owner_user_id=document.owner_user_id,
@@ -380,6 +436,68 @@ class RagDocumentRepository:
             status="deleted",
             is_deleted=True,
         )
+
+    def delete_document(self, document_id: str) -> None:
+        if self.uses_database:
+            with self._session() as session:
+                assert session is not None
+                session.execute(delete(RagIngestionJobModel).where(RagIngestionJobModel.document_id == document_id))
+                session.execute(delete(RagChunkModel).where(RagChunkModel.document_id == document_id))
+                session.execute(delete(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
+                session.flush()
+            return
+
+        with self._lock:
+            self._documents.pop(document_id, None)
+            self._chunks.pop(document_id, None)
+            jobs = {job_id: job for job_id, job in self._ingestion_jobs.items() if job.document_id != document_id}
+            self._ingestion_jobs = jobs
+
+    def get_knowledge_base_version(self, collection_name: str) -> int:
+        normalized_collection = collection_name.strip()
+        if not normalized_collection:
+            return 1
+
+        if self.uses_database:
+            with self._session() as session:
+                assert session is not None
+                model = session.scalar(
+                    select(RagKnowledgeBaseStateModel).where(
+                        RagKnowledgeBaseStateModel.collection_name == normalized_collection
+                    )
+                )
+                return int(model.kb_version) if model is not None else 1
+
+        with self._lock:
+            return self._knowledge_base_state.get(normalized_collection, 1)
+
+    def bump_knowledge_base_version(self, collection_name: str) -> int:
+        normalized_collection = collection_name.strip()
+        if not normalized_collection:
+            return 1
+
+        if self.uses_database:
+            with self._session() as session:
+                assert session is not None
+                model = session.scalar(
+                    select(RagKnowledgeBaseStateModel).where(
+                        RagKnowledgeBaseStateModel.collection_name == normalized_collection
+                    )
+                )
+                if model is None:
+                    model = RagKnowledgeBaseStateModel(collection_name=normalized_collection, kb_version=1)
+                    session.add(model)
+                    session.flush()
+                model.kb_version = int(model.kb_version) + 1 if model.kb_version else 2
+                session.flush()
+                session.refresh(model)
+                return int(model.kb_version)
+
+        with self._lock:
+            current = self._knowledge_base_state.get(normalized_collection, 1)
+            next_version = current + 1
+            self._knowledge_base_state[normalized_collection] = next_version
+            return next_version
 
     def upsert_chunk(self, chunk: RagChunkRecord) -> RagChunkRecord:
         if self.uses_database:
@@ -475,6 +593,30 @@ class RagDocumentRepository:
         hits.sort(key=lambda hit: (-hit.score, hit.chunk_index, hit.doc_id, hit.chunk_id))
         return hits[:top_k]
 
+    def search_direct_match(
+        self,
+        collection_name: str,
+        query_text: str,
+        *,
+        top_k: int = 5,
+        access_context: RagSearchAccessContext | None = None,
+    ) -> list[RagSearchHit]:
+        del collection_name
+        normalized_query = query_text.strip()
+        if not normalized_query:
+            return []
+
+        if self.uses_database:
+            with self._session() as session:
+                assert session is not None
+                rows = self._direct_match_search_rows(session, normalized_query)
+                hits = self._rows_to_direct_match_hits(rows, normalized_query, access_context)
+        else:
+            hits = self._direct_match_search_in_memory(normalized_query, access_context)
+
+        hits.sort(key=lambda hit: (-hit.score, hit.chunk_index, hit.doc_id, hit.chunk_id))
+        return hits[:top_k]
+
     def _keyword_search_in_memory(
         self,
         query_text: str,
@@ -491,6 +633,24 @@ class RagDocumentRepository:
                 continue
             for chunk in sorted(chunk_groups[document_id], key=lambda item: item.chunk_index):
                 hits.extend(self._build_keyword_hits(query_text, document, chunk, access_context))
+        return hits
+
+    def _direct_match_search_in_memory(
+        self,
+        query_text: str,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        hits: list[RagSearchHit] = []
+        with self._lock:
+            documents = dict(self._documents)
+            chunk_groups = {document_id: list(chunks) for document_id, chunks in self._chunks.items()}
+
+        for document_id in sorted(chunk_groups):
+            document = documents.get(document_id)
+            if document is None:
+                continue
+            for chunk in sorted(chunk_groups[document_id], key=lambda item: item.chunk_index):
+                hits.extend(self._build_direct_match_hits(query_text, document, chunk, access_context))
         return hits
 
     def _keyword_search_rows(self, session: Session, query_text: str):
@@ -530,6 +690,25 @@ class RagDocumentRepository:
             hits.extend(self._build_keyword_hits(query_text, document, chunk, access_context))
         return hits
 
+    def _direct_match_search_rows(self, session: Session, query_text: str):
+        stmt = (
+            select(RagChunkModel, RagDocumentModel)
+            .join(RagDocumentModel, RagChunkModel.document_id == RagDocumentModel.document_id)
+            .order_by(RagChunkModel.document_id.asc(), RagChunkModel.chunk_index.asc())
+        )
+        return session.execute(stmt).all()
+
+    def _rows_to_direct_match_hits(
+        self,
+        rows,
+        query_text: str,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        hits: list[RagSearchHit] = []
+        for chunk, document in rows:
+            hits.extend(self._build_direct_match_hits(query_text, document, chunk, access_context))
+        return hits
+
     @staticmethod
     def _build_keyword_hits(
         query_text: str,
@@ -547,6 +726,7 @@ class RagDocumentRepository:
             {
                 "doc_id": getattr(document, "document_id", getattr(document, "doc_id", "")),
                 "title": getattr(document, "title", None),
+                "original_filename": getattr(document, "original_filename", None),
                 "page_number": getattr(chunk, "page_number", None),
                 "chunk_index": getattr(chunk, "chunk_index", getattr(chunk, "index", 0)),
                 "start_char": getattr(chunk, "start_char", 0),
@@ -563,6 +743,64 @@ class RagDocumentRepository:
             return []
 
         score = _keyword_score(query_text, getattr(chunk, "text", ""))
+        if score <= 0:
+            return []
+
+        return [
+            RagSearchHit(
+                doc_id=str(metadata["doc_id"]),
+                chunk_id=str(chunk.chunk_id),
+                title=metadata["title"],
+                page_number=metadata["page_number"],
+                chunk_index=metadata["chunk_index"],
+                text=str(getattr(chunk, "text", "")),
+                score=score,
+                start_char=metadata["start_char"],
+                end_char=metadata["end_char"],
+                metadata=metadata,
+            )
+        ]
+
+    @staticmethod
+    def _build_direct_match_hits(
+        query_text: str,
+        document: RagDocumentModel | RagDocumentRecord,
+        chunk: RagChunkModel | RagChunkRecord,
+        access_context: RagSearchAccessContext | None,
+    ) -> list[RagSearchHit]:
+        chunk_metadata = dict(
+            getattr(chunk, "chunk_metadata", None)
+            or getattr(chunk, "metadata", None)
+            or {}
+        )
+        original_filename = getattr(document, "original_filename", None)
+        metadata = normalize_rag_search_metadata(
+            chunk.chunk_id,
+            {
+                "doc_id": getattr(document, "document_id", getattr(document, "doc_id", "")),
+                "title": getattr(document, "title", None),
+                "original_filename": original_filename,
+                "page_number": getattr(chunk, "page_number", None),
+                "chunk_index": getattr(chunk, "chunk_index", getattr(chunk, "index", 0)),
+                "start_char": getattr(chunk, "start_char", 0),
+                "end_char": getattr(chunk, "end_char", 0),
+                "permission_scope": getattr(document, "permission_scope", None),
+                "workspace_id": getattr(document, "workspace_id", None),
+                "owner_user_id": getattr(document, "owner_user_id", None),
+                "content_hash": getattr(document, "content_hash", None),
+                "lifecycle_version": chunk_metadata.get("lifecycle_version", 1),
+                **chunk_metadata,
+            },
+        )
+        if not is_rag_search_accessible(metadata, access_context):
+            return []
+
+        score = _direct_match_score(
+            query_text,
+            title=getattr(document, "title", None),
+            original_filename=original_filename,
+            text=getattr(chunk, "text", ""),
+        )
         if score <= 0:
             return []
 
@@ -729,6 +967,7 @@ class RagDocumentRepository:
         if self.uses_database:
             with self._session() as session:
                 assert session is not None
+                session.execute(delete(RagKnowledgeBaseStateModel))
                 session.execute(delete(RagIngestionJobModel))
                 session.execute(delete(RagChunkModel))
                 session.execute(delete(RagDocumentModel))
@@ -739,6 +978,7 @@ class RagDocumentRepository:
             self._documents.clear()
             self._chunks.clear()
             self._ingestion_jobs.clear()
+            self._knowledge_base_state = {}
 
 
 def _build_default_repository() -> RagDocumentRepository:

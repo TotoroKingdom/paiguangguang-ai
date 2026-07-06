@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -27,6 +27,7 @@ from app.schemas.admin import (
     AdminWorkspaceUpdateRequest,
 )
 from app.schemas.common import ApiResponse
+from app.services.document_parser import DocumentParser, DocumentParseError
 from app.services.admin import AdminService, get_admin_service
 from app.services.auth import User, get_current_user
 from app.services.rag_ingestion import RagIngestionService, get_rag_ingestion_service
@@ -414,6 +415,45 @@ def create_document(
 ) -> ApiResponse[AdminDocumentData]:
     _require_permission(service, session, current_user, "document.delete", rbac_service)
     return ApiResponse(data=service.create_document(session, request))
+
+
+@router.post("/documents/upload", response_model=ApiResponse[AdminDocumentData])
+async def upload_document(
+    file: UploadFile = File(...),
+    title: str | None = Form(default=None),
+    owner_user_id: str | None = Form(default=None),
+    workspace_id: str | None = Form(default=None),
+    permission_scope: str | None = Form(default=None),
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    service: AdminService = Depends(get_admin_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> ApiResponse[AdminDocumentData]:
+    _require_permission(service, session, current_user, "document.upload", rbac_service)
+    raw_name = file.filename or ""
+    if not raw_name.strip():
+        raise HTTPException(status_code=400, detail="file filename is required")
+
+    parser = DocumentParser()
+    try:
+        content = await file.read()
+        parsed = parser.parse(raw_name, content)
+    except DocumentParseError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return ApiResponse(
+        data=service.create_document(
+            session,
+            AdminDocumentCreateRequest(
+                title=title,
+                original_filename=raw_name,
+                text=parsed.normalized_text,
+                owner_user_id=owner_user_id,
+                workspace_id=workspace_id,
+                permission_scope=permission_scope,
+            ),
+        )
+    )
 
 
 @router.patch("/documents/{document_id}", response_model=ApiResponse[AdminDocumentData])

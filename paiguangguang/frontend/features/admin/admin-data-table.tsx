@@ -67,18 +67,22 @@ export function AdminDataTable<T>({
               const isSorted = sortBy === column.sortKey;
               const sortLabel = isSorted ? (sortOrder === "asc" ? "ascending" : "descending") : undefined;
               return (
-                <th key={column.key} scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-clay">
+                <th
+                  key={column.key}
+                  scope="col"
+                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-clay"
+                >
                   {column.sortable && column.sortKey && onSort ? (
                     <button
                       type="button"
                       onClick={() => onSort(column.sortKey ?? column.key)}
-                      aria-label={`Sort by ${column.header}`}
+                      aria-label={`按 ${column.header} 排序`}
                       aria-sort={sortLabel}
                       className="inline-flex items-center gap-1 text-left transition hover:text-ink"
                     >
                       <span>{column.header}</span>
                       <span aria-hidden="true" className="text-[10px]">
-                        {isSorted ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+                        {isSorted ? (sortOrder === "asc" ? "^" : "v") : "↕"}
                       </span>
                     </button>
                   ) : (

@@ -155,6 +155,7 @@ class RagDocument(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     document_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    original_filename: Mapped[str | None] = mapped_column(String(255), nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
@@ -168,6 +169,21 @@ class RagDocument(Base):
     is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa_text("false"))
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+    )
+
+
+class RagKnowledgeBaseState(Base):
+    __tablename__ = "rag_knowledge_base_state"
+    __table_args__ = (UniqueConstraint("collection_name", name="uq_rag_knowledge_base_state_collection_name"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    collection_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    kb_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=sa_text("1"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

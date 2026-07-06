@@ -9,6 +9,7 @@ from threading import Lock
 from typing import Any, Protocol
 
 from app.core.config import Settings, get_settings
+from app.core.logging import log_event
 
 try:  # Optional dependency for configured Redis-backed cache.
     import redis  # type: ignore
@@ -65,6 +66,8 @@ def build_cache_key(namespace: str, context: CacheKeyContext) -> str:
 
 
 class CacheAdapter(Protocol):
+    backend_name: str
+
     def get(self, key: str) -> Any | None:
         ...
 
@@ -79,6 +82,8 @@ class CacheAdapter(Protocol):
 
 
 class InMemoryCacheAdapter:
+    backend_name = "memory"
+
     def __init__(self) -> None:
         self._values: dict[str, tuple[str, datetime | None]] = {}
         self._lock = Lock()
@@ -117,6 +122,8 @@ class InMemoryCacheAdapter:
 
 
 class RedisCacheAdapter:
+    backend_name = "redis"
+
     def __init__(
         self,
         redis_url: str,
@@ -162,17 +169,32 @@ class RedisCacheAdapter:
 
 _IN_MEMORY_CACHE_ADAPTER = InMemoryCacheAdapter()
 _REDIS_CACHE_ADAPTER: RedisCacheAdapter | None = None
+_ACTIVE_CACHE_BACKEND: str | None = None
 
 
 def get_cache_adapter(settings: Settings | None = None) -> CacheAdapter:
-    global _REDIS_CACHE_ADAPTER
+    global _REDIS_CACHE_ADAPTER, _ACTIVE_CACHE_BACKEND
 
     settings = settings or get_settings()
     if settings.redis_url:
         try:
             if _REDIS_CACHE_ADAPTER is None or getattr(_REDIS_CACHE_ADAPTER, "_redis_url", None) != settings.redis_url:
                 _REDIS_CACHE_ADAPTER = RedisCacheAdapter(settings.redis_url)
+            if _ACTIVE_CACHE_BACKEND != _REDIS_CACHE_ADAPTER.backend_name:
+                _ACTIVE_CACHE_BACKEND = _REDIS_CACHE_ADAPTER.backend_name
+                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url=settings.redis_url)
             return _REDIS_CACHE_ADAPTER
         except Exception:
+            if _ACTIVE_CACHE_BACKEND != _IN_MEMORY_CACHE_ADAPTER.backend_name:
+                _ACTIVE_CACHE_BACKEND = _IN_MEMORY_CACHE_ADAPTER.backend_name
+                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url=settings.redis_url)
             return _IN_MEMORY_CACHE_ADAPTER
+    if _ACTIVE_CACHE_BACKEND != _IN_MEMORY_CACHE_ADAPTER.backend_name:
+        _ACTIVE_CACHE_BACKEND = _IN_MEMORY_CACHE_ADAPTER.backend_name
+        log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url="")
     return _IN_MEMORY_CACHE_ADAPTER
+
+
+def get_active_cache_backend(settings: Settings | None = None) -> str:
+    adapter = get_cache_adapter(settings)
+    return adapter.backend_name

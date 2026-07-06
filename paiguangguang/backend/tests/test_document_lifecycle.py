@@ -31,6 +31,7 @@ def test_repository_tracks_document_chunk_and_job_lifecycle_states(tmp_path) -> 
         RagDocumentRecord(
             document_id="doc-1",
             title="Lifecycle Notes",
+            original_filename="lifecycle-notes.txt",
             text="Lifecycle source text",
             content_hash="hash-1",
             owner_user_id="user-1",
@@ -49,6 +50,7 @@ def test_repository_tracks_document_chunk_and_job_lifecycle_states(tmp_path) -> 
     )
     assert document.document_id == "doc-1"
     assert document.status == "registered"
+    assert document.original_filename == "lifecycle-notes.txt"
 
     updated = repository.update_document_lifecycle(
         "doc-1",
@@ -113,6 +115,20 @@ def test_repository_tracks_document_chunk_and_job_lifecycle_states(tmp_path) -> 
     assert repository.get_ingestion_job("job-1").status == "completed"
 
 
+def test_knowledge_base_version_is_persisted_and_monotonic(tmp_path) -> None:
+    repository = _create_repository(tmp_path, "kb-version.sqlite3")
+
+    first = repository.get_knowledge_base_version("portfolio_knowledge")
+    second = repository.bump_knowledge_base_version("portfolio_knowledge")
+    third = repository.get_knowledge_base_version("portfolio_knowledge")
+    fourth = repository.bump_knowledge_base_version("portfolio_knowledge")
+
+    assert first == 1
+    assert second == 2
+    assert third == 2
+    assert fourth == 3
+
+
 def test_ingestion_persists_document_chunks_and_job_state(tmp_path) -> None:
     repository = _create_repository(tmp_path, "ingestion-lifecycle.sqlite3")
     service = RagIngestionService(repository=repository, index_to_vector_store=False)
@@ -120,6 +136,7 @@ def test_ingestion_persists_document_chunks_and_job_state(tmp_path) -> None:
     registration = service.register_document(
         RagDocumentCreateRequest(
             title="Project Notes",
+            original_filename="project-notes.md",
             text="Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau.",
         )
     )
@@ -143,6 +160,7 @@ def test_ingestion_persists_document_chunks_and_job_state(tmp_path) -> None:
     assert indexed_document.chunk_status == "completed"
     assert indexed_document.embedding_status == "completed"
     assert indexed_document.index_status == "completed"
+    assert indexed_document.original_filename == "project-notes.md"
 
     chunks = repository.get_chunks(registration.doc_id)
     assert len(chunks) == ingestion.chunk_count

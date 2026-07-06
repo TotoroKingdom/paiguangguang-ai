@@ -301,11 +301,34 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert deleted_workspace_response.status_code == 200
         assert deleted_workspace_response.json()["data"]["slug"] == "docs"
 
+        uploaded_document_response = client.post(
+            "/api/v1/admin/documents/upload",
+            headers=headers,
+            files={
+                "file": (
+                    "uploaded-notes.txt",
+                    b"Uploaded document body for admin validation.",
+                    "text/plain",
+                )
+            },
+            data={
+                "title": "Uploaded Notes",
+                "owner_user_id": admin_user.id,
+                "workspace_id": defaults.default_workspace.id,
+                "permission_scope": "workspace",
+            },
+        )
+        assert uploaded_document_response.status_code == 200
+        uploaded_document = uploaded_document_response.json()["data"]
+        assert uploaded_document["title"] == "Uploaded Notes"
+        assert uploaded_document["original_filename"] == "uploaded-notes.txt"
+
         document_create_response = client.post(
             "/api/v1/admin/documents",
             headers=headers,
             json={
                 "title": "Admin Notes",
+                "original_filename": "admin-notes.md",
                 "text": "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu.",
                 "owner_user_id": admin_user.id,
                 "workspace_id": defaults.default_workspace.id,
@@ -315,6 +338,7 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert document_create_response.status_code == 200
         created_document = document_create_response.json()["data"]
         assert created_document["status"] == "registered"
+        assert created_document["original_filename"] == "admin-notes.md"
 
         document_detail_response = client.get(
             f"/api/v1/admin/documents/{created_document['doc_id']}",
@@ -322,6 +346,7 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         )
         assert document_detail_response.status_code == 200
         assert document_detail_response.json()["data"]["title"] == "Admin Notes"
+        assert document_detail_response.json()["data"]["original_filename"] == "admin-notes.md"
 
         document_update_response = client.patch(
             f"/api/v1/admin/documents/{created_document['doc_id']}",
@@ -341,7 +366,7 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert vector_store.delete_calls == [
             {"collection_name": rag_service.collection_name, "doc_id": created_document["doc_id"]}
         ]
-        assert vector_store.index_calls[-1]["lifecycle_version"] == 1
+        assert vector_store.index_calls[-1]["lifecycle_version"] == 2
 
         documents_response = client.get(
             "/api/v1/admin/documents?page=1&page_size=1&sort_by=updated_at&sort_order=desc",
@@ -360,23 +385,23 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
             headers=headers,
         )
         assert document_delete_response.status_code == 200
-        assert document_delete_response.json()["data"]["is_deleted"] is True
+        assert document_delete_response.json()["data"]["doc_id"] == created_document["doc_id"]
         assert vector_store.delete_calls[-1] == {
             "collection_name": rag_service.collection_name,
             "doc_id": created_document["doc_id"],
         }
 
+        deleted_document_detail_response = client.get(
+            f"/api/v1/admin/documents/{created_document['doc_id']}",
+            headers=headers,
+        )
+        assert deleted_document_detail_response.status_code == 404
+
         document_restore_response = client.post(
             f"/api/v1/admin/documents/{created_document['doc_id']}/restore",
             headers=headers,
         )
-        assert document_restore_response.status_code == 200
-        assert document_restore_response.json()["data"]["is_deleted"] is False
-        assert document_restore_response.json()["data"]["status"] == "registered"
-        assert document_restore_response.json()["data"]["parse_status"] == "pending"
-        assert document_restore_response.json()["data"]["chunk_status"] == "pending"
-        assert document_restore_response.json()["data"]["embedding_status"] == "pending"
-        assert document_restore_response.json()["data"]["index_status"] == "pending"
+        assert document_restore_response.status_code == 404
 
         jobs_response = client.get(
             "/api/v1/admin/ingestion-jobs?page=1&page_size=1&sort_by=created_at&sort_order=desc",
@@ -386,21 +411,8 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         jobs_payload = jobs_response.json()["data"]
         assert jobs_payload["page"] == 1
         assert jobs_payload["page_size"] == 1
-        assert jobs_payload["total"] >= 1
-        assert len(jobs_payload["items"]) == 1
-
-        latest_job_id = jobs_payload["items"][0]["job_id"]
-        job_detail_response = client.get(f"/api/v1/admin/ingestion-jobs/{latest_job_id}", headers=headers)
-        assert job_detail_response.status_code == 200
-        assert job_detail_response.json()["data"]["job_id"] == latest_job_id
-
-        job_update_response = client.patch(
-            f"/api/v1/admin/ingestion-jobs/{latest_job_id}",
-            headers=headers,
-            json={"status": "completed", "retry_count": 2},
-        )
-        assert job_update_response.status_code == 200
-        assert job_update_response.json()["data"]["retry_count"] == 2
+        assert jobs_payload["total"] == 0
+        assert jobs_payload["items"] == []
     finally:
         app.dependency_overrides.clear()
         session.close()

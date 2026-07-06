@@ -30,13 +30,13 @@ export function AdminPagination({
   return (
     <div className="flex flex-col gap-3 border border-ink/10 bg-white px-4 py-3 text-sm text-ink/75 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        Showing <span className="font-semibold text-ink">{from}</span> to{" "}
-        <span className="font-semibold text-ink">{to}</span> of{" "}
+        显示 <span className="font-semibold text-ink">{from}</span> 到{" "}
+        <span className="font-semibold text-ink">{to}</span>，共{" "}
         <span className="font-semibold text-ink">{total}</span>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-clay">Page size</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-clay">每页条数</span>
           <select
             value={pageSize}
             onChange={(event) => onPageSizeChange(Number(event.target.value))}
@@ -56,10 +56,10 @@ export function AdminPagination({
             disabled={currentPage <= 1}
             className="border border-ink/15 bg-paper px-3 py-2 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Previous
+            上一页
           </button>
           <div className="min-w-24 text-center text-xs font-semibold uppercase tracking-wide text-clay">
-            Page {currentPage} / {totalPages}
+            第 {currentPage} / {totalPages} 页
           </div>
           <button
             type="button"
@@ -67,7 +67,7 @@ export function AdminPagination({
             disabled={currentPage >= totalPages}
             className="border border-ink/15 bg-paper px-3 py-2 text-sm font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Next
+            下一页
           </button>
         </div>
       </div>

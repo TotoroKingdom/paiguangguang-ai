@@ -59,6 +59,31 @@ async function requestJson<TResponse>(
   return payload.data;
 }
 
+async function requestFormData<TResponse>(path: string, init: RequestInit, options?: RequestOptions): Promise<TResponse> {
+  const headers = new Headers(init.headers);
+  const token = options?.token?.trim();
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
+  const response = await fetch(`${getBackendBaseUrl()}${path}`, {
+    ...init,
+    headers,
+  });
+
+  const payload = (await response.json()) as ApiEnvelope<TResponse>;
+
+  if (!response.ok || !payload.success || !payload.data) {
+    throw new ApiError(
+      payload.error?.message || "Request failed",
+      response.status,
+      payload.error?.code || "REQUEST_FAILED"
+    );
+  }
+
+  return payload.data;
+}
+
 export async function postJson<TResponse, TBody extends Record<string, unknown>>(
   path: string,
   body: TBody,
@@ -89,6 +114,17 @@ export async function postEmptyJson<TResponse>(path: string, options?: RequestOp
     path,
     {
       method: "POST"
+    },
+    options
+  );
+}
+
+export async function postFormData<TResponse>(path: string, body: FormData, options?: RequestOptions): Promise<TResponse> {
+  return requestFormData<TResponse>(
+    path,
+    {
+      method: "POST",
+      body,
     },
     options
   );
