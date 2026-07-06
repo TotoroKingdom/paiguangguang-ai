@@ -1,6 +1,7 @@
 import { deleteJson, getJson, patchJson, postEmptyJson, postJson } from "@/lib/api";
 import { getStoredAuthToken } from "@/lib/auth";
 import type {
+  AdminPagedResponse,
   AdminPermissionCreateRequest,
   AdminPermissionData,
   AdminPermissionUpdateRequest,
@@ -19,8 +20,44 @@ import type {
   AdminWorkspaceUpdateRequest,
 } from "@/types/admin";
 
-export function listAdminDocuments() {
-  return getJson<AdminDocumentData[]>("/api/v1/admin/documents", { token: getStoredAuthToken() });
+type AdminListQuery = {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+};
+
+function toAdminPagedResponse<T>(payload: { items: T[]; total: number; page: number; page_size: number }) {
+  return Object.assign([...payload.items], {
+    total: payload.total,
+    page: payload.page,
+    page_size: payload.page_size,
+  }) as AdminPagedResponse<T>;
+}
+
+function buildAdminListQuery(options?: AdminListQuery) {
+  const params = new URLSearchParams();
+  if (options?.page !== undefined) {
+    params.set("page", String(options.page));
+  }
+  if (options?.pageSize !== undefined) {
+    params.set("page_size", String(options.pageSize));
+  }
+  if (options?.sortBy) {
+    params.set("sort_by", options.sortBy);
+  }
+  if (options?.sortOrder) {
+    params.set("sort_order", options.sortOrder);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+export function listAdminDocuments(options?: AdminListQuery) {
+  return getJson<{ items: AdminDocumentData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/documents${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminDocument(documentId: string) {
@@ -55,16 +92,22 @@ export function reindexAdminDocument(documentId: string) {
   });
 }
 
-export function listAdminIngestionJobs() {
-  return getJson<AdminIngestionJobData[]>("/api/v1/admin/ingestion-jobs", { token: getStoredAuthToken() });
+export function listAdminIngestionJobs(options?: AdminListQuery) {
+  return getJson<{ items: AdminIngestionJobData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/ingestion-jobs${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminIngestionJob(jobId: string) {
   return getJson<AdminIngestionJobData>(`/api/v1/admin/ingestion-jobs/${jobId}`, { token: getStoredAuthToken() });
 }
 
-export function listAdminUsers() {
-  return getJson<AdminUserData[]>("/api/v1/admin/users", { token: getStoredAuthToken() });
+export function listAdminUsers(options?: AdminListQuery) {
+  return getJson<{ items: AdminUserData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/users${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminUser(userId: string) {
@@ -89,8 +132,11 @@ export function disableAdminUser(userId: string) {
   });
 }
 
-export function listAdminRoles() {
-  return getJson<AdminRoleData[]>("/api/v1/admin/roles", { token: getStoredAuthToken() });
+export function listAdminRoles(options?: AdminListQuery) {
+  return getJson<{ items: AdminRoleData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/roles${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminRole(roleId: string) {
@@ -115,8 +161,11 @@ export function deleteAdminRole(roleId: string) {
   });
 }
 
-export function listAdminPermissions() {
-  return getJson<AdminPermissionData[]>("/api/v1/admin/permissions", { token: getStoredAuthToken() });
+export function listAdminPermissions(options?: AdminListQuery) {
+  return getJson<{ items: AdminPermissionData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/permissions${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminPermission(permissionId: string) {
@@ -145,8 +194,11 @@ export function deleteAdminPermission(permissionId: string) {
   });
 }
 
-export function listAdminWorkspaces() {
-  return getJson<AdminWorkspaceData[]>("/api/v1/admin/workspaces", { token: getStoredAuthToken() });
+export function listAdminWorkspaces(options?: AdminListQuery) {
+  return getJson<{ items: AdminWorkspaceData[]; total: number; page: number; page_size: number }>(
+    `/api/v1/admin/workspaces${buildAdminListQuery(options)}`,
+    { token: getStoredAuthToken() }
+  ).then(toAdminPagedResponse);
 }
 
 export function getAdminWorkspace(workspaceId: string) {
