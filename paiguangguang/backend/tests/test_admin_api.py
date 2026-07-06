@@ -129,6 +129,22 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         created_user = created_user_response.json()["data"]
         assert created_user["email"] == "editor@example.com"
         assert created_user["roles"] == ["user"]
+        assert created_user["effective_permissions"] == [
+            "document.upload",
+            "document.view",
+            "knowledge.query",
+        ]
+
+        created_user_detail_response = client.get(
+            f"/api/v1/admin/users/{created_user['id']}",
+            headers=headers,
+        )
+        assert created_user_detail_response.status_code == 200
+        assert created_user_detail_response.json()["data"]["effective_permissions"] == [
+            "document.upload",
+            "document.view",
+            "knowledge.query",
+        ]
 
         updated_user_response = client.patch(
             f"/api/v1/admin/users/{created_user['id']}",
@@ -138,6 +154,13 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert updated_user_response.status_code == 200
         assert updated_user_response.json()["data"]["display_name"] == "Editor Updated"
         assert updated_user_response.json()["data"]["roles"] == ["document_admin"]
+        assert updated_user_response.json()["data"]["effective_permissions"] == [
+            "document.delete",
+            "document.reindex",
+            "document.upload",
+            "document.view",
+            "knowledge.query",
+        ]
 
         disabled_user_response = client.delete(
             f"/api/v1/admin/users/{created_user['id']}",
@@ -145,6 +168,13 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         )
         assert disabled_user_response.status_code == 200
         assert disabled_user_response.json()["data"]["is_active"] is False
+
+        activated_user_response = client.post(
+            f"/api/v1/admin/users/{created_user['id']}/activate",
+            headers=headers,
+        )
+        assert activated_user_response.status_code == 200
+        assert activated_user_response.json()["data"]["is_active"] is True
 
         roles_response = client.get(
             "/api/v1/admin/roles?page=1&page_size=1&sort_by=name&sort_order=asc",
@@ -329,6 +359,18 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
             "collection_name": rag_service.collection_name,
             "doc_id": created_document["doc_id"],
         }
+
+        document_restore_response = client.post(
+            f"/api/v1/admin/documents/{created_document['doc_id']}/restore",
+            headers=headers,
+        )
+        assert document_restore_response.status_code == 200
+        assert document_restore_response.json()["data"]["is_deleted"] is False
+        assert document_restore_response.json()["data"]["status"] == "registered"
+        assert document_restore_response.json()["data"]["parse_status"] == "pending"
+        assert document_restore_response.json()["data"]["chunk_status"] == "pending"
+        assert document_restore_response.json()["data"]["embedding_status"] == "pending"
+        assert document_restore_response.json()["data"]["index_status"] == "pending"
 
         jobs_response = client.get(
             "/api/v1/admin/ingestion-jobs?page=1&page_size=1&sort_by=created_at&sort_order=desc",
