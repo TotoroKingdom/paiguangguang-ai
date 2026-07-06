@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
@@ -44,8 +45,18 @@ from app.services.rag_ingestion import (
     make_content_hash,
     make_document_id,
     normalize_text,
-)
+    )
 from app.services.rbac import RBACService, get_rbac_service
+
+SortOrder = Literal["asc", "desc"]
+
+
+@dataclass(frozen=True)
+class AdminListQuery:
+    page: int
+    page_size: int
+    sort_by: str
+    sort_order: SortOrder
 
 
 def _user_roles(user: User) -> list[str]:
@@ -117,6 +128,37 @@ def _document_to_admin_data(model: RagDocumentModel) -> AdminDocumentData:
         error_message=model.error_message,
         created_at=model.created_at,
         updated_at=model.updated_at,
+    )
+
+
+def normalize_admin_list_query(
+    *,
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
+    allowed_sort_by: set[str] | frozenset[str],
+    default_sort_by: str | None = None,
+    default_sort_order: SortOrder = "desc",
+) -> AdminListQuery:
+    if page < 1:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="page must be at least 1")
+    if page_size < 1 or page_size > 100:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="page_size must be between 1 and 100")
+    if sort_order not in {"asc", "desc"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sort_order must be asc or desc")
+
+    normalized_sort_by = sort_by or default_sort_by
+    if normalized_sort_by is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="sort_by is required")
+    if normalized_sort_by not in allowed_sort_by:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid sort_by: {normalized_sort_by}")
+
+    return AdminListQuery(
+        page=page,
+        page_size=page_size,
+        sort_by=normalized_sort_by,
+        sort_order=sort_order if sort_order in {"asc", "desc"} else default_sort_order,
     )
 
 
