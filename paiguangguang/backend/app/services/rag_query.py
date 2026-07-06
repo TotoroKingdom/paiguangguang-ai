@@ -11,6 +11,7 @@ from app.core.errors import ExternalModelError, RetrievalFailureError, ServiceTi
 from app.core.logging import log_event
 from app.db.models import User
 from app.schemas.rag import (
+    RagQueryCacheData,
     RagQueryData,
     RagQueryDebugData,
     RagQueryRequest,
@@ -96,8 +97,11 @@ class RagQueryService:
             workspace_id=getattr(access_context, "workspace_id", None),
         )
         try:
-            rewrite = self.rewrite_service.rewrite(request.question, cache_bypass=cache_bypass)
-            trace = self._get_retrieval_trace(
+            rewrite, rewrite_cache_hit = self.rewrite_service.rewrite_with_cache_info(
+                request.question,
+                cache_bypass=cache_bypass,
+            )
+            trace, retrieval_cache_hit = self._get_retrieval_trace(
                 collection_name,
                 request=request,
                 rewrite=rewrite,
@@ -109,7 +113,7 @@ class RagQueryService:
             hits = self._apply_rerank(request.question, hits)
             assembly = self.context_assembler.assemble(hits)
 
-            cached_result = self._load_answer_cache(
+            cached_result, answer_cache_hit = self._load_answer_cache(
                 request=request,
                 rewrite=rewrite,
                 access_context=access_context,
@@ -117,6 +121,15 @@ class RagQueryService:
                 cache_bypass=cache_bypass,
             )
             if cached_result is not None:
+                cached_result = cached_result.model_copy(
+                    update={
+                        "cache": RagQueryCacheData(
+                            rewrite_hit=rewrite_cache_hit,
+                            retrieval_trace_hit=retrieval_cache_hit,
+                            answer_hit=answer_cache_hit,
+                        )
+                    }
+                )
                 debug = self._build_debug_data(
                     request,
                     rewrite=rewrite,
@@ -132,6 +145,11 @@ class RagQueryService:
                     sources=cached_result.sources,
                     rewrite=rewrite,
                     debug=debug,
+                    cache=RagQueryCacheData(
+                        rewrite_hit=rewrite_cache_hit,
+                        retrieval_trace_hit=retrieval_cache_hit,
+                        answer_hit=answer_cache_hit,
+                    ),
                 )
                 log_event(
                     "rag_query.cache_hit",
@@ -144,10 +162,7 @@ class RagQueryService:
 
             answer, model_usage = self._ask_model(request.question, assembly)
 
-            sources = [
-                self._hit_to_source_data(hit)
-                for hit in assembly.selected_sources
-            ]
+            sources = [self._hit_to_source_data(hit) for hit in hits]
             debug = self._build_debug_data(
                 request,
                 rewrite=rewrite,
@@ -158,7 +173,17 @@ class RagQueryService:
                 latency_ms=int((perf_counter() - started_at) * 1000),
                 model_usage=model_usage,
             )
-            result = RagQueryData(answer=answer, sources=sources, rewrite=rewrite, debug=debug)
+            result = RagQueryData(
+                answer=answer,
+                sources=sources,
+                rewrite=rewrite,
+                debug=debug,
+                cache=RagQueryCacheData(
+                    rewrite_hit=rewrite_cache_hit,
+                    retrieval_trace_hit=retrieval_cache_hit,
+                    answer_hit=answer_cache_hit,
+                ),
+            )
             self._store_answer_cache(
                 request=request,
                 rewrite=rewrite,
@@ -279,14 +304,17 @@ class RagQueryService:
         rewrite: RagQueryRewriteData,
         access_context: RagSearchAccessContext | None,
         cache_bypass: bool,
-    ) -> HybridRetrievalTrace:
+    ) -> tuple[HybridRetrievalTrace, bool]:
         if access_context is None or request.include_debug or cache_bypass:
-            return self.retrieval_service.search_with_trace(
-                collection_name,
-                rewrite.original_question,
-                top_k=request.top_k,
-                access_context=access_context,
-                rewrite_queries=rewrite.rewritten_queries,
+            return (
+                self.retrieval_service.search_with_trace(
+                    collection_name,
+                    rewrite.original_question,
+                    top_k=request.top_k,
+                    access_context=access_context,
+                    rewrite_queries=rewrite.rewritten_queries,
+                ),
+                False,
             )
 
         cache_key = build_authorized_cache_key(
@@ -308,7 +336,7 @@ class RagQueryService:
                 trace = self._trace_from_payload(cached)
                 if trace is not None:
                     self._remember_trace_cache_keys(cache_key, trace)
-                    return trace
+                    return trace, True
 
         trace = self.retrieval_service.search_with_trace(
             collection_name,
@@ -320,7 +348,7 @@ class RagQueryService:
         if cache_key is not None:
             self.cache_adapter.set(cache_key, self._trace_to_payload(trace))
             self._remember_trace_cache_keys(cache_key, trace)
-        return trace
+        return trace, False
 
     def _apply_rerank(self, question: str, hits: list[HybridRetrievalHit]) -> list[HybridRetrievalHit]:
         if self.rerank_provider is None or not hits:
@@ -432,9 +460,9 @@ class RagQueryService:
         access_context: RagSearchAccessContext | None,
         assembly: ContextAssemblyResult,
         cache_bypass: bool,
-    ) -> RagQueryData | None:
+    ) -> tuple[RagQueryData | None, bool]:
         if access_context is None or request.include_debug or cache_bypass:
-            return None
+            return None, False
 
         cache_key = build_authorized_cache_key(
             "rag:answer",
@@ -452,15 +480,15 @@ class RagQueryService:
             },
         )
         if cache_key is None:
-            return None
+            return None, False
 
         cached = self.cache_adapter.get(cache_key)
         if isinstance(cached, dict):
             try:
-                return RagQueryData.model_validate(cached)
+                return RagQueryData.model_validate(cached), True
             except Exception:
-                return None
-        return None
+                return None, False
+        return None, False
 
     def _store_answer_cache(
         self,
@@ -524,7 +552,7 @@ class RagQueryService:
             fusion=[self._hit_to_source_data(hit) for hit in fusion_hits],
             rerank=[self._hit_to_source_data(hit) for hit in reranked_hits],
             selected_context=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
-            citations=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
+            citations=[self._hit_to_source_data(hit) for hit in reranked_hits],
             latency_ms=latency_ms,
             model_usage=dict(model_usage),
         )

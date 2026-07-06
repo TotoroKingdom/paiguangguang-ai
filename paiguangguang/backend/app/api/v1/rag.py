@@ -5,6 +5,7 @@ from app.core.rate_limit import RateLimitConfig, get_rate_limiter
 from app.schemas.common import ApiResponse
 from app.db.session import get_db_session
 from app.schemas.rag import (
+    RagCollectionsData,
     RagDocumentCreateRequest,
     RagDocumentData,
     RagIngestData,
@@ -17,6 +18,7 @@ from app.services.auth import get_current_user
 from app.services.rag_ingestion import RagIngestionService, get_rag_ingestion_service
 from app.services.rag_query import RagQueryService, get_rag_query_service
 from app.services.rbac import RBACService, get_rbac_service
+from app.storage.chroma_store import ChromaRagStore, get_chroma_rag_store
 
 router = APIRouter(prefix="/api/v1/rag", tags=["rag"])
 
@@ -31,6 +33,13 @@ def _apply_rate_limit(operation: str, key: str) -> None:
         ),
         operation=operation,
     )
+
+
+@router.get("/collections", response_model=ApiResponse[RagCollectionsData])
+def list_collections(
+    store: ChromaRagStore = Depends(get_chroma_rag_store),
+) -> ApiResponse[RagCollectionsData]:
+    return ApiResponse(data=RagCollectionsData(collections=store.list_collections()))
 
 
 @router.post("/documents", response_model=ApiResponse[RagDocumentData])

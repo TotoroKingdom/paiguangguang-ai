@@ -81,6 +81,10 @@ class RagIngestionJobData(BaseModel):
     updated_at: datetime
 
 
+class RagCollectionsData(BaseModel):
+    collections: list[str] = Field(default_factory=list)
+
+
 class RagQueryRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
     collection: str = Field(min_length=1, max_length=128)
@@ -120,6 +124,7 @@ class RagQueryData(BaseModel):
     sources: list[RagSourceData]
     rewrite: RagQueryRewriteData | None = None
     debug: RagQueryDebugData | None = None
+    cache: "RagQueryCacheData" = Field(default_factory=lambda: RagQueryCacheData())
 
 
 class RagQueryDebugData(BaseModel):
@@ -132,6 +137,12 @@ class RagQueryDebugData(BaseModel):
     citations: list[RagSourceData] = Field(default_factory=list)
     latency_ms: int
     model_usage: dict[str, object] = Field(default_factory=dict)
+
+
+class RagQueryCacheData(BaseModel):
+    rewrite_hit: bool = False
+    retrieval_trace_hit: bool = False
+    answer_hit: bool = False
 
 
 RagIngestData.model_rebuild()

@@ -89,6 +89,20 @@ class ChromaRagStore:
         collection = self._collection(collection_name)
         collection.delete(where={"doc_id": doc_id})
 
+    def list_collections(self) -> list[str]:
+        with self._lock:
+            collections = self.client.list_collections()
+
+        names: list[str] = []
+        for collection in collections:
+            if isinstance(collection, str):
+                name = collection
+            else:
+                name = getattr(collection, "name", None)
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+        return sorted(dict.fromkeys(names))
+
     def search(
         self,
         collection_name: str,

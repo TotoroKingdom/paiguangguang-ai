@@ -36,6 +36,15 @@ class QueryRewriteService:
         self.cache_adapter = cache_adapter or get_rag_cache_adapter(settings)
 
     def rewrite(self, question: str, *, cache_bypass: bool = False) -> RagQueryRewriteData:
+        result, _cache_hit = self.rewrite_with_cache_info(question, cache_bypass=cache_bypass)
+        return result
+
+    def rewrite_with_cache_info(
+        self,
+        question: str,
+        *,
+        cache_bypass: bool = False,
+    ) -> tuple[RagQueryRewriteData, bool]:
         original_question = question.strip()
         if not self.enabled:
             result = self._build_result(
@@ -46,12 +55,12 @@ class QueryRewriteService:
                 model=self.model,
             )
             self._store_cache(original_question, result, cache_bypass=cache_bypass)
-            return result
+            return result, False
 
         if not cache_bypass:
             cached = self._load_cache(original_question)
             if cached is not None:
-                return cached
+                return cached, True
 
         try:
             payload = self._rewrite_with_model(original_question)
@@ -65,7 +74,7 @@ class QueryRewriteService:
                     model=self.model,
                 )
                 self._store_cache(original_question, result, cache_bypass=cache_bypass)
-                return result
+                return result, False
 
             result = self._build_result(
                 original_question=original_question,
@@ -75,7 +84,7 @@ class QueryRewriteService:
                 model=self.model,
             )
             self._store_cache(original_question, result, cache_bypass=cache_bypass)
-            return result
+            return result, False
         except (ValueError, TypeError, json.JSONDecodeError, DeepSeekError) as exc:
             result = self._build_result(
                 original_question=original_question,
@@ -85,7 +94,7 @@ class QueryRewriteService:
                 model=self.model,
             )
             self._store_cache(original_question, result, cache_bypass=cache_bypass)
-            return result
+            return result, False
 
     def _load_cache(self, original_question: str) -> RagQueryRewriteData | None:
         cache_key = build_shared_cache_key(

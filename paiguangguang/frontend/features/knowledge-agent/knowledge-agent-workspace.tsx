@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { AuthGate } from "@/components/auth-gate";
 import { useAuth } from "@/components/auth-provider";
@@ -9,9 +9,15 @@ import {
   getDefaultKnowledgeCollection,
   ingestKnowledgeDocument,
   ingestKnowledgeText,
+  listKnowledgeCollections,
   queryKnowledgeAgent,
 } from "@/lib/knowledge-agent";
-import type { KnowledgeDocumentData, KnowledgeIngestData, KnowledgeSourceData } from "@/types/knowledge-agent";
+import type {
+  KnowledgeDocumentData,
+  KnowledgeIngestData,
+  KnowledgeQueryCacheData,
+  KnowledgeSourceData,
+} from "@/types/knowledge-agent";
 
 const sampleQuestions = [
   "What does this document say about the project goals?",
@@ -52,6 +58,41 @@ function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function getCacheStageState(
+  stage: "rewrite" | "retrieval trace" | "answer",
+  cache: KnowledgeQueryCacheData | null,
+  loading: boolean,
+) {
+  if (loading) {
+    return {
+      tone: "loading" as const,
+      label: stage,
+      value: "loading",
+    };
+  }
+
+  if (!cache) {
+    return {
+      tone: "unavailable" as const,
+      label: stage,
+      value: "unavailable",
+    };
+  }
+
+  const hit =
+    stage === "rewrite"
+      ? cache.rewrite_hit
+      : stage === "retrieval trace"
+        ? cache.retrieval_trace_hit
+        : cache.answer_hit;
+
+  return {
+    tone: hit ? ("hit" as const) : ("miss" as const),
+    label: stage,
+    value: hit ? "hit" : "miss",
+  };
+}
+
 function formatDateTime(value: string | null) {
   if (!value) {
     return "Unknown";
@@ -60,6 +101,70 @@ function formatDateTime(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function RedisIcon() {
+  return (
+    <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center">
+      <span className="relative block h-4 w-4">
+        <span className="absolute left-0 top-0 h-2.5 w-4 rounded-[999px] bg-[#DC382D] opacity-95" />
+        <span className="absolute left-0 top-[0.45rem] h-2.5 w-4 rounded-[999px] bg-[#FF6B5A] opacity-95" />
+        <span className="absolute left-0 top-[0.9rem] h-2.5 w-4 rounded-[999px] bg-[#B92B23] opacity-95" />
+      </span>
+    </span>
+  );
+}
+
+function CachePill({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "hit" | "miss" | "loading" | "unavailable";
+}) {
+  const className =
+    tone === "hit"
+      ? "border-tide/25 bg-tide/10 text-tide"
+      : tone === "miss"
+        ? "border-clay/25 bg-clay/10 text-clay"
+        : tone === "loading"
+          ? "border-brass/25 bg-brass/10 text-ink"
+          : "border-ink/10 bg-paper text-ink/55";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${className}`}>
+      <span>{label}</span>
+      <span className="text-[10px] normal-case tracking-normal">{value}</span>
+    </span>
+  );
+}
+
+function CacheStatusBar({
+  cache,
+  loading,
+}: {
+  cache: KnowledgeQueryCacheData | null;
+  loading: boolean;
+}) {
+  const stages = [
+    getCacheStageState("rewrite", cache, loading),
+    getCacheStageState("retrieval trace", cache, loading),
+    getCacheStageState("answer", cache, loading),
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-ink/10 bg-paper/80 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <RedisIcon />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Redis</span>
+      </div>
+      {stages.map((stage) => (
+        <CachePill key={stage.label} label={stage.label} value={stage.value} tone={stage.tone} />
+      ))}
+    </div>
+  );
 }
 
 function isAuthError(error: unknown) {
@@ -306,6 +411,9 @@ export function KnowledgeAgentWorkspace() {
   const [documentFileName, setDocumentFileName] = useState<string | null>(null);
   const [question, setQuestion] = useState(defaultQuestion);
   const [collection, setCollection] = useState(defaultCollection);
+  const [collectionOptions, setCollectionOptions] = useState<string[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [topK, setTopK] = useState(5);
   const [documentId, setDocumentId] = useState<string | null>(null);
   const [chunkCount, setChunkCount] = useState<number | null>(null);
@@ -315,6 +423,7 @@ export function KnowledgeAgentWorkspace() {
   } | null>(null);
   const [answer, setAnswer] = useState("");
   const [sources, setSources] = useState<KnowledgeSourceData[]>([]);
+  const [queryCache, setQueryCache] = useState<KnowledgeQueryCacheData | null>(null);
   const [hasQueried, setHasQueried] = useState(false);
   const [notice, setNotice] = useState<{ kind: "success" | "error" | "info"; text: string } | null>({
     kind: "info",
@@ -325,6 +434,49 @@ export function KnowledgeAgentWorkspace() {
   const [queryLoading, setQueryLoading] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [queryError, setQueryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setCollectionsLoading(true);
+    setCollectionsError(null);
+
+    void listKnowledgeCollections()
+      .then((result) => {
+        if (!active) {
+          return;
+        }
+
+        const options = result.collections.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+        setCollectionOptions(options);
+        setCollection((current) => {
+          if (options.length === 0) {
+            return defaultCollection;
+          }
+          const currentValue = current.trim();
+          if (currentValue && options.includes(currentValue)) {
+            return currentValue;
+          }
+          return options[0];
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        setCollectionOptions([]);
+        setCollectionsError(error instanceof ApiError ? error.message : "Unable to load knowledge collections.");
+      })
+      .finally(() => {
+        if (active) {
+          setCollectionsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleFileChange(file: File | null) {
     if (!file) {
@@ -466,6 +618,7 @@ export function KnowledgeAgentWorkspace() {
     setQueryError(null);
     setAuthError(null);
     setNotice(null);
+    setQueryCache(null);
 
     try {
       const result = await queryKnowledgeAgent({
@@ -477,6 +630,7 @@ export function KnowledgeAgentWorkspace() {
       setHasQueried(true);
       setAnswer(result.answer);
       setSources(result.sources);
+      setQueryCache(result.cache);
       setNotice({
         kind: "success",
         text: result.sources.length
@@ -489,6 +643,7 @@ export function KnowledgeAgentWorkspace() {
       } else {
         const message = error instanceof ApiError ? error.message : "Unable to query the knowledge agent.";
         setQueryError(message);
+        setQueryCache(null);
         setNotice({
           kind: "error",
           text: message,
@@ -518,6 +673,7 @@ export function KnowledgeAgentWorkspace() {
     setQuestion(defaultQuestion);
     setAnswer("");
     setSources([]);
+    setQueryCache(null);
     setHasQueried(false);
     setQueryError(null);
     setNotice({
@@ -533,8 +689,17 @@ export function KnowledgeAgentWorkspace() {
   }
 
   const sourceStatus = getSourceStatus(answer, sources, hasQueried);
+  const collectionSelectOptions = collectionOptions.length ? collectionOptions : [defaultCollection];
+  const collectionHint = collectionsError
+    ? collectionsError
+    : collectionsLoading
+      ? "Loading backend collections..."
+      : collectionOptions.length
+        ? "Choose a collection from the backend-provided list."
+        : "The backend returned no collections, so the configured default is used.";
 
   const canInteract = status === "authenticated";
+  const queryDisabled = queryLoading || !canInteract || collectionsLoading || Boolean(collectionsError);
 
   return (
     <AuthGate
@@ -714,16 +879,19 @@ export function KnowledgeAgentWorkspace() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-ink">Collection</span>
-                    <input
+                    <select
                       value={collection}
                       onChange={(event) => setCollection(event.target.value)}
-                      placeholder={defaultCollection}
-                      className="w-full border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition placeholder:text-ink/40 focus:border-tide/50 focus:ring-2 focus:ring-tide/10"
-                    />
-                    <span className="mt-2 block text-xs leading-5 text-ink/55">
-                      Ingest writes to the configured default collection. This field controls which collection the
-                      query endpoint searches.
-                    </span>
+                      disabled={collectionsLoading || Boolean(collectionsError)}
+                      className="w-full border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-tide/50 focus:ring-2 focus:ring-tide/10 disabled:cursor-not-allowed disabled:bg-paper/80"
+                    >
+                      {collectionSelectOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-2 block text-xs leading-5 text-ink/55">{collectionHint}</span>
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-ink">Top K</span>
@@ -761,12 +929,12 @@ export function KnowledgeAgentWorkspace() {
                 ) : null}
 
                 <div className="flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => void handleQuery()}
-                    disabled={queryLoading || !canInteract}
-                    className="border border-tide/40 bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
+                    <button
+                      type="button"
+                      onClick={() => void handleQuery()}
+                      disabled={queryDisabled}
+                      className="border border-tide/40 bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
                     {queryLoading ? "Searching..." : "Ask question"}
                   </button>
                   <button
@@ -788,8 +956,11 @@ export function KnowledgeAgentWorkspace() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-clay">Answer</p>
                   <h2 className="mt-2 text-2xl font-semibold text-ink">DeepSeek response</h2>
                 </div>
-                <div className="rounded-full border border-tide/20 bg-tide/10 px-3 py-1 text-xs font-semibold text-tide">
-                  {sources.length ? `${sources.length} sources` : "No sources yet"}
+                <div className="flex flex-col items-end gap-2">
+                  <div className="rounded-full border border-tide/20 bg-tide/10 px-3 py-1 text-xs font-semibold text-tide">
+                    {sources.length ? `${sources.length} sources` : "No sources yet"}
+                  </div>
+                  <CacheStatusBar cache={queryCache} loading={queryLoading} />
                 </div>
               </div>
 

@@ -51,6 +51,10 @@ export type KnowledgeIngestData = {
   job: KnowledgeIngestionJobData;
 };
 
+export type KnowledgeCollectionsData = {
+  collections: string[];
+};
+
 export type KnowledgeQueryRequest = {
   question: string;
   collection: string;
@@ -85,11 +89,18 @@ export type KnowledgeQueryRewriteData = {
   metadata: KnowledgeQueryRewriteMetadata;
 };
 
+export type KnowledgeQueryCacheData = {
+  rewrite_hit: boolean;
+  retrieval_trace_hit: boolean;
+  answer_hit: boolean;
+};
+
 export type KnowledgeQueryData = {
   answer: string;
   sources: KnowledgeSourceData[];
   rewrite?: KnowledgeQueryRewriteData | null;
   debug?: KnowledgeQueryDebugData | null;
+  cache: KnowledgeQueryCacheData;
 };
 
 export type KnowledgeQueryDebugData = {
@@ -102,7 +113,6 @@ export type KnowledgeQueryDebugData = {
   citations: KnowledgeSourceData[];
   latency_ms: number;
   model_usage: Record<string, unknown>;
-  cache_status?: string | null;
 };
 
 export type KnowledgeIngestResult = {

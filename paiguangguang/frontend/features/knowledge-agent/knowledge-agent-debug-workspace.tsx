@@ -6,9 +6,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { ApiError } from "@/lib/api";
 import { listAdminDocuments } from "@/lib/admin";
-import { getDefaultKnowledgeCollection, queryKnowledgeAgent } from "@/lib/knowledge-agent";
+import { getDefaultKnowledgeCollection, listKnowledgeCollections, queryKnowledgeAgent } from "@/lib/knowledge-agent";
 import type {
   KnowledgeQueryData,
+  KnowledgeQueryCacheData,
   KnowledgeQueryDebugData,
   KnowledgeQueryRewriteData,
   KnowledgeSourceData,
@@ -25,6 +26,90 @@ function formatScore(value: number) {
 
 function formatCount(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
+}
+
+function RedisIcon() {
+  return (
+    <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center">
+      <span className="relative block h-4 w-4">
+        <span className="absolute left-0 top-0 h-2.5 w-4 rounded-[999px] bg-[#DC382D] opacity-95" />
+        <span className="absolute left-0 top-[0.45rem] h-2.5 w-4 rounded-[999px] bg-[#FF6B5A] opacity-95" />
+        <span className="absolute left-0 top-[0.9rem] h-2.5 w-4 rounded-[999px] bg-[#B92B23] opacity-95" />
+      </span>
+    </span>
+  );
+}
+
+function CachePill({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "hit" | "miss" | "loading" | "unavailable";
+}) {
+  const className =
+    tone === "hit"
+      ? "border-tide/25 bg-tide/10 text-tide"
+      : tone === "miss"
+        ? "border-clay/25 bg-clay/10 text-clay"
+        : tone === "loading"
+          ? "border-brass/25 bg-brass/10 text-ink"
+          : "border-ink/10 bg-paper text-ink/55";
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${className}`}>
+      <span>{label}</span>
+      <span className="text-[10px] normal-case tracking-normal">{value}</span>
+    </span>
+  );
+}
+
+function CacheStatusBar({
+  cache,
+  loading,
+}: {
+  cache: KnowledgeQueryCacheData | null;
+  loading: boolean;
+}) {
+  const stages: Array<{
+    label: string;
+    value: string;
+    tone: "hit" | "miss" | "loading" | "unavailable";
+  }> = loading
+    ? [
+        { label: "rewrite", value: "loading", tone: "loading" },
+        { label: "retrieval trace", value: "loading", tone: "loading" },
+        { label: "answer", value: "loading", tone: "loading" },
+      ]
+    : cache
+      ? [
+          { label: "rewrite", value: cache.rewrite_hit ? "hit" : "miss", tone: cache.rewrite_hit ? "hit" : "miss" },
+          {
+            label: "retrieval trace",
+            value: cache.retrieval_trace_hit ? "hit" : "miss",
+            tone: cache.retrieval_trace_hit ? "hit" : "miss",
+          },
+          { label: "answer", value: cache.answer_hit ? "hit" : "miss", tone: cache.answer_hit ? "hit" : "miss" },
+        ]
+      : [
+          { label: "rewrite", value: "unavailable", tone: "unavailable" },
+          { label: "retrieval trace", value: "unavailable", tone: "unavailable" },
+          { label: "answer", value: "unavailable", tone: "unavailable" },
+        ];
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-ink/10 bg-paper/80 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <RedisIcon />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink/60">Redis</span>
+      </div>
+      {stages.map((stage) => (
+        <CachePill key={stage.label} label={stage.label} value={stage.value} tone={stage.tone} />
+      ))}
+    </div>
+  );
 }
 
 function formatObjectValue(value: unknown) {
@@ -80,14 +165,20 @@ function formatModelUsage(modelUsage: Record<string, unknown>) {
     .map(([key, value]) => `${key}: ${formatObjectValue(value)}`);
 }
 
-function getCacheStatus(debug: KnowledgeQueryDebugData | null) {
-  if (!debug) {
+function getCacheStatus(cache: KnowledgeQueryCacheData | null) {
+  if (!cache) {
     return "Cache status is not available until a query runs.";
   }
-  if (typeof debug.cache_status === "string" && debug.cache_status.trim()) {
-    return debug.cache_status.trim();
-  }
-  return "Bypassed for debug inspection. The backend skips answer and retrieval caches when include_debug is enabled.";
+
+  const statuses = [
+    ["rewrite", cache.rewrite_hit],
+    ["retrieval trace", cache.retrieval_trace_hit],
+    ["answer", cache.answer_hit],
+  ];
+
+  return statuses
+    .map(([label, hit]) => `${label}: ${hit ? "hit" : "miss"}`)
+    .join(" | ");
 }
 
 function ScoreBadge({ label, value }: { label: string; value: string }) {
@@ -235,11 +326,57 @@ export function KnowledgeAgentDebugWorkspace() {
   const [accessError, setAccessError] = useState<string | null>(null);
   const [question, setQuestion] = useState(defaultQuestion);
   const [collection, setCollection] = useState(defaultCollection);
+  const [collectionOptions, setCollectionOptions] = useState<string[]>([]);
+  const [collectionsLoading, setCollectionsLoading] = useState(true);
+  const [collectionsError, setCollectionsError] = useState<string | null>(null);
   const [topK, setTopK] = useState(5);
   const [queryLoading, setQueryLoading] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [hasQueried, setHasQueried] = useState(false);
   const [result, setResult] = useState<KnowledgeQueryData | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setCollectionsLoading(true);
+    setCollectionsError(null);
+
+    void listKnowledgeCollections()
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        const options = response.collections.filter((value): value is string => typeof value === "string" && value.trim().length > 0);
+        setCollectionOptions(options);
+        setCollection((current) => {
+          if (options.length === 0) {
+            return defaultCollection;
+          }
+          const currentValue = current.trim();
+          if (currentValue && options.includes(currentValue)) {
+            return currentValue;
+          }
+          return options[0];
+        });
+      })
+      .catch((error: unknown) => {
+        if (!active) {
+          return;
+        }
+
+        setCollectionOptions([]);
+        setCollectionsError(error instanceof ApiError ? error.message : "Unable to load knowledge collections.");
+      })
+      .finally(() => {
+        if (active) {
+          setCollectionsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -320,13 +457,24 @@ export function KnowledgeAgentDebugWorkspace() {
     setQueryError(null);
   }
 
+  const collectionSelectOptions = collectionOptions.length ? collectionOptions : [defaultCollection];
+  const collectionHint = collectionsError
+    ? collectionsError
+    : collectionsLoading
+      ? "Loading backend collections..."
+      : collectionOptions.length
+        ? "Choose a collection from the backend-provided list."
+        : "The backend returned no collections, so the configured default is used.";
+  const queryDisabled = queryLoading || collectionsLoading || Boolean(collectionsError);
+
   const debug = result?.debug ?? null;
+  const cache = result?.cache ?? null;
   const promptSummary = {
     question: question.trim() || "Empty question",
     collection: collection.trim() || defaultCollection,
     topK: formatCount(topK),
     includeDebug: "enabled",
-    cache: getCacheStatus(debug),
+    cache: getCacheStatus(cache),
   };
 
   return (
@@ -452,11 +600,19 @@ export function KnowledgeAgentDebugWorkspace() {
                 <div className="space-y-4">
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-ink">Collection</span>
-                    <input
+                    <select
                       value={collection}
                       onChange={(event) => setCollection(event.target.value)}
-                      className="w-full border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition placeholder:text-ink/40 focus:border-tide/50 focus:ring-2 focus:ring-tide/10"
-                    />
+                      disabled={collectionsLoading || Boolean(collectionsError)}
+                      className="w-full border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-tide/50 focus:ring-2 focus:ring-tide/10 disabled:cursor-not-allowed disabled:bg-paper/80"
+                    >
+                      {collectionSelectOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="mt-2 block text-xs leading-5 text-ink/55">{collectionHint}</span>
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-ink">Top K</span>
@@ -472,12 +628,15 @@ export function KnowledgeAgentDebugWorkspace() {
                       className="w-full border border-ink/15 bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-tide/50 focus:ring-2 focus:ring-tide/10"
                     />
                   </label>
-                  <div className="rounded-2xl border border-ink/10 bg-paper/70 p-4 text-sm leading-7 text-ink/75">
-                    <p className="font-semibold text-ink">Prompt summary</p>
-                    <p className="mt-2 text-xs uppercase tracking-wide text-clay">Cache</p>
-                    <p>{promptSummary.cache}</p>
+                <div className="rounded-2xl border border-ink/10 bg-paper/70 p-4 text-sm leading-7 text-ink/75">
+                  <p className="font-semibold text-ink">Prompt summary</p>
+                  <p className="mt-2 text-xs uppercase tracking-wide text-clay">Cache</p>
+                  <p>{promptSummary.cache}</p>
+                  <div className="mt-3">
+                    <CacheStatusBar cache={cache} loading={queryLoading} />
                   </div>
                 </div>
+              </div>
               </div>
 
               {queryError ? (
@@ -490,7 +649,7 @@ export function KnowledgeAgentDebugWorkspace() {
                 <button
                   type="button"
                   onClick={() => void handleQuery()}
-                  disabled={queryLoading}
+                  disabled={queryDisabled}
                   className="border border-tide/40 bg-ink px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {queryLoading ? "Running trace..." : "Inspect trace"}
@@ -550,7 +709,7 @@ export function KnowledgeAgentDebugWorkspace() {
                     <section className="border border-ink/10 bg-white/72 p-5 shadow-sm">
                       <p className="text-sm font-semibold uppercase tracking-wide text-clay">Cache status</p>
                       <h2 className="mt-2 text-2xl font-semibold text-ink">Debug request cache view</h2>
-                      <p className="mt-2 max-w-2xl text-sm leading-7 text-ink/70">{getCacheStatus(debug)}</p>
+                      <p className="mt-2 max-w-2xl text-sm leading-7 text-ink/70">{getCacheStatus(cache)}</p>
                     </section>
                   </div>
 
