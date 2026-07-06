@@ -190,7 +190,7 @@ function ResourceListButton({
   );
 }
 
-function UserManager() {
+export function UserManager() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [users, setUsers] = useState<AdminUserData[]>([]);
@@ -426,7 +426,7 @@ function UserManager() {
   );
 }
 
-function RoleManager() {
+export function RoleManager() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [roles, setRoles] = useState<AdminRoleData[]>([]);
@@ -620,7 +620,7 @@ function RoleManager() {
   );
 }
 
-function PermissionManager() {
+export function PermissionManager() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<AdminPermissionData[]>([]);
@@ -808,7 +808,7 @@ function PermissionManager() {
   );
 }
 
-function WorkspaceManager() {
+export function WorkspaceManager() {
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<AdminWorkspaceData[]>([]);
