@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.db.bootstrap import initialize_database
 from app.db.alembic import get_alembic_config
 from app.db.models import Role, User, Workspace
-from app.db.session import get_db_session
+from app.db.session import get_db_session, resolve_database_url
 from app.services.auth import AuthService
 
 
@@ -26,6 +26,18 @@ def test_settings_load_database_url_and_test_override(monkeypatch) -> None:
         "postgresql+psycopg://app_user:app_pass@db.example.com/app_db"
     )
     assert settings.test_database_url == "sqlite+pysqlite:///./test-db.sqlite3"
+
+
+def test_resolve_database_url_keeps_postgres_password(monkeypatch) -> None:
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql://app_user:app_pass@db.example.com/app_db",
+    )
+    monkeypatch.delenv("TEST_DATABASE_URL", raising=False)
+
+    resolved_url = resolve_database_url()
+
+    assert resolved_url == "postgresql+psycopg://app_user:app_pass@db.example.com/app_db"
 
 
 def test_settings_load_admin_bootstrap_configuration(monkeypatch) -> None:
