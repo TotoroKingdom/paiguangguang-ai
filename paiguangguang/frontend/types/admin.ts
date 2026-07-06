@@ -1,3 +1,9 @@
+export type AdminPagedResponse<T> = T[] & {
+  total: number;
+  page: number;
+  page_size: number;
+};
+
 export type AdminDocumentData = {
   doc_id: string;
   title: string | null;
@@ -64,6 +70,7 @@ export type AdminUserData = {
   updated_at: string;
   roles: string[];
   workspace_ids: string[];
+  effective_permissions: string[];
 };
 
 export type AdminUserCreateRequest = {
