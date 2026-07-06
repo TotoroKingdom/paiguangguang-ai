@@ -41,7 +41,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=36), primary_key=True, nullable=False),
         sa.Column("slug", sa.String(length=100), nullable=False),
         sa.Column("name", sa.String(length=200), nullable=False),
-        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("0")),
+        sa.Column("is_default", sa.Boolean(), nullable=False, server_default=sa.text("false")),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
         sa.UniqueConstraint("slug", name="uq_workspaces_slug"),
