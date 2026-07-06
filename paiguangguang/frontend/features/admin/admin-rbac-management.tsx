@@ -199,6 +199,11 @@ export function UserManager() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserData | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "disable" | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [sortBy, setSortBy] = useState("email");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [total, setTotal] = useState(0);
   const [createForm, setCreateForm] = useState({
     email: "",
     displayName: "",
@@ -219,8 +224,16 @@ export function UserManager() {
     setState("loading");
     setError(null);
     try {
-      const nextUsers = await listAdminUsers();
+      const nextUsers = await listAdminUsers({
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+      });
       setUsers(nextUsers);
+      setTotal(nextUsers.total);
+      setPage(nextUsers.page);
+      setPageSize(nextUsers.page_size);
       const fallbackId =
         preferredId && nextUsers.some((user) => user.id === preferredId) ? preferredId : nextUsers[0]?.id ?? null;
       setSelectedUserId(fallbackId);
@@ -233,7 +246,7 @@ export function UserManager() {
 
   useEffect(() => {
     void loadUsers();
-  }, []);
+  }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!selectedUserId) {
@@ -271,6 +284,70 @@ export function UserManager() {
   }, [selectedUserId]);
 
   const selectedUserSummary = selectedUser ?? users.find((user) => user.id === selectedUserId) ?? null;
+
+  const userColumns: AdminDataTableColumn<AdminUserData>[] = [
+    {
+      key: "email",
+      header: "Email",
+      sortable: true,
+      sortKey: "email",
+      render: (user) => <span className="font-semibold text-ink">{user.email}</span>,
+    },
+    {
+      key: "display_name",
+      header: "Display name",
+      sortable: true,
+      sortKey: "display_name",
+      render: (user) => <span className="text-sm text-ink/70">{user.display_name}</span>,
+    },
+    {
+      key: "is_active",
+      header: "Status",
+      sortable: true,
+      sortKey: "is_active",
+      render: (user) => (
+        <span className={user.is_active ? "font-semibold text-emerald-700" : "font-semibold text-clay"}>
+          {user.is_active ? "Active" : "Inactive"}
+        </span>
+      ),
+    },
+    {
+      key: "roles",
+      header: "Roles",
+      render: (user) => <span className="text-sm text-ink/70">{user.roles.length}</span>,
+    },
+    {
+      key: "workspaces",
+      header: "Workspaces",
+      render: (user) => <span className="text-sm text-ink/70">{user.workspace_ids.length}</span>,
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      sortable: true,
+      sortKey: "updated_at",
+      render: (user) => <span className="text-sm text-ink/70">{formatDateTime(user.updated_at)}</span>,
+    },
+  ];
+
+  function handleUserSort(nextSortBy: string) {
+    setPage(1);
+    if (sortBy === nextSortBy) {
+      setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortBy === "is_active" ? "desc" : "asc");
+  }
+
+  function handleUserPageChange(nextPage: number) {
+    setPage(nextPage);
+  }
+
+  function handleUserPageSizeChange(nextPageSize: number) {
+    setPage(1);
+    setPageSize(nextPageSize);
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -342,27 +419,33 @@ export function UserManager() {
       description="Create users, edit display names and status, and assign roles or default workspace memberships."
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
-      {state === "loading" ? <div className="border border-dashed border-ink/15 bg-paper/70 p-4 text-sm">Loading users...</div> : null}
-      {state === "forbidden" ? (
-        <div className="border border-clay/20 bg-clay/10 p-4 text-sm">
-          You do not have permission to manage users.
-        </div>
-      ) : null}
-      {state === "error" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">{error ?? "Unable to load users."}</div> : null}
-      {state === "empty" ? <div className="border border-ink/10 bg-paper/70 p-4 text-sm">No users found.</div> : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)]">
         <div className="space-y-3">
-          {users.map((user) => (
-            <ResourceListButton
-              key={user.id}
-              active={user.id === selectedUserId}
-              title={user.display_name}
-              subtitle={user.email}
-              badge={user.is_active ? "active" : "inactive"}
-              onClick={() => setSelectedUserId(user.id)}
+          <AdminDataTable
+            columns={userColumns}
+            rows={users}
+            state={state}
+            loadingMessage="Loading users..."
+            emptyMessage="No users found."
+            forbiddenMessage="You do not have permission to manage users."
+            errorMessage={error}
+            getRowKey={(user) => user.id}
+            activeRowKey={selectedUserId}
+            onRowClick={(user) => setSelectedUserId(user.id)}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleUserSort}
+          />
+          {state === "ready" ? (
+            <AdminPagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={handleUserPageChange}
+              onPageSizeChange={handleUserPageSizeChange}
             />
-          ))}
+          ) : null}
         </div>
         <div className="space-y-4">
           <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
@@ -435,6 +518,11 @@ export function RoleManager() {
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AdminRoleData | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [total, setTotal] = useState(0);
   const [createForm, setCreateForm] = useState({ name: "", description: "", permissions: "" });
   const [editForm, setEditForm] = useState({ name: "", description: "", permissions: "" });
 
@@ -442,8 +530,16 @@ export function RoleManager() {
     setState("loading");
     setError(null);
     try {
-      const nextRoles = await listAdminRoles();
+      const nextRoles = await listAdminRoles({
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+      });
       setRoles(nextRoles);
+      setTotal(nextRoles.total);
+      setPage(nextRoles.page);
+      setPageSize(nextRoles.page_size);
       const fallbackId = preferredId && nextRoles.some((role) => role.id === preferredId) ? preferredId : nextRoles[0]?.id ?? null;
       setSelectedRoleId(fallbackId);
       setState(nextRoles.length === 0 ? "empty" : "ready");
@@ -455,7 +551,7 @@ export function RoleManager() {
 
   useEffect(() => {
     void loadRoles();
-  }, []);
+  }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!selectedRoleId) {
@@ -491,6 +587,52 @@ export function RoleManager() {
   }, [selectedRoleId]);
 
   const selectedRoleSummary = selectedRole ?? roles.find((role) => role.id === selectedRoleId) ?? null;
+
+  const roleColumns: AdminDataTableColumn<AdminRoleData>[] = [
+    {
+      key: "name",
+      header: "Name",
+      sortable: true,
+      sortKey: "name",
+      render: (role) => <span className="font-semibold text-ink">{role.name}</span>,
+    },
+    {
+      key: "description",
+      header: "Description",
+      render: (role) => <span className="text-sm text-ink/70">{role.description ?? "No description"}</span>,
+    },
+    {
+      key: "permissions",
+      header: "Permissions",
+      render: (role) => <span className="text-sm text-ink/70">{role.permissions.length}</span>,
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      sortable: true,
+      sortKey: "updated_at",
+      render: (role) => <span className="text-sm text-ink/70">{formatDateTime(role.updated_at)}</span>,
+    },
+  ];
+
+  function handleRoleSort(nextSortBy: string) {
+    setPage(1);
+    if (sortBy === nextSortBy) {
+      setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortOrder("asc");
+  }
+
+  function handleRolePageChange(nextPage: number) {
+    setPage(nextPage);
+  }
+
+  function handleRolePageSizeChange(nextPageSize: number) {
+    setPage(1);
+    setPageSize(nextPageSize);
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -557,23 +699,33 @@ export function RoleManager() {
       description="Create roles, edit their permissions, and inspect the permission bundles assigned to staff accounts."
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
-      {state === "loading" ? <div className="border border-dashed border-ink/15 bg-paper/70 p-4 text-sm">Loading roles...</div> : null}
-      {state === "forbidden" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">You do not have permission to manage roles.</div> : null}
-      {state === "error" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">{error ?? "Unable to load roles."}</div> : null}
-      {state === "empty" ? <div className="border border-ink/10 bg-paper/70 p-4 text-sm">No roles found.</div> : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)]">
         <div className="space-y-3">
-          {roles.map((role) => (
-            <ResourceListButton
-              key={role.id}
-              active={role.id === selectedRoleId}
-              title={role.name}
-              subtitle={role.description ?? "No description"}
-              badge={`${role.permissions.length} permissions`}
-              onClick={() => setSelectedRoleId(role.id)}
+          <AdminDataTable
+            columns={roleColumns}
+            rows={roles}
+            state={state}
+            loadingMessage="Loading roles..."
+            emptyMessage="No roles found."
+            forbiddenMessage="You do not have permission to manage roles."
+            errorMessage={error}
+            getRowKey={(role) => role.id}
+            activeRowKey={selectedRoleId}
+            onRowClick={(role) => setSelectedRoleId(role.id)}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleRoleSort}
+          />
+          {state === "ready" ? (
+            <AdminPagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={handleRolePageChange}
+              onPageSizeChange={handleRolePageSizeChange}
             />
-          ))}
+          ) : null}
         </div>
         <div className="space-y-4">
           <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
@@ -881,6 +1033,11 @@ export function WorkspaceManager() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedWorkspace, setSelectedWorkspace] = useState<AdminWorkspaceData | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [sortBy, setSortBy] = useState("slug");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [total, setTotal] = useState(0);
   const [createForm, setCreateForm] = useState({ slug: "", name: "", isDefault: false });
   const [editForm, setEditForm] = useState({ slug: "", name: "", isDefault: false });
 
@@ -888,8 +1045,16 @@ export function WorkspaceManager() {
     setState("loading");
     setError(null);
     try {
-      const nextWorkspaces = await listAdminWorkspaces();
+      const nextWorkspaces = await listAdminWorkspaces({
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+      });
       setWorkspaces(nextWorkspaces);
+      setTotal(nextWorkspaces.total);
+      setPage(nextWorkspaces.page);
+      setPageSize(nextWorkspaces.page_size);
       const fallbackId =
         preferredId && nextWorkspaces.some((workspace) => workspace.id === preferredId)
           ? preferredId
@@ -904,7 +1069,7 @@ export function WorkspaceManager() {
 
   useEffect(() => {
     void loadWorkspaces();
-  }, []);
+  }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!selectedWorkspaceId) {
@@ -941,6 +1106,60 @@ export function WorkspaceManager() {
 
   const selectedWorkspaceSummary =
     selectedWorkspace ?? workspaces.find((workspace) => workspace.id === selectedWorkspaceId) ?? null;
+
+  const workspaceColumns: AdminDataTableColumn<AdminWorkspaceData>[] = [
+    {
+      key: "slug",
+      header: "Slug",
+      sortable: true,
+      sortKey: "slug",
+      render: (workspace) => <span className="font-semibold text-ink">{workspace.slug}</span>,
+    },
+    {
+      key: "name",
+      header: "Name",
+      sortable: true,
+      sortKey: "name",
+      render: (workspace) => <span className="text-sm text-ink/70">{workspace.name}</span>,
+    },
+    {
+      key: "is_default",
+      header: "Default",
+      sortable: true,
+      sortKey: "is_default",
+      render: (workspace) => (
+        <span className={workspace.is_default ? "font-semibold text-emerald-700" : "font-semibold text-clay"}>
+          {workspace.is_default ? "Default" : "No"}
+        </span>
+      ),
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      sortable: true,
+      sortKey: "updated_at",
+      render: (workspace) => <span className="text-sm text-ink/70">{formatDateTime(workspace.updated_at)}</span>,
+    },
+  ];
+
+  function handleWorkspaceSort(nextSortBy: string) {
+    setPage(1);
+    if (sortBy === nextSortBy) {
+      setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortBy === "is_default" ? "desc" : "asc");
+  }
+
+  function handleWorkspacePageChange(nextPage: number) {
+    setPage(nextPage);
+  }
+
+  function handleWorkspacePageSizeChange(nextPageSize: number) {
+    setPage(1);
+    setPageSize(nextPageSize);
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1007,23 +1226,33 @@ export function WorkspaceManager() {
       description="Maintain workspace records and mark the current default workspace for permission scoping."
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
-      {state === "loading" ? <div className="border border-dashed border-ink/15 bg-paper/70 p-4 text-sm">Loading workspaces...</div> : null}
-      {state === "forbidden" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">You do not have permission to manage workspaces.</div> : null}
-      {state === "error" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">{error ?? "Unable to load workspaces."}</div> : null}
-      {state === "empty" ? <div className="border border-ink/10 bg-paper/70 p-4 text-sm">No workspaces found.</div> : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)]">
         <div className="space-y-3">
-          {workspaces.map((workspace) => (
-            <ResourceListButton
-              key={workspace.id}
-              active={workspace.id === selectedWorkspaceId}
-              title={workspace.name}
-              subtitle={workspace.slug}
-              badge={workspace.is_default ? "default" : "workspace"}
-              onClick={() => setSelectedWorkspaceId(workspace.id)}
+          <AdminDataTable
+            columns={workspaceColumns}
+            rows={workspaces}
+            state={state}
+            loadingMessage="Loading workspaces..."
+            emptyMessage="No workspaces found."
+            forbiddenMessage="You do not have permission to manage workspaces."
+            errorMessage={error}
+            getRowKey={(workspace) => workspace.id}
+            activeRowKey={selectedWorkspaceId}
+            onRowClick={(workspace) => setSelectedWorkspaceId(workspace.id)}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleWorkspaceSort}
+          />
+          {state === "ready" ? (
+            <AdminPagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={handleWorkspacePageChange}
+              onPageSizeChange={handleWorkspacePageSizeChange}
             />
-          ))}
+          ) : null}
         </div>
         <div className="space-y-4">
           <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
