@@ -27,6 +27,8 @@ import {
   updateAdminUser,
   updateAdminWorkspace,
 } from "@/lib/admin";
+import { AdminDataTable, type AdminDataTableColumn } from "@/features/admin/admin-data-table";
+import { AdminPagination } from "@/features/admin/admin-pagination";
 import type {
   AdminPermissionData,
   AdminRoleData,
@@ -627,6 +629,11 @@ export function PermissionManager() {
   const [selectedPermissionId, setSelectedPermissionId] = useState<string | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<AdminPermissionData | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(5);
+  const [sortBy, setSortBy] = useState("name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [total, setTotal] = useState(0);
   const [createForm, setCreateForm] = useState({ name: "", description: "" });
   const [editForm, setEditForm] = useState({ name: "", description: "" });
 
@@ -634,8 +641,16 @@ export function PermissionManager() {
     setState("loading");
     setError(null);
     try {
-      const nextPermissions = await listAdminPermissions();
+      const nextPermissions = await listAdminPermissions({
+        page,
+        pageSize,
+        sortBy,
+        sortOrder,
+      });
       setPermissions(nextPermissions);
+      setTotal(nextPermissions.total);
+      setPage(nextPermissions.page);
+      setPageSize(nextPermissions.page_size);
       const fallbackId =
         preferredId && nextPermissions.some((permission) => permission.id === preferredId)
           ? preferredId
@@ -650,7 +665,7 @@ export function PermissionManager() {
 
   useEffect(() => {
     void loadPermissions();
-  }, []);
+  }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
     if (!selectedPermissionId) {
@@ -685,6 +700,47 @@ export function PermissionManager() {
   }, [selectedPermissionId]);
 
   const selectedPermissionSummary = selectedPermission ?? permissions.find((permission) => permission.id === selectedPermissionId) ?? null;
+
+  const permissionColumns: AdminDataTableColumn<AdminPermissionData>[] = [
+    {
+      key: "name",
+      header: "Name",
+      sortable: true,
+      sortKey: "name",
+      render: (permission) => <span className="font-semibold text-ink">{permission.name}</span>,
+    },
+    {
+      key: "description",
+      header: "Description",
+      render: (permission) => <span className="text-sm text-ink/70">{permission.description ?? "No description"}</span>,
+    },
+    {
+      key: "updated_at",
+      header: "Updated",
+      sortable: true,
+      sortKey: "updated_at",
+      render: (permission) => <span className="text-sm text-ink/70">{formatDateTime(permission.updated_at)}</span>,
+    },
+  ];
+
+  function handleSort(nextSortBy: string) {
+    setPage(1);
+    if (sortBy === nextSortBy) {
+      setSortOrder((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortBy(nextSortBy);
+    setSortOrder(nextSortBy === "updated_at" ? "desc" : "asc");
+  }
+
+  function handlePageChange(nextPage: number) {
+    setPage(nextPage);
+  }
+
+  function handlePageSizeChange(nextPageSize: number) {
+    setPage(1);
+    setPageSize(nextPageSize);
+  }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -749,23 +805,33 @@ export function PermissionManager() {
       description="Create and edit permission definitions that can be assigned to roles."
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
-      {state === "loading" ? <div className="border border-dashed border-ink/15 bg-paper/70 p-4 text-sm">Loading permissions...</div> : null}
-      {state === "forbidden" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">You do not have permission to manage permissions.</div> : null}
-      {state === "error" ? <div className="border border-clay/20 bg-clay/10 p-4 text-sm">{error ?? "Unable to load permissions."}</div> : null}
-      {state === "empty" ? <div className="border border-ink/10 bg-paper/70 p-4 text-sm">No permissions found.</div> : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.36fr)_minmax(0,0.64fr)]">
         <div className="space-y-3">
-          {permissions.map((permission) => (
-            <ResourceListButton
-              key={permission.id}
-              active={permission.id === selectedPermissionId}
-              title={permission.name}
-              subtitle={permission.description ?? "No description"}
-              badge={permission.id}
-              onClick={() => setSelectedPermissionId(permission.id)}
+          <AdminDataTable
+            columns={permissionColumns}
+            rows={permissions}
+            state={state}
+            loadingMessage="Loading permissions..."
+            emptyMessage="No permissions found."
+            forbiddenMessage="You do not have permission to manage permissions."
+            errorMessage={error}
+            getRowKey={(permission) => permission.id}
+            activeRowKey={selectedPermissionId}
+            onRowClick={(permission) => setSelectedPermissionId(permission.id)}
+            sortBy={sortBy}
+            sortOrder={sortOrder}
+            onSort={handleSort}
+          />
+          {state === "ready" ? (
+            <AdminPagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
             />
-          ))}
+          ) : null}
         </div>
         <div className="space-y-4">
           <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
