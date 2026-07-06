@@ -1,9 +1,14 @@
 # Paiguangguang AI Agent Platform
 
 一个面向个人作品集展示的 AI Agent 应用平台。
+常用命令
+npx chromadb-admin --port 3434 --chromadb-url http://your-chromadb:8000
 
-当前版本为 **v1 阶段**，主要目标是完成项目基础架构、前后端联通、基础 Agent 页面、后端 API 骨架、Docker 本地运行环境，
-为后续 v2 阶段的企业知识库 Agent、RAG 检索问答、Redis 会话缓存等能力打基础。
+chroma run --host localhost --port 8002 --path ./chroma
+
+python chroma_view.py
+
+uv run python -m uvicorn app.main:app --reload --env-file dev.env    
 
 ---
 
