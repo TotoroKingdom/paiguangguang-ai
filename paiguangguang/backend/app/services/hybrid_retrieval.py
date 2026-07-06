@@ -56,6 +56,7 @@ class HybridRetrievalTrace:
     queries: list[str]
     vector_hits: list[HybridRetrievalHit]
     keyword_hits: list[HybridRetrievalHit]
+    direct_hits: list[HybridRetrievalHit]
     fusion_hits: list[HybridRetrievalHit]
 
 
@@ -99,11 +100,12 @@ class HybridRetrievalService:
     ) -> HybridRetrievalTrace:
         queries = self._build_queries(query_text, rewrite_queries)
         if not queries:
-            return HybridRetrievalTrace(queries=[], vector_hits=[], keyword_hits=[], fusion_hits=[])
+            return HybridRetrievalTrace(queries=[], vector_hits=[], keyword_hits=[], direct_hits=[], fusion_hits=[])
 
         candidates: dict[tuple[str, str], HybridRetrievalHit] = {}
         vector_hits: list[HybridRetrievalHit] = []
         keyword_hits: list[HybridRetrievalHit] = []
+        direct_hits: list[HybridRetrievalHit] = []
         for query in queries:
             vector_route_hits = self.vector_store.search(
                 collection_name,
@@ -117,8 +119,19 @@ class HybridRetrievalService:
                 top_k=top_k,
                 access_context=access_context,
             )
+            direct_search = getattr(self.keyword_retriever, "search_direct_match", None)
+            if callable(direct_search):
+                direct_route_hits = direct_search(
+                    collection_name,
+                    query,
+                    top_k=top_k,
+                    access_context=access_context,
+                )
+            else:
+                direct_route_hits = keyword_route_hits
             vector_hits.extend(self._clone_hit(hit, "vector") for hit in vector_route_hits)
-            keyword_hits.extend(self._clone_hit(hit, "keyword") for hit in keyword_route_hits)
+            keyword_hits.extend(self._clone_hit(hit, "bm25") for hit in keyword_route_hits)
+            direct_hits.extend(self._clone_hit(hit, "direct") for hit in direct_route_hits)
             self._merge_route_hits(
                 candidates,
                 "vector",
@@ -126,8 +139,13 @@ class HybridRetrievalService:
             )
             self._merge_route_hits(
                 candidates,
-                "keyword",
+                "bm25",
                 keyword_route_hits,
+            )
+            self._merge_route_hits(
+                candidates,
+                "direct",
+                direct_route_hits,
             )
 
         fusion_hits = sorted(
@@ -138,6 +156,7 @@ class HybridRetrievalService:
             queries=queries,
             vector_hits=vector_hits,
             keyword_hits=keyword_hits,
+            direct_hits=direct_hits,
             fusion_hits=fusion_hits,
         )
 

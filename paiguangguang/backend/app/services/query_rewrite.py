@@ -6,7 +6,7 @@ from typing import Any
 from app.ai.deepseek import DeepSeekClient, DeepSeekError
 from app.core.config import get_settings
 from app.schemas.rag import RagQueryRewriteData, RagQueryRewriteMetadata
-from app.services.rag_cache import build_shared_cache_key, get_rag_cache_adapter
+from app.services.rag_cache import build_shared_cache_key, cache_ttl_seconds, get_rag_cache_adapter
 
 
 def build_query_rewrite_system_prompt() -> str:
@@ -126,7 +126,11 @@ class QueryRewriteService:
                 "model": self.model,
             },
         )
-        self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
+        self.cache_adapter.set(
+            cache_key,
+            result.model_dump(mode="json"),
+            ttl_seconds=cache_ttl_seconds("rag:rewrite"),
+        )
 
     def _rewrite_with_model(self, question: str) -> dict[str, Any]:
         result = self.client.chat_completions(

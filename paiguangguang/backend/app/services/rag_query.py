@@ -20,10 +20,11 @@ from app.schemas.rag import (
 )
 from app.services.context_assembler import ContextAssembler, ContextAssemblyResult, get_context_assembler
 from app.services.rag_cache import (
-    RAG_KNOWLEDGE_BASE_VERSION,
     RAG_RETRIEVAL_STRATEGY_VERSION,
+    cache_ttl_seconds,
     build_authorized_cache_key,
     invalidate_document_cache,
+    get_current_knowledge_base_version,
     get_rag_cache_adapter,
     remember_document_cache_keys,
 )
@@ -67,7 +68,6 @@ class RagQueryService:
         self.rerank_provider = rerank_provider if rerank_provider is not None else get_rerank_provider(settings)
         self.cache_adapter = cache_adapter or get_rag_cache_adapter(settings)
         self.default_collection_name = settings.rag_collection_name
-        self.knowledge_base_version = RAG_KNOWLEDGE_BASE_VERSION
         self.retrieval_strategy_version = RAG_RETRIEVAL_STRATEGY_VERSION
         self.answer_model_version = settings.deepseek_chat_model
         self.retrieval_model_version = ":".join(
@@ -76,6 +76,10 @@ class RagQueryService:
                 self.rerank_provider.__class__.__name__ if self.rerank_provider is not None else "none",
             ]
         )
+
+    @staticmethod
+    def _knowledge_base_version(collection_name: str) -> str:
+        return get_current_knowledge_base_version(collection_name)
 
     def query(
         self,
@@ -114,6 +118,7 @@ class RagQueryService:
             assembly = self.context_assembler.assemble(hits)
 
             cached_result, answer_cache_hit = self._load_answer_cache(
+                collection_name=collection_name,
                 request=request,
                 rewrite=rewrite,
                 access_context=access_context,
@@ -186,6 +191,7 @@ class RagQueryService:
             )
             self._store_answer_cache(
                 request=request,
+                collection_name=collection_name,
                 rewrite=rewrite,
                 access_context=access_context,
                 assembly=assembly,
@@ -320,7 +326,7 @@ class RagQueryService:
         cache_key = build_authorized_cache_key(
             "rag:retrieval",
             access_context=access_context,
-            knowledge_base_version=self.knowledge_base_version,
+            knowledge_base_version=self._knowledge_base_version(collection_name),
             retrieval_strategy_version=self.retrieval_strategy_version,
             model_version=self.retrieval_model_version,
             payload={
@@ -346,7 +352,11 @@ class RagQueryService:
             rewrite_queries=rewrite.rewritten_queries,
         )
         if cache_key is not None:
-            self.cache_adapter.set(cache_key, self._trace_to_payload(trace))
+            self.cache_adapter.set(
+                cache_key,
+                self._trace_to_payload(trace),
+                ttl_seconds=cache_ttl_seconds("rag:retrieval"),
+            )
             self._remember_trace_cache_keys(cache_key, trace)
         return trace, False
 
@@ -419,6 +429,7 @@ class RagQueryService:
             "queries": list(trace.queries),
             "vector_hits": [self._hit_to_payload(hit) for hit in trace.vector_hits],
             "keyword_hits": [self._hit_to_payload(hit) for hit in trace.keyword_hits],
+            "direct_hits": [self._hit_to_payload(hit) for hit in trace.direct_hits],
             "fusion_hits": [self._hit_to_payload(hit) for hit in trace.fusion_hits],
         }
 
@@ -426,8 +437,15 @@ class RagQueryService:
         queries = payload.get("queries")
         vector_hits_payload = payload.get("vector_hits")
         keyword_hits_payload = payload.get("keyword_hits")
+        direct_hits_payload = payload.get("direct_hits")
         fusion_hits_payload = payload.get("fusion_hits")
-        if not isinstance(queries, list) or not isinstance(vector_hits_payload, list) or not isinstance(keyword_hits_payload, list) or not isinstance(fusion_hits_payload, list):
+        if (
+            not isinstance(queries, list)
+            or not isinstance(vector_hits_payload, list)
+            or not isinstance(keyword_hits_payload, list)
+            or not isinstance(direct_hits_payload, list)
+            or not isinstance(fusion_hits_payload, list)
+        ):
             return None
 
         vector_hits = [
@@ -440,6 +458,11 @@ class RagQueryService:
             for item in keyword_hits_payload
             if isinstance(item, dict) and (hit := self._hit_from_payload(item)) is not None
         ]
+        direct_hits = [
+            hit
+            for item in direct_hits_payload
+            if isinstance(item, dict) and (hit := self._hit_from_payload(item)) is not None
+        ]
         fusion_hits = [
             hit
             for item in fusion_hits_payload
@@ -449,12 +472,14 @@ class RagQueryService:
             queries=[str(query) for query in queries if isinstance(query, str)],
             vector_hits=vector_hits,
             keyword_hits=keyword_hits,
+            direct_hits=direct_hits,
             fusion_hits=fusion_hits,
         )
 
     def _load_answer_cache(
         self,
         *,
+        collection_name: str,
         request: RagQueryRequest,
         rewrite: RagQueryRewriteData,
         access_context: RagSearchAccessContext | None,
@@ -467,7 +492,7 @@ class RagQueryService:
         cache_key = build_authorized_cache_key(
             "rag:answer",
             access_context=access_context,
-            knowledge_base_version=self.knowledge_base_version,
+            knowledge_base_version=self._knowledge_base_version(collection_name),
             retrieval_strategy_version=self.retrieval_strategy_version,
             model_version=self.answer_model_version,
             payload={
@@ -493,6 +518,7 @@ class RagQueryService:
     def _store_answer_cache(
         self,
         *,
+        collection_name: str,
         request: RagQueryRequest,
         rewrite: RagQueryRewriteData,
         access_context: RagSearchAccessContext | None,
@@ -506,7 +532,7 @@ class RagQueryService:
         cache_key = build_authorized_cache_key(
             "rag:answer",
             access_context=access_context,
-            knowledge_base_version=self.knowledge_base_version,
+            knowledge_base_version=self._knowledge_base_version(collection_name),
             retrieval_strategy_version=self.retrieval_strategy_version,
             model_version=self.answer_model_version,
             payload={
@@ -519,7 +545,11 @@ class RagQueryService:
             },
         )
         if cache_key is not None:
-            self.cache_adapter.set(cache_key, result.model_dump(mode="json"))
+            self.cache_adapter.set(
+                cache_key,
+                result.model_dump(mode="json"),
+                ttl_seconds=cache_ttl_seconds("rag:answer"),
+            )
             self._remember_result_cache_keys(cache_key, result)
 
     def _remember_result_cache_keys(self, cache_key: str, result: RagQueryData) -> None:
@@ -545,20 +575,39 @@ class RagQueryService:
         if not request.include_debug:
             return None
 
+        route_hit_counts = {
+            "vector": len({(hit.doc_id, hit.chunk_id) for hit in trace.vector_hits}),
+            "bm25": len({(hit.doc_id, hit.chunk_id) for hit in trace.keyword_hits}),
+            "direct": len({(hit.doc_id, hit.chunk_id) for hit in trace.direct_hits}),
+        }
+        recalled_unique_chunks = {
+            (hit.doc_id, hit.chunk_id)
+            for hit in (*trace.vector_hits, *trace.keyword_hits, *trace.direct_hits)
+        }
+        selected_unique_chunks = {(hit.doc_id, hit.chunk_id) for hit in fusion_hits}
+        chunk_hit_rate = (
+            len(selected_unique_chunks) / len(recalled_unique_chunks)
+            if recalled_unique_chunks
+            else None
+        )
+
         return RagQueryDebugData(
             rewrites=rewrite,
             vector_hits=[self._hit_to_source_data(hit) for hit in trace.vector_hits],
             keyword_hits=[self._hit_to_source_data(hit) for hit in trace.keyword_hits],
+            direct_hits=[self._hit_to_source_data(hit) for hit in trace.direct_hits],
             fusion=[self._hit_to_source_data(hit) for hit in fusion_hits],
             rerank=[self._hit_to_source_data(hit) for hit in reranked_hits],
             selected_context=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
             citations=[self._hit_to_source_data(hit) for hit in reranked_hits],
+            chunk_hit_rate=chunk_hit_rate,
+            route_hit_counts=route_hit_counts,
             latency_ms=latency_ms,
             model_usage=dict(model_usage),
         )
 
     def _remember_trace_cache_keys(self, cache_key: str, trace: HybridRetrievalTrace) -> None:
-        document_ids = {hit.doc_id for hit in (*trace.vector_hits, *trace.keyword_hits, *trace.fusion_hits)}
+        document_ids = {hit.doc_id for hit in (*trace.vector_hits, *trace.keyword_hits, *trace.direct_hits, *trace.fusion_hits)}
         for document_id in document_ids:
             remember_document_cache_keys(self.cache_adapter, document_id, [cache_key])
 

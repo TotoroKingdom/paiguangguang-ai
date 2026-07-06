@@ -108,6 +108,7 @@ class AdminWorkspaceData(BaseModel):
 
 class AdminDocumentCreateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
+    original_filename: str | None = Field(default=None, max_length=255)
     text: str = Field(min_length=1, max_length=200_000)
     owner_user_id: str | None = Field(default=None, max_length=36)
     workspace_id: str | None = Field(default=None, max_length=36)
@@ -116,6 +117,7 @@ class AdminDocumentCreateRequest(BaseModel):
 
 class AdminDocumentUpdateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
+    original_filename: str | None = Field(default=None, max_length=255)
     text: str | None = Field(default=None, min_length=1, max_length=200_000)
     owner_user_id: str | None = Field(default=None, max_length=36)
     workspace_id: str | None = Field(default=None, max_length=36)

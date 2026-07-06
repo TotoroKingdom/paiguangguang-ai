@@ -20,3 +20,5 @@ class ApiResponse(BaseModel, Generic[DataT]):
 
 class HealthData(BaseModel):
     status: str
+    cache_backend: str | None = None
+    knowledge_base_version: str | None = None

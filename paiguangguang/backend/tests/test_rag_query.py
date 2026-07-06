@@ -60,6 +60,14 @@ class FakeSearchStore:
             hits = filtered
         return hits[:top_k]
 
+    def search_direct_match(self, collection_name, query_text, *, top_k=5, access_context=None):
+        return self.search(
+            collection_name,
+            query_text,
+            top_k=top_k,
+            access_context=access_context,
+        )
+
 
 class FakeVectorStore(FakeSearchStore):
     pass
@@ -750,14 +758,20 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert body["data"]["debug"]["rewrites"]["original_question"] == "How is the project deployed?"
     assert len(body["data"]["debug"]["vector_hits"]) == 1
     assert len(body["data"]["debug"]["keyword_hits"]) == 1
+    assert len(body["data"]["debug"]["direct_hits"]) == 1
     assert len(body["data"]["debug"]["fusion"]) == 1
     assert len(body["data"]["debug"]["rerank"]) == 1
     assert len(body["data"]["debug"]["selected_context"]) == 1
     assert len(body["data"]["debug"]["citations"]) == 1
+    assert body["data"]["debug"]["route_hit_counts"] == {"vector": 1, "bm25": 1, "direct": 1}
+    assert body["data"]["debug"]["chunk_hit_rate"] == 1.0
     assert body["data"]["debug"]["latency_ms"] >= 0
     assert body["data"]["debug"]["model_usage"] == {}
     assert [item["doc_id"] for item in body["data"]["debug"]["vector_hits"]] == ["doc-alpha"]
     assert [item["doc_id"] for item in body["data"]["debug"]["keyword_hits"]] == [
+        "doc-alpha",
+    ]
+    assert [item["doc_id"] for item in body["data"]["debug"]["direct_hits"]] == [
         "doc-alpha",
     ]
     assert [item["doc_id"] for item in body["data"]["debug"]["fusion"]] == ["doc-alpha"]
@@ -778,7 +792,7 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
     assert source["text"] == "Alpha project notes explain the workflow."
     assert source["score"] > 0
     assert source["rerank_score"] == 0.8
-    assert source["route_scores"] == {"vector": 0.91, "keyword": 0.91}
+    assert source["route_scores"] == {"vector": 0.91, "bm25": 0.91, "direct": 0.91}
     assert source["metadata"]["workspace_id"] == defaults.default_workspace.id
     assert source["metadata"]["permission_scope"] == "workspace"
     assert source["metadata"]["lifecycle_version"] == 4
@@ -791,14 +805,11 @@ def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
             "access_context": vector_store.calls[0]["access_context"],
         }
     ]
-    assert keyword_retriever.calls == [
-        {
-            "collection_name": "portfolio_knowledge",
-            "query_text": "How is the project deployed?",
-            "top_k": 2,
-            "access_context": keyword_retriever.calls[0]["access_context"],
-        }
-    ]
+    assert len(keyword_retriever.calls) == 2
+    assert keyword_retriever.calls[0]["collection_name"] == "portfolio_knowledge"
+    assert keyword_retriever.calls[0]["query_text"] == "How is the project deployed?"
+    assert keyword_retriever.calls[1]["collection_name"] == "portfolio_knowledge"
+    assert keyword_retriever.calls[1]["query_text"] == "How is the project deployed?"
     access_context = vector_store.calls[0]["access_context"]
     assert access_context.user_id == user.id
     assert access_context.workspace_id == defaults.default_workspace.id

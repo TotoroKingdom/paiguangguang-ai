@@ -1,4 +1,4 @@
-import { deleteJson, getJson, patchJson, postEmptyJson, postJson } from "@/lib/api";
+import { deleteJson, getJson, patchJson, postEmptyJson, postFormData, postJson } from "@/lib/api";
 import { getStoredAuthToken } from "@/lib/auth";
 import type {
   AdminPagedResponse,
@@ -66,6 +66,12 @@ export function getAdminDocument(documentId: string) {
 
 export function createAdminDocument(request: AdminDocumentCreateRequest) {
   return postJson<AdminDocumentData, AdminDocumentCreateRequest>("/api/v1/admin/documents", request, {
+    token: getStoredAuthToken(),
+  });
+}
+
+export function uploadAdminDocument(formData: FormData) {
+  return postFormData<AdminDocumentData>("/api/v1/admin/documents/upload", formData, {
     token: getStoredAuthToken(),
   });
 }

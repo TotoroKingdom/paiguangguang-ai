@@ -289,8 +289,8 @@ def test_reindex_clears_old_vector_entries_and_bumps_lifecycle_version() -> None
 
     assert first.chunk_count == second.chunk_count
     assert vector_store.delete_calls == [{"collection_name": service.collection_name, "doc_id": registration.doc_id}]
-    assert vector_store.calls[-1]["chunks"][0].metadata["lifecycle_version"] == 2
-    assert repository.get_chunks(registration.doc_id)[0].metadata["lifecycle_version"] == 2
+    assert vector_store.calls[-1]["chunks"][0].metadata["lifecycle_version"] == 3
+    assert repository.get_chunks(registration.doc_id)[0].metadata["lifecycle_version"] == 3
 
 
 def test_purge_document_artifacts_invalidates_document_cache_entries() -> None:

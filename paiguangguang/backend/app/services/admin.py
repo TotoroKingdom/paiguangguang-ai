@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from app.db.models import RagChunk as RagChunkModel
 from app.db.models import (
     Permission,
     RagDocument as RagDocumentModel,
@@ -120,6 +122,7 @@ def _document_to_admin_data(model: RagDocumentModel) -> AdminDocumentData:
     return AdminDocumentData(
         doc_id=model.document_id,
         title=model.title,
+        original_filename=model.original_filename,
         text_length=len(model.text),
         content_hash=model.content_hash,
         owner_user_id=model.owner_user_id,
@@ -585,7 +588,15 @@ class AdminService:
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
-            allowed_sort_by={"title", "status", "owner_user_id", "workspace_id", "updated_at", "created_at"},
+            allowed_sort_by={
+                "title",
+                "original_filename",
+                "status",
+                "owner_user_id",
+                "workspace_id",
+                "updated_at",
+                "created_at",
+            },
             default_sort_by="updated_at",
             item_mapper=_document_to_admin_data,
         )
@@ -598,11 +609,15 @@ class AdminService:
 
     def create_document(self, session: Session, request: AdminDocumentCreateRequest) -> AdminDocumentData:
         normalized_text = normalize_text(request.text)
-        content_hash = make_content_hash(request.title, normalized_text)
+        title = request.title.strip() if request.title else None
+        if title is None and request.original_filename:
+            title = Path(request.original_filename).stem or None
+        content_hash = make_content_hash(title, normalized_text)
         document_id = make_document_id(content_hash)
         document = RagDocumentModel(
             document_id=document_id,
-            title=request.title.strip() if request.title else None,
+            title=title,
+            original_filename=request.original_filename.strip() if request.original_filename else None,
             text=normalized_text,
             content_hash=content_hash,
             owner_user_id=request.owner_user_id,
@@ -630,6 +645,8 @@ class AdminService:
             raise KeyError(document_id)
         if request.title is not None:
             document.title = request.title.strip()
+        if request.original_filename is not None:
+            document.original_filename = request.original_filename.strip()
         if request.text is not None:
             document.text = normalize_text(request.text)
             document.content_hash = make_content_hash(request.title or document.title, document.text)
@@ -661,12 +678,13 @@ class AdminService:
         document = session.scalar(select(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
         if document is None:
             raise KeyError(document_id)
-        document.status = "deleted"
-        document.is_deleted = True
+        snapshot = _document_to_admin_data(document)
+        session.execute(delete(RagChunkModel).where(RagChunkModel.document_id == document_id))
+        session.execute(delete(RagIngestionJobModel).where(RagIngestionJobModel.document_id == document_id))
+        session.execute(delete(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
         session.commit()
         self.rag_service.purge_document_artifacts(document_id)
-        session.refresh(document)
-        return _document_to_admin_data(document)
+        return snapshot
 
     def restore_document(self, session: Session, document_id: str) -> AdminDocumentData:
         document = session.scalar(select(RagDocumentModel).where(RagDocumentModel.document_id == document_id))

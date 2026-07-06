@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field, model_validator
 
 class RagDocumentCreateRequest(BaseModel):
     title: str | None = Field(default=None, max_length=200)
+    original_filename: str | None = Field(default=None, max_length=255)
     text: str = Field(min_length=1, max_length=200_000)
 
 
 class RagDocumentData(BaseModel):
     doc_id: str
     title: str | None
+    original_filename: str | None = None
     text_length: int
     content_hash: str
     owner_user_id: str | None = None
@@ -131,10 +133,13 @@ class RagQueryDebugData(BaseModel):
     rewrites: RagQueryRewriteData | None = None
     vector_hits: list[RagSourceData] = Field(default_factory=list)
     keyword_hits: list[RagSourceData] = Field(default_factory=list)
+    direct_hits: list[RagSourceData] = Field(default_factory=list)
     fusion: list[RagSourceData] = Field(default_factory=list)
     rerank: list[RagSourceData] = Field(default_factory=list)
     selected_context: list[RagSourceData] = Field(default_factory=list)
     citations: list[RagSourceData] = Field(default_factory=list)
+    chunk_hit_rate: float | None = None
+    route_hit_counts: dict[str, int] = Field(default_factory=dict)
     latency_ms: int
     model_usage: dict[str, object] = Field(default_factory=dict)
 

@@ -79,6 +79,7 @@ class ChromaRagStore:
                     "start_char": chunk.start_char,
                     "end_char": chunk.end_char,
                     "lifecycle_version": lifecycle_version,
+                    "kb_version": lifecycle_version,
                 }
                 for chunk in chunks
             ],

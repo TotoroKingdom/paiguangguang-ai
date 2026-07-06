@@ -23,6 +23,21 @@ class KeywordRetriever:
             access_context=access_context,
         )
 
+    def search_direct_match(
+        self,
+        collection_name: str,
+        query_text: str,
+        *,
+        top_k: int = 5,
+        access_context: RagSearchAccessContext | None = None,
+    ) -> list[RagSearchHit]:
+        return self.repository.search_direct_match(
+            collection_name,
+            query_text,
+            top_k=top_k,
+            access_context=access_context,
+        )
+
 
 _KEYWORD_RETRIEVER = KeywordRetriever()
 

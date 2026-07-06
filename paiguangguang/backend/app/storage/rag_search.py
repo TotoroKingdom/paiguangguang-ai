@@ -37,7 +37,9 @@ def normalize_rag_search_metadata(chunk_id: str, metadata: dict[str, object] | N
     permission_scope = metadata.get("permission_scope") or None
     workspace_id = metadata.get("workspace_id") or None
     owner_user_id = metadata.get("owner_user_id") or None
+    original_filename = metadata.get("original_filename") or None
     content_hash = metadata.get("content_hash") or None
+    kb_version = metadata.get("kb_version")
     lifecycle_version = metadata.get("lifecycle_version")
     normalized = {
         "doc_id": str(doc_id),
@@ -49,7 +51,9 @@ def normalize_rag_search_metadata(chunk_id: str, metadata: dict[str, object] | N
         "permission_scope": permission_scope,
         "workspace_id": workspace_id,
         "owner_user_id": owner_user_id,
+        "original_filename": original_filename,
         "content_hash": content_hash,
+        "kb_version": int(kb_version) if kb_version not in (None, "") else int(lifecycle_version) if lifecycle_version not in (None, "") else 1,
         "lifecycle_version": int(lifecycle_version) if lifecycle_version not in (None, "") else 1,
         "chunk_id": str(chunk_id),
     }

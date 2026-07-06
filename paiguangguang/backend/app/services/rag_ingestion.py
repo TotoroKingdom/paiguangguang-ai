@@ -100,6 +100,7 @@ class RagIngestionService:
         return RagDocumentData(
             doc_id=document.document_id,
             title=document.title,
+            original_filename=document.original_filename,
             text_length=len(document.text),
             content_hash=document.content_hash,
             owner_user_id=document.owner_user_id,
@@ -141,6 +142,7 @@ class RagIngestionService:
             RagDocumentRecord(
                 document_id=doc_id,
                 title=request.title.strip() if request.title else None,
+                original_filename=request.original_filename.strip() if request.original_filename else None,
                 text=normalized_text,
                 content_hash=content_hash,
                 status="registered",
@@ -173,15 +175,18 @@ class RagIngestionService:
             text = document.text
             content_hash = document.content_hash
             doc_id = document.doc_id
+            original_filename = document.original_filename
         else:
             text = normalize_text(request.text or "")
             content_hash = make_content_hash(request.title, text)
             doc_id = make_document_id(content_hash)
             title = request.title.strip() if request.title else None
+            original_filename = None
             self.repository.upsert_document(
                 RagDocumentRecord(
                     document_id=doc_id,
                     title=title,
+                    original_filename=original_filename,
                     text=text,
                     content_hash=content_hash,
                     status="registered",
@@ -192,7 +197,8 @@ class RagIngestionService:
                 )
             )
 
-        lifecycle_version = self._next_lifecycle_version(doc_id, request.reindex)
+        kb_version = self.repository.get_knowledge_base_version(self.collection_name)
+        next_kb_version = kb_version + 1
         if request.reindex:
             self.purge_document_artifacts(doc_id)
 
@@ -252,7 +258,8 @@ class RagIngestionService:
                         "chunk_index": chunk.chunk_index,
                         "start_char": chunk.start_char,
                         "end_char": chunk.end_char,
-                        "lifecycle_version": lifecycle_version,
+                        "lifecycle_version": next_kb_version,
+                        "kb_version": next_kb_version,
                     },
                 )
                 for chunk in chunk_records
@@ -272,7 +279,7 @@ class RagIngestionService:
                         title=title,
                         content_hash=content_hash,
                         chunks=chunks,
-                        lifecycle_version=lifecycle_version,
+                        lifecycle_version=next_kb_version,
                     )
                 except EmbeddingProviderTimeoutError as exc:
                     raise ServiceTimeoutError("Embedding", getattr(self.vector_store.embedding_provider, "timeout_seconds", 0.0), str(exc)) from exc
@@ -280,6 +287,7 @@ class RagIngestionService:
                     raise ExternalModelError("Embedding", str(exc)) from exc
                 except Exception as exc:
                     raise ExternalModelError("Embedding", str(exc)) from exc
+                self.repository.bump_knowledge_base_version(self.collection_name)
             self.repository.update_document_lifecycle(
                 doc_id,
                 status="indexed",
@@ -297,7 +305,7 @@ class RagIngestionService:
                 document_id=doc_id,
                 job_id=job_id,
                 chunk_count=len(chunks),
-                lifecycle_version=lifecycle_version,
+                kb_version=next_kb_version,
             )
             return RagIngestData(
                 doc_id=doc_id,
@@ -340,24 +348,6 @@ class RagIngestionService:
         if self.vector_store is not None:
             self.vector_store.delete_document(self.collection_name, doc_id=document_id)
         invalidate_document_cache(self.cache_adapter, document_id)
-
-    def _next_lifecycle_version(self, document_id: str, is_reindex: bool) -> int:
-        if not is_reindex:
-            return 1
-
-        try:
-            chunks = self.repository.get_chunks(document_id)
-        except KeyError:
-            return 1
-
-        versions = [
-            int(chunk.metadata.get("lifecycle_version", 1))
-            for chunk in chunks
-            if isinstance(chunk.metadata.get("lifecycle_version", 1), int)
-            or str(chunk.metadata.get("lifecycle_version", 1)).isdigit()
-        ]
-        return (max(versions) if versions else 0) + 1
-
 
 _RAG_INGESTION_SERVICE = RagIngestionService()
 
