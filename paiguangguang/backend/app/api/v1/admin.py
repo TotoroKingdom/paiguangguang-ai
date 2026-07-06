@@ -10,6 +10,7 @@ from app.schemas.admin import (
     AdminDocumentCreateRequest,
     AdminDocumentData,
     AdminDocumentUpdateRequest,
+    AdminPagedData,
     AdminIngestionJobData,
     AdminIngestionJobUpdateRequest,
     AdminPermissionCreateRequest,
@@ -60,15 +61,19 @@ def _handle_key_error(exc: KeyError, entity_name: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{entity_name} {exc.args[0]} not found")
 
 
-@router.get("/users", response_model=ApiResponse[list[AdminUserData]])
+@router.get("/users", response_model=ApiResponse[AdminPagedData[AdminUserData]])
 def list_users(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminUserData]]:
+) -> ApiResponse[AdminPagedData[AdminUserData]]:
     _require_permission(service, session, current_user, "user.manage", rbac_service)
-    return ApiResponse(data=service.list_users(session))
+    return ApiResponse(data=service.list_users(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/users/{user_id}", response_model=ApiResponse[AdminUserData])
@@ -132,15 +137,19 @@ def disable_user(
         raise _handle_key_error(exc, "User") from exc
 
 
-@router.get("/roles", response_model=ApiResponse[list[AdminRoleData]])
+@router.get("/roles", response_model=ApiResponse[AdminPagedData[AdminRoleData]])
 def list_roles(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "asc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminRoleData]]:
+) -> ApiResponse[AdminPagedData[AdminRoleData]]:
     _require_permission(service, session, current_user, "role.manage", rbac_service)
-    return ApiResponse(data=service.list_roles(session))
+    return ApiResponse(data=service.list_roles(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/roles/{role_id}", response_model=ApiResponse[AdminRoleData])
@@ -204,15 +213,19 @@ def delete_role(
         raise _handle_key_error(exc, "Role") from exc
 
 
-@router.get("/permissions", response_model=ApiResponse[list[AdminPermissionData]])
+@router.get("/permissions", response_model=ApiResponse[AdminPagedData[AdminPermissionData]])
 def list_permissions(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "asc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminPermissionData]]:
+) -> ApiResponse[AdminPagedData[AdminPermissionData]]:
     _require_permission(service, session, current_user, "role.manage", rbac_service)
-    return ApiResponse(data=service.list_permissions(session))
+    return ApiResponse(data=service.list_permissions(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/permissions/{permission_id}", response_model=ApiResponse[AdminPermissionData])
@@ -273,15 +286,19 @@ def delete_permission(
         raise _handle_key_error(exc, "Permission") from exc
 
 
-@router.get("/workspaces", response_model=ApiResponse[list[AdminWorkspaceData]])
+@router.get("/workspaces", response_model=ApiResponse[AdminPagedData[AdminWorkspaceData]])
 def list_workspaces(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "asc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminWorkspaceData]]:
+) -> ApiResponse[AdminPagedData[AdminWorkspaceData]]:
     _require_permission(service, session, current_user, "workspace.manage", rbac_service)
-    return ApiResponse(data=service.list_workspaces(session))
+    return ApiResponse(data=service.list_workspaces(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/workspaces/{workspace_id}", response_model=ApiResponse[AdminWorkspaceData])
@@ -342,15 +359,19 @@ def delete_workspace(
         raise _handle_key_error(exc, "Workspace") from exc
 
 
-@router.get("/documents", response_model=ApiResponse[list[AdminDocumentData]])
+@router.get("/documents", response_model=ApiResponse[AdminPagedData[AdminDocumentData]])
 def list_documents(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminDocumentData]]:
+) -> ApiResponse[AdminPagedData[AdminDocumentData]]:
     _require_permission(service, session, current_user, "document.delete", rbac_service)
-    return ApiResponse(data=service.list_documents(session))
+    return ApiResponse(data=service.list_documents(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/documents/{document_id}", response_model=ApiResponse[AdminDocumentData])
@@ -430,15 +451,19 @@ def reindex_document(
         raise _handle_key_error(exc, "Document") from exc
 
 
-@router.get("/ingestion-jobs", response_model=ApiResponse[list[AdminIngestionJobData]])
+@router.get("/ingestion-jobs", response_model=ApiResponse[AdminPagedData[AdminIngestionJobData]])
 def list_ingestion_jobs(
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str | None = None,
+    sort_order: str = "desc",
     session: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
     service: AdminService = Depends(get_admin_service),
     rbac_service: RBACService = Depends(get_rbac_service),
-) -> ApiResponse[list[AdminIngestionJobData]]:
+) -> ApiResponse[AdminPagedData[AdminIngestionJobData]]:
     _require_permission(service, session, current_user, "document.delete", rbac_service)
-    return ApiResponse(data=service.list_jobs(session))
+    return ApiResponse(data=service.list_jobs(session, page=page, page_size=page_size, sort_by=sort_by, sort_order=sort_order))
 
 
 @router.get("/ingestion-jobs/{job_id}", response_model=ApiResponse[AdminIngestionJobData])

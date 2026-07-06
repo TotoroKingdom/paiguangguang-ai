@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.db.models import (
@@ -22,6 +22,7 @@ from app.schemas.admin import (
     AdminDocumentCreateRequest,
     AdminDocumentData,
     AdminDocumentUpdateRequest,
+    AdminPagedData,
     AdminIngestionJobData,
     AdminIngestionJobUpdateRequest,
     AdminPermissionCreateRequest,
@@ -131,6 +132,66 @@ def _document_to_admin_data(model: RagDocumentModel) -> AdminDocumentData:
     )
 
 
+def _paginate_admin_query(
+    session: Session,
+    model: type,
+    *,
+    page: int,
+    page_size: int,
+    sort_by: str | None,
+    sort_order: str,
+    allowed_sort_by: set[str] | frozenset[str],
+    default_sort_by: str,
+) -> AdminListQuery:
+    return normalize_admin_list_query(
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_sort_by=allowed_sort_by,
+        default_sort_by=default_sort_by,
+    )
+
+
+def _build_paged_data(
+    session: Session,
+    model: type,
+    *,
+    page: int,
+    page_size: int,
+    sort_by: str | None,
+    sort_order: str,
+    allowed_sort_by: set[str] | frozenset[str],
+    default_sort_by: str,
+    item_mapper,
+) -> AdminPagedData:
+    query = _paginate_admin_query(
+        session,
+        model,
+        page=page,
+        page_size=page_size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        allowed_sort_by=allowed_sort_by,
+        default_sort_by=default_sort_by,
+    )
+    sort_column = getattr(model, query.sort_by)
+    ordering = sort_column.asc() if query.sort_order == "asc" else sort_column.desc()
+    total = session.scalar(select(func.count()).select_from(model)) or 0
+    items = session.scalars(
+        select(model)
+        .order_by(ordering)
+        .offset((query.page - 1) * query.page_size)
+        .limit(query.page_size)
+    ).all()
+    return AdminPagedData(
+        items=[item_mapper(item) for item in items],
+        total=total,
+        page=query.page,
+        page_size=query.page_size,
+    )
+
+
 def normalize_admin_list_query(
     *,
     page: int = 1,
@@ -192,9 +253,26 @@ class AdminService:
                 detail=f"{permission_name} permission required",
             )
 
-    def list_users(self, session: Session) -> list[AdminUserData]:
-        users = session.scalars(select(User).order_by(User.created_at.desc())).all()
-        return [_user_to_admin_data(user) for user in users]
+    def list_users(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "desc",
+    ) -> AdminPagedData[AdminUserData]:
+        return _build_paged_data(
+            session,
+            User,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"email", "display_name", "is_active", "updated_at", "created_at"},
+            default_sort_by="created_at",
+            item_mapper=_user_to_admin_data,
+        )
 
     def get_user(self, session: Session, user_id: str) -> AdminUserData:
         user = session.get(User, user_id)
@@ -267,9 +345,26 @@ class AdminService:
     def disable_user(self, session: Session, user_id: str) -> AdminUserData:
         return self.update_user(session, user_id, AdminUserUpdateRequest(is_active=False))
 
-    def list_roles(self, session: Session) -> list[AdminRoleData]:
-        roles = session.scalars(select(Role).order_by(Role.name)).all()
-        return [_role_to_admin_data(role) for role in roles]
+    def list_roles(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "asc",
+    ) -> AdminPagedData[AdminRoleData]:
+        return _build_paged_data(
+            session,
+            Role,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"name", "updated_at", "created_at"},
+            default_sort_by="name",
+            item_mapper=_role_to_admin_data,
+        )
 
     def get_role(self, session: Session, role_id: str) -> AdminRoleData:
         role = session.get(Role, role_id)
@@ -325,9 +420,26 @@ class AdminService:
         session.commit()
         return snapshot
 
-    def list_permissions(self, session: Session) -> list[AdminPermissionData]:
-        permissions = session.scalars(select(Permission).order_by(Permission.name)).all()
-        return [_permission_to_admin_data(permission) for permission in permissions]
+    def list_permissions(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "asc",
+    ) -> AdminPagedData[AdminPermissionData]:
+        return _build_paged_data(
+            session,
+            Permission,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"name", "updated_at", "created_at"},
+            default_sort_by="name",
+            item_mapper=_permission_to_admin_data,
+        )
 
     def get_permission(self, session: Session, permission_id: str) -> AdminPermissionData:
         permission = session.get(Permission, permission_id)
@@ -369,9 +481,26 @@ class AdminService:
         session.commit()
         return snapshot
 
-    def list_workspaces(self, session: Session) -> list[AdminWorkspaceData]:
-        workspaces = session.scalars(select(Workspace).order_by(Workspace.slug)).all()
-        return [_workspace_to_admin_data(workspace) for workspace in workspaces]
+    def list_workspaces(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "asc",
+    ) -> AdminPagedData[AdminWorkspaceData]:
+        return _build_paged_data(
+            session,
+            Workspace,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"slug", "name", "is_default", "updated_at", "created_at"},
+            default_sort_by="slug",
+            item_mapper=_workspace_to_admin_data,
+        )
 
     def get_workspace(self, session: Session, workspace_id: str) -> AdminWorkspaceData:
         workspace = session.get(Workspace, workspace_id)
@@ -421,9 +550,26 @@ class AdminService:
         session.commit()
         return snapshot
 
-    def list_documents(self, session: Session) -> list[AdminDocumentData]:
-        documents = session.scalars(select(RagDocumentModel).order_by(RagDocumentModel.updated_at.desc())).all()
-        return [_document_to_admin_data(document) for document in documents]
+    def list_documents(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "desc",
+    ) -> AdminPagedData[AdminDocumentData]:
+        return _build_paged_data(
+            session,
+            RagDocumentModel,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"title", "status", "owner_user_id", "workspace_id", "updated_at", "created_at"},
+            default_sort_by="updated_at",
+            item_mapper=_document_to_admin_data,
+        )
 
     def get_document(self, session: Session, document_id: str) -> AdminDocumentData:
         document = session.scalar(select(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
@@ -529,9 +675,26 @@ class AdminService:
         session.refresh(document)
         return _document_to_admin_data(document)
 
-    def list_jobs(self, session: Session) -> list[AdminIngestionJobData]:
-        jobs = session.scalars(select(RagIngestionJobModel).order_by(RagIngestionJobModel.created_at.desc())).all()
-        return [_job_to_admin_data(job) for job in jobs]
+    def list_jobs(
+        self,
+        session: Session,
+        *,
+        page: int = 1,
+        page_size: int = 20,
+        sort_by: str | None = None,
+        sort_order: str = "desc",
+    ) -> AdminPagedData[AdminIngestionJobData]:
+        return _build_paged_data(
+            session,
+            RagIngestionJobModel,
+            page=page,
+            page_size=page_size,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            allowed_sort_by={"status", "document_id", "created_at", "updated_at"},
+            default_sort_by="created_at",
+            item_mapper=_job_to_admin_data,
+        )
 
     def get_job(self, session: Session, job_id: str) -> AdminIngestionJobData:
         job = session.scalar(select(RagIngestionJobModel).where(RagIngestionJobModel.job_id == job_id))
