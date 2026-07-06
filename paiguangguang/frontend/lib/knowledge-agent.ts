@@ -1,6 +1,7 @@
-import { postJson } from "@/lib/api";
+import { getJson, postJson } from "@/lib/api";
 import { getStoredAuthToken } from "@/lib/auth";
 import type {
+  KnowledgeCollectionsData,
   KnowledgeDocumentCreateRequest,
   KnowledgeDocumentData,
   KnowledgeIngestData,
@@ -24,6 +25,12 @@ export function registerKnowledgeDocument(request: KnowledgeDocumentCreateReques
 
 export function ingestKnowledgeDocument(request: KnowledgeIngestRequest) {
   return postJson<KnowledgeIngestData, KnowledgeIngestRequest>("/api/v1/rag/ingest", request, {
+    token: getStoredAuthToken(),
+  });
+}
+
+export function listKnowledgeCollections() {
+  return getJson<KnowledgeCollectionsData>("/api/v1/rag/collections", {
     token: getStoredAuthToken(),
   });
 }

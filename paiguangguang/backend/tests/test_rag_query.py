@@ -17,9 +17,12 @@ from app.services.context_assembler import ContextAssemblyResult
 from app.services.auth import AuthService, get_auth_service
 from app.services.hybrid_retrieval import HybridRetrievalHit
 from app.services.hybrid_retrieval import HybridRetrievalService
+from app.services.query_rewrite import QueryRewriteService
 from app.services.rag_query import RagQueryService, get_rag_query_service
 from app.services.rbac import RBACService, get_rbac_service
 from app.db.session import get_db_session
+from app.storage.cache import InMemoryCacheAdapter
+from app.storage.chroma_store import get_chroma_rag_store
 
 
 class FakeSearchStore:
@@ -134,6 +137,49 @@ def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=Non
     )
 
 
+def _build_query_service_with_cache(
+    vector_hits,
+    keyword_hits,
+    rewrite_handler,
+    answer_handler,
+    *,
+    rerank_provider=None,
+    context_assembler=None,
+    cache_adapter=None,
+):
+    rewrite_transport = httpx.MockTransport(rewrite_handler)
+    answer_transport = httpx.MockTransport(answer_handler)
+    rewrite_client = DeepSeekClient(api_key="test-key", transport=rewrite_transport)
+    answer_client = DeepSeekClient(api_key="test-key", transport=answer_transport)
+    vector_store = FakeVectorStore(vector_hits)
+    keyword_retriever = FakeKeywordRetriever(keyword_hits)
+    retrieval_service = HybridRetrievalService(
+        vector_store=vector_store,
+        keyword_retriever=keyword_retriever,
+    )
+    cache_adapter = cache_adapter or InMemoryCacheAdapter()
+    rewrite_service = QueryRewriteService(
+        client=rewrite_client,
+        enabled=True,
+        model="rewrite-test-model",
+        cache_adapter=cache_adapter,
+    )
+    return (
+        RagQueryService(
+            retrieval_service=retrieval_service,
+            context_assembler=context_assembler,
+            client=answer_client,
+            rewrite_service=rewrite_service,
+            rerank_provider=rerank_provider,
+            cache_adapter=cache_adapter,
+        ),
+        vector_store,
+        keyword_retriever,
+        rewrite_service,
+        cache_adapter,
+    )
+
+
 def _build_test_client(
     session: Session,
     auth_service: AuthService,
@@ -163,6 +209,14 @@ def _create_user(session: Session, auth_service: AuthService, *, email: str, pas
     )
 
 
+class FakeCollectionStore:
+    def __init__(self, names: list[str]) -> None:
+        self.names = list(names)
+
+    def list_collections(self):
+        return list(self.names)
+
+
 def test_rag_query_requires_authentication(tmp_path) -> None:
     session = _create_session(tmp_path, "rag-query-auth.sqlite3")
     auth_service = AuthService()
@@ -190,6 +244,35 @@ def test_rag_query_requires_authentication(tmp_path) -> None:
     assert response.status_code == 401
     assert response.json()["success"] is False
     assert response.json()["error"]["code"] == "AUTHENTICATION_ERROR"
+
+
+def test_rag_collections_endpoint_returns_collection_names(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-collections.sqlite3")
+    auth_service = AuthService()
+    store = FakeCollectionStore(["portfolio_knowledge", "another_collection"])
+
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
+        [],
+        [],
+        lambda request: httpx.Response(200, json={}),
+    )
+    client = _build_test_client(session, auth_service, service)
+    app.dependency_overrides[get_chroma_rag_store] = lambda: store
+
+    try:
+        response = client.get("/api/v1/rag/collections")
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "success": True,
+        "data": {
+            "collections": ["portfolio_knowledge", "another_collection"],
+        },
+        "error": None,
+    }
 
 
 def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
@@ -230,6 +313,322 @@ def test_rag_query_rejects_users_without_knowledge_permission(tmp_path) -> None:
     assert response.status_code == 403
     assert response.json()["success"] is False
     assert response.json()["error"]["message"] == "knowledge.query permission required"
+
+
+def test_rag_query_returns_raw_retrieval_sources_and_debug_citations_without_adjacent_chunks(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-query-raw-sources.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    user = _create_user(session, auth_service, email="admin@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, user.id, "user")
+    rbac_service.add_user_to_workspace(session, user.id, defaults.default_workspace.slug)
+
+    def rewrite_handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "{\"original_question\":\"What is the project about?\",\"rewritten_queries\":[\"project summary\"]}",
+                        }
+                    }
+                ]
+            },
+        )
+
+    def answer_handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "The project is about retrieval and citations.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    primary_hit = SimpleNamespace(
+        doc_id="doc-alpha",
+        chunk_id="doc-alpha-chunk-0001",
+        title="Alpha Notes",
+        page_number=3,
+        chunk_index=1,
+        text="Alpha project notes explain the workflow.",
+        score=0.91,
+        start_char=0,
+        end_char=40,
+        metadata={
+            "doc_id": "doc-alpha",
+            "chunk_id": "doc-alpha-chunk-0001",
+            "title": "Alpha Notes",
+            "page_number": 3,
+            "chunk_index": 1,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "owner_user_id": user.id,
+            "content_hash": "hash-alpha",
+            "lifecycle_version": 4,
+            "start_char": 0,
+            "end_char": 40,
+        },
+    )
+    adjacent_hit = SimpleNamespace(
+        doc_id="doc-alpha",
+        chunk_id="doc-alpha-chunk-0002",
+        title="Alpha Notes",
+        page_number=3,
+        chunk_index=2,
+        text="Adjacent chunk that should help the prompt but not the citation list.",
+        score=0.64,
+        start_char=41,
+        end_char=100,
+        metadata={
+            "doc_id": "doc-alpha",
+            "chunk_id": "doc-alpha-chunk-0002",
+            "title": "Alpha Notes",
+            "page_number": 3,
+            "chunk_index": 2,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "owner_user_id": user.id,
+            "content_hash": "hash-alpha",
+            "lifecycle_version": 4,
+            "start_char": 41,
+            "end_char": 100,
+        },
+    )
+    context_assembler = FakeContextAssembler(
+        ContextAssemblyResult(
+            context_text="PRIMARY AND ADJACENT CONTEXT",
+            selected_sources=[
+                HybridRetrievalHit(
+                    doc_id=primary_hit.doc_id,
+                    chunk_id=primary_hit.chunk_id,
+                    title=primary_hit.title,
+                    page_number=primary_hit.page_number,
+                    chunk_index=primary_hit.chunk_index,
+                    text=primary_hit.text,
+                    score=primary_hit.score,
+                    start_char=primary_hit.start_char,
+                    end_char=primary_hit.end_char,
+                    metadata=dict(primary_hit.metadata),
+                    rerank_score=0.88,
+                    route_scores={"vector": 0.91, "keyword": 0.73},
+                ),
+                HybridRetrievalHit(
+                    doc_id=adjacent_hit.doc_id,
+                    chunk_id=adjacent_hit.chunk_id,
+                    title=adjacent_hit.title,
+                    page_number=adjacent_hit.page_number,
+                    chunk_index=adjacent_hit.chunk_index,
+                    text=adjacent_hit.text,
+                    score=adjacent_hit.score,
+                    start_char=adjacent_hit.start_char,
+                    end_char=adjacent_hit.end_char,
+                    metadata=dict(adjacent_hit.metadata),
+                    rerank_score=None,
+                    route_scores={},
+                ),
+            ],
+            total_characters=len("PRIMARY AND ADJACENT CONTEXT"),
+            truncated=False,
+        )
+    )
+    rerank_provider = FakeRerankProvider({"Alpha project notes explain the workflow.": 0.88})
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service_with_cache(
+        [primary_hit],
+        [primary_hit],
+        rewrite_handler,
+        answer_handler,
+        rerank_provider=rerank_provider,
+        context_assembler=context_assembler,
+    )
+    client = _build_test_client(session, auth_service, service, rbac_service)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "What is the project about?",
+                "collection": "portfolio_knowledge",
+                "top_k": 1,
+                "include_debug": True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["cache"] == {
+        "rewrite_hit": False,
+        "retrieval_trace_hit": False,
+        "answer_hit": False,
+    }
+    assert [source["chunk_id"] for source in body["sources"]] == ["doc-alpha-chunk-0001"]
+    assert [citation["chunk_id"] for citation in body["debug"]["citations"]] == ["doc-alpha-chunk-0001"]
+    assert [item["chunk_id"] for item in body["debug"]["selected_context"]] == [
+        "doc-alpha-chunk-0001",
+        "doc-alpha-chunk-0002",
+    ]
+
+
+def test_rag_query_exposes_cache_hits_after_repeated_non_debug_queries(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-query-cache-hits.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    user = _create_user(session, auth_service, email="cache@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, user.id, "user")
+    rbac_service.add_user_to_workspace(session, user.id, defaults.default_workspace.slug)
+
+    rewrite_calls: list[str] = []
+    answer_calls: list[str] = []
+
+    def rewrite_handler(request: httpx.Request) -> httpx.Response:
+        rewrite_calls.append(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "{\"original_question\":\"What is cached?\",\"rewritten_queries\":[\"cached answer\"]}",
+                        }
+                    }
+                ]
+            },
+        )
+
+    def answer_handler(request: httpx.Request) -> httpx.Response:
+        answer_calls.append(request.content.decode("utf-8"))
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Cached answer response.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    cached_hit = SimpleNamespace(
+        doc_id="doc-cache",
+        chunk_id="doc-cache-chunk-0001",
+        title="Cache Notes",
+        page_number=1,
+        chunk_index=1,
+        text="Cache-aware retrieval chunk.",
+        score=0.87,
+        start_char=0,
+        end_char=28,
+        metadata={
+            "doc_id": "doc-cache",
+            "chunk_id": "doc-cache-chunk-0001",
+            "title": "Cache Notes",
+            "page_number": 1,
+            "chunk_index": 1,
+            "workspace_id": defaults.default_workspace.id,
+            "permission_scope": "workspace",
+            "start_char": 0,
+            "end_char": 28,
+        },
+    )
+    context_assembler = FakeContextAssembler(
+        ContextAssemblyResult(
+            context_text="CACHE CONTEXT",
+            selected_sources=[
+                HybridRetrievalHit(
+                    doc_id=cached_hit.doc_id,
+                    chunk_id=cached_hit.chunk_id,
+                    title=cached_hit.title,
+                    page_number=cached_hit.page_number,
+                    chunk_index=cached_hit.chunk_index,
+                    text=cached_hit.text,
+                    score=cached_hit.score,
+                    start_char=cached_hit.start_char,
+                    end_char=cached_hit.end_char,
+                    metadata=dict(cached_hit.metadata),
+                    rerank_score=None,
+                    route_scores={"vector": 0.87},
+                )
+            ],
+            total_characters=len("CACHE CONTEXT"),
+            truncated=False,
+        )
+    )
+    cache_adapter = InMemoryCacheAdapter()
+    service, _vector_store, _keyword_retriever, _rewrite_service, _cache_adapter = _build_query_service_with_cache(
+        [cached_hit],
+        [cached_hit],
+        rewrite_handler,
+        answer_handler,
+        context_assembler=context_assembler,
+        cache_adapter=cache_adapter,
+    )
+    client = _build_test_client(session, auth_service, service, rbac_service)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "cache@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        first_response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "What is cached?",
+                "collection": "portfolio_knowledge",
+                "top_k": 1,
+            },
+        )
+        second_response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "What is cached?",
+                "collection": "portfolio_knowledge",
+                "top_k": 1,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert first_response.status_code == 200
+    assert first_response.json()["data"]["cache"] == {
+        "rewrite_hit": False,
+        "retrieval_trace_hit": False,
+        "answer_hit": False,
+    }
+    assert second_response.status_code == 200
+    assert second_response.json()["data"]["cache"] == {
+        "rewrite_hit": True,
+        "retrieval_trace_hit": True,
+        "answer_hit": True,
+    }
+    assert len(rewrite_calls) == 1
+    assert len(answer_calls) == 1
 
 
 def test_rag_query_returns_answer_and_richer_sources(tmp_path) -> None:
