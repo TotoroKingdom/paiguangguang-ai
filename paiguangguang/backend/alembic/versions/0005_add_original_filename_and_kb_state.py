@@ -1,6 +1,6 @@
 """add original filename and kb state
 
-Revision ID: 0005_add_original_filename_and_kb_state
+Revision ID: 0005_add_orig_filename_kb_state
 Revises: 0004_create_rag_lifecycle_tables
 Create Date: 2026-07-07 00:00:00.000000
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision = "0005_add_original_filename_and_kb_state"
+revision = "0005_add_orig_filename_kb_state"
 down_revision = "0004_create_rag_lifecycle_tables"
 branch_labels = None
 depends_on = None
