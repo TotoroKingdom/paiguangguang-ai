@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import REGCONFIG
+
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -500,8 +503,10 @@ class RagDocumentRepository:
         if dialect_name == "postgresql":
             query_terms = _keyword_terms(query_text)
             if query_terms:
-                tsvector = func.to_tsvector(literal("simple"), RagChunkModel.text)
-                tsquery = func.websearch_to_tsquery(literal("simple"), query_text)
+                # tsvector = func.to_tsvector(literal("simple"), RagChunkModel.text)
+                # tsquery = func.websearch_to_tsquery(literal("simple"), query_text)
+                tsvector = func.to_tsvector(cast(literal("simple"), REGCONFIG), RagChunkModel.text)
+                tsquery = func.websearch_to_tsquery(cast(literal("simple"), REGCONFIG), query_text)
                 match_conditions = [tsvector.op("@@")(tsquery)]
                 for term in query_terms:
                     if _needs_exact_fallback(term):
