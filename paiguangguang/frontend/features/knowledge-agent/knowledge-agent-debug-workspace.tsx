@@ -685,7 +685,7 @@ export function KnowledgeAgentDebugWorkspace() {
                       <h2 className="mt-2 text-2xl font-semibold text-ink">Latency and token usage</h2>
                     </div>
                     <span className="rounded-full border border-ink/10 bg-paper px-3 py-1 text-xs font-semibold text-ink/65">
-                      {result.debug ? formatCount(result.debug.latency_ms) : } ms
+                      {result.debug ? formatCount(result.debug.latency_ms) : "0"} ms
                     </span>
                   </div>
 
