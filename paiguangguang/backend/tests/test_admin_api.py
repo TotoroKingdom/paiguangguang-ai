@@ -162,19 +162,25 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
             "knowledge.query",
         ]
 
-        disabled_user_response = client.delete(
-            f"/api/v1/admin/users/{created_user['id']}",
-            headers=headers,
-        )
-        assert disabled_user_response.status_code == 200
-        assert disabled_user_response.json()["data"]["is_active"] is False
-
         activated_user_response = client.post(
             f"/api/v1/admin/users/{created_user['id']}/activate",
             headers=headers,
         )
         assert activated_user_response.status_code == 200
         assert activated_user_response.json()["data"]["is_active"] is True
+
+        deleted_user_response = client.delete(
+            f"/api/v1/admin/users/{created_user['id']}",
+            headers=headers,
+        )
+        assert deleted_user_response.status_code == 200
+        assert deleted_user_response.json()["data"]["email"] == "editor@example.com"
+
+        deleted_user_detail_response = client.get(
+            f"/api/v1/admin/users/{created_user['id']}",
+            headers=headers,
+        )
+        assert deleted_user_detail_response.status_code == 404
 
         roles_response = client.get(
             "/api/v1/admin/roles?page=1&page_size=1&sort_by=name&sort_order=asc",

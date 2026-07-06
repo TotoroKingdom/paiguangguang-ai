@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { ApiError } from "@/lib/api";
 import {
+  activateAdminUser,
   createAdminPermission,
   createAdminRole,
   createAdminUser,
@@ -13,7 +14,7 @@ import {
   deleteAdminPermission,
   deleteAdminRole,
   deleteAdminWorkspace,
-  disableAdminUser,
+  deleteAdminUser,
   getAdminPermission,
   getAdminRole,
   getAdminUser,
@@ -28,7 +29,9 @@ import {
   updateAdminWorkspace,
 } from "@/lib/admin";
 import { AdminDataTable, type AdminDataTableColumn } from "@/features/admin/admin-data-table";
+import { AdminEntityModal } from "@/features/admin/admin-entity-modal";
 import { AdminPagination } from "@/features/admin/admin-pagination";
+import { AdminRelationshipTree } from "@/features/admin/admin-relationship-tree";
 import type {
   AdminPermissionData,
   AdminRoleData,
@@ -50,17 +53,6 @@ function formatDateTime(value: string | null) {
 
 function formatError(error: unknown, fallback: string) {
   return error instanceof ApiError ? error.message : fallback;
-}
-
-function splitCsv(value: string) {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function joinCsv(value: string[] | null | undefined) {
-  return (value ?? []).join(", ");
 }
 
 function SectionFrame({
@@ -198,26 +190,29 @@ export function UserManager() {
   const [users, setUsers] = useState<AdminUserData[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedUser, setSelectedUser] = useState<AdminUserData | null>(null);
-  const [actionState, setActionState] = useState<"create" | "update" | "disable" | null>(null);
+  const [modal, setModal] = useState<"view" | "create" | "edit" | "delete" | "activate" | null>(null);
+  const [actionState, setActionState] = useState<"create" | "update" | "delete" | "activate" | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [sortBy, setSortBy] = useState("email");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [total, setTotal] = useState(0);
+  const [roleOptions, setRoleOptions] = useState<AdminRoleData[]>([]);
+  const [workspaceOptions, setWorkspaceOptions] = useState<AdminWorkspaceData[]>([]);
   const [createForm, setCreateForm] = useState({
     email: "",
     displayName: "",
     password: "",
     isActive: true,
-    roles: "",
-    workspaceSlugs: "",
+    roles: [] as string[],
+    workspaceSlugs: [] as string[],
   });
   const [editForm, setEditForm] = useState({
     displayName: "",
     password: "",
     isActive: true,
-    roles: "",
-    workspaceSlugs: "",
+    roles: [] as string[],
+    workspaceSlugs: [] as string[],
   });
 
   async function loadUsers(preferredId?: string | null) {
@@ -245,8 +240,41 @@ export function UserManager() {
   }
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadOptions() {
+      try {
+        const [nextRoles, nextWorkspaces] = await Promise.all([
+          listAdminRoles({ page: 1, pageSize: 100, sortBy: "name", sortOrder: "asc" }),
+          listAdminWorkspaces({ page: 1, pageSize: 100, sortBy: "slug", sortOrder: "asc" }),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        setRoleOptions(nextRoles);
+        setWorkspaceOptions(nextWorkspaces);
+      } catch {
+        if (!cancelled) {
+          setRoleOptions([]);
+          setWorkspaceOptions([]);
+        }
+      }
+    }
+
+    void loadOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     void loadUsers();
   }, [page, pageSize, sortBy, sortOrder]);
+
+  function mapWorkspaceIdsToSlugs(workspaceIds: string[]) {
+    const lookup = new Map(workspaceOptions.map((workspace) => [workspace.id, workspace.slug]));
+    return workspaceIds.map((workspaceId) => lookup.get(workspaceId) ?? workspaceId);
+  }
 
   useEffect(() => {
     if (!selectedUserId) {
@@ -267,8 +295,8 @@ export function UserManager() {
           displayName: user.display_name,
           password: "",
           isActive: user.is_active,
-          roles: joinCsv(user.roles),
-          workspaceSlugs: joinCsv(user.workspace_ids),
+          roles: user.roles,
+          workspaceSlugs: mapWorkspaceIdsToSlugs(user.workspace_ids),
         });
       } catch (caughtError) {
         if (!cancelled) {
@@ -281,9 +309,12 @@ export function UserManager() {
     return () => {
       cancelled = true;
     };
-  }, [selectedUserId]);
+  }, [selectedUserId, workspaceOptions]);
 
   const selectedUserSummary = selectedUser ?? users.find((user) => user.id === selectedUserId) ?? null;
+  const selectedUserWorkspaceSlugs = selectedUserSummary ? mapWorkspaceIdsToSlugs(selectedUserSummary.workspace_ids) : [];
+  const roleNames = roleOptions.map((role) => role.name);
+  const workspaceSlugs = workspaceOptions.map((workspace) => workspace.slug);
 
   const userColumns: AdminDataTableColumn<AdminUserData>[] = [
     {
@@ -349,6 +380,51 @@ export function UserManager() {
     setPageSize(nextPageSize);
   }
 
+  function openCreateModal() {
+    setModal("create");
+  }
+
+  function openViewModal(userId?: string) {
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+    setModal("view");
+  }
+
+  function openEditModal(userId?: string) {
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+    if (selectedUserSummary) {
+      setEditForm({
+        displayName: selectedUserSummary.display_name,
+        password: "",
+        isActive: selectedUserSummary.is_active,
+        roles: selectedUserSummary.roles,
+        workspaceSlugs: mapWorkspaceIdsToSlugs(selectedUserSummary.workspace_ids),
+      });
+    }
+    setModal("edit");
+  }
+
+  function openDeleteModal(userId?: string) {
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+    setModal("delete");
+  }
+
+  function openActivateModal(userId?: string) {
+    if (userId) {
+      setSelectedUserId(userId);
+    }
+    setModal("activate");
+  }
+
+  function closeModal() {
+    setModal(null);
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionState("create");
@@ -359,10 +435,11 @@ export function UserManager() {
         display_name: createForm.displayName,
         password: createForm.password,
         is_active: createForm.isActive,
-        roles: splitCsv(createForm.roles),
-        workspace_slugs: splitCsv(createForm.workspaceSlugs),
+        roles: createForm.roles,
+        workspace_slugs: createForm.workspaceSlugs,
       });
-      setCreateForm({ email: "", displayName: "", password: "", isActive: true, roles: "", workspaceSlugs: "" });
+      setCreateForm({ email: "", displayName: "", password: "", isActive: true, roles: [], workspaceSlugs: [] });
+      closeModal();
       await loadUsers();
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to create user."));
@@ -383,9 +460,10 @@ export function UserManager() {
         display_name: editForm.displayName,
         password: editForm.password || null,
         is_active: editForm.isActive,
-        roles: splitCsv(editForm.roles),
-        workspace_slugs: splitCsv(editForm.workspaceSlugs),
+        roles: editForm.roles,
+        workspace_slugs: editForm.workspaceSlugs,
       });
+      closeModal();
       await loadUsers(selectedUserSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to update user."));
@@ -394,20 +472,35 @@ export function UserManager() {
     }
   }
 
-  async function handleDisable() {
+  async function handleDelete() {
     if (!selectedUserSummary) {
       return;
     }
-    if (!window.confirm(`Disable ${selectedUserSummary.email}?`)) {
-      return;
-    }
-    setActionState("disable");
+    setActionState("delete");
     setError(null);
     try {
-      await disableAdminUser(selectedUserSummary.id);
+      await deleteAdminUser(selectedUserSummary.id);
+      closeModal();
       await loadUsers(selectedUserSummary.id);
     } catch (caughtError) {
-      setError(formatError(caughtError, "Unable to disable user."));
+      setError(formatError(caughtError, "Unable to delete user."));
+    } finally {
+      setActionState(null);
+    }
+  }
+
+  async function handleActivate() {
+    if (!selectedUserSummary) {
+      return;
+    }
+    setActionState("activate");
+    setError(null);
+    try {
+      await activateAdminUser(selectedUserSummary.id);
+      closeModal();
+      await loadUsers(selectedUserSummary.id);
+    } catch (caughtError) {
+      setError(formatError(caughtError, "Unable to activate user."));
     } finally {
       setActionState(null);
     }
@@ -446,67 +539,228 @@ export function UserManager() {
               onPageSizeChange={handleUserPageSizeChange}
             />
           ) : null}
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="w-full border border-tide/40 bg-tide px-4 py-3 text-sm font-semibold text-paper transition hover:opacity-95"
+          >
+            Create user
+          </button>
         </div>
         <div className="space-y-4">
-          <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
-            <h4 className="text-base font-semibold text-ink">Create user</h4>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <InlineField label="Email" value={createForm.email} onChange={(email) => setCreateForm((prev) => ({ ...prev, email }))} type="email" />
-              <InlineField label="Display name" value={createForm.displayName} onChange={(displayName) => setCreateForm((prev) => ({ ...prev, displayName }))} />
-              <InlineField label="Password" value={createForm.password} onChange={(password) => setCreateForm((prev) => ({ ...prev, password }))} type="password" />
-              <CheckboxField label="Active" checked={createForm.isActive} onChange={(isActive) => setCreateForm((prev) => ({ ...prev, isActive }))} />
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <InlineField label="Roles" value={createForm.roles} onChange={(roles) => setCreateForm((prev) => ({ ...prev, roles }))} placeholder="user, document_admin" />
-              <InlineField label="Workspace slugs" value={createForm.workspaceSlugs} onChange={(workspaceSlugs) => setCreateForm((prev) => ({ ...prev, workspaceSlugs }))} placeholder="default, docs" />
-            </div>
-            <button
-              type="submit"
-              disabled={actionState === "create"}
-              className="mt-4 border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60"
-            >
-              {actionState === "create" ? "Creating..." : "Create user"}
-            </button>
-          </form>
-
           {selectedUserSummary ? (
-            <form onSubmit={(event) => void handleUpdate(event)} className="border border-ink/10 bg-white p-4">
+            <section className="border border-ink/10 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-base font-semibold text-ink">Edit user</h4>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedUserSummary.id}</p>
+                  <h4 className="text-base font-semibold text-ink">Selected user</h4>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedUserSummary.email}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleDisable()}
-                  className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink"
-                >
-                  {actionState === "disable" ? "Disabling..." : "Disable"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    View
+                  </button>
+                  <button type="button" onClick={() => openEditModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => openDeleteModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Delete
+                  </button>
+                  {!selectedUserSummary.is_active ? (
+                    <button type="button" onClick={() => openActivateModal()} className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                      Activate
+                    </button>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InlineField label="Display name" value={editForm.displayName} onChange={(displayName) => setEditForm((prev) => ({ ...prev, displayName }))} />
-                <InlineField label="Password" value={editForm.password} onChange={(password) => setEditForm((prev) => ({ ...prev, password }))} type="password" placeholder="Leave blank to keep current password" />
-                <CheckboxField label="Active" checked={editForm.isActive} onChange={(isActive) => setEditForm((prev) => ({ ...prev, isActive }))} />
-              </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InlineField label="Roles" value={editForm.roles} onChange={(roles) => setEditForm((prev) => ({ ...prev, roles }))} placeholder="user, document_admin" />
-                <InlineField label="Workspace slugs" value={editForm.workspaceSlugs} onChange={(workspaceSlugs) => setEditForm((prev) => ({ ...prev, workspaceSlugs }))} placeholder="default" />
+              <div className="mt-4 grid gap-3 text-sm text-ink/75 md:grid-cols-2">
+                <div>
+                  <span className="font-semibold text-ink">Display name:</span> {selectedUserSummary.display_name}
+                </div>
+                <div>
+                  <span className="font-semibold text-ink">Status:</span> {selectedUserSummary.is_active ? "Active" : "Inactive"}
+                </div>
+                <div>
+                  <span className="font-semibold text-ink">Roles:</span> {selectedUserSummary.roles.join(", ") || "None"}
+                </div>
+                <div>
+                  <span className="font-semibold text-ink">Workspaces:</span> {selectedUserWorkspaceSlugs.join(", ") || "None"}
+                </div>
               </div>
               <div className="mt-4 text-xs leading-6 text-ink/55">
                 Created {formatDateTime(selectedUserSummary.created_at)}. Updated {formatDateTime(selectedUserSummary.updated_at)}.
               </div>
-              <button
-                type="submit"
-                disabled={actionState === "update"}
-                className="mt-4 border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60"
-              >
-                {actionState === "update" ? "Saving..." : "Save user"}
-              </button>
-            </form>
+            </section>
           ) : null}
         </div>
       </div>
+
+      <AdminEntityModal
+        open={modal === "create"}
+        title="Create user"
+        description="Create a new user, assign roles, and attach workspace memberships."
+        onClose={closeModal}
+        footer={null}
+      >
+        <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Email" value={createForm.email} onChange={(email) => setCreateForm((prev) => ({ ...prev, email }))} type="email" />
+            <InlineField label="Display name" value={createForm.displayName} onChange={(displayName) => setCreateForm((prev) => ({ ...prev, displayName }))} />
+            <InlineField label="Password" value={createForm.password} onChange={(password) => setCreateForm((prev) => ({ ...prev, password }))} type="password" />
+            <CheckboxField label="Active" checked={createForm.isActive} onChange={(isActive) => setCreateForm((prev) => ({ ...prev, isActive }))} />
+          </div>
+          <AdminRelationshipTree
+            title="Roles"
+            description="Select the role bundles assigned to this user."
+            values={roleNames}
+            selectedValues={createForm.roles}
+            onChange={(roles) => setCreateForm((prev) => ({ ...prev, roles }))}
+            delimiter={null}
+            emptyMessage="No roles available."
+          />
+          <AdminRelationshipTree
+            title="Workspaces"
+            description="Select the workspaces this user can access."
+            values={workspaceSlugs}
+            selectedValues={createForm.workspaceSlugs}
+            onChange={(workspaceSlugs) => setCreateForm((prev) => ({ ...prev, workspaceSlugs }))}
+            delimiter="/"
+            emptyMessage="No workspaces available."
+          />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "create"} className="border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "create" ? "Creating..." : "Create user"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "view"}
+        title="View user"
+        description="Read-only details for the selected user."
+        onClose={closeModal}
+      >
+        {selectedUserSummary ? (
+          <div className="space-y-4 text-sm text-ink/75">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><span className="font-semibold text-ink">Email:</span> {selectedUserSummary.email}</div>
+              <div><span className="font-semibold text-ink">Display name:</span> {selectedUserSummary.display_name}</div>
+              <div><span className="font-semibold text-ink">Status:</span> {selectedUserSummary.is_active ? "Active" : "Inactive"}</div>
+              <div><span className="font-semibold text-ink">User ID:</span> {selectedUserSummary.id}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-ink">Roles</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedUserSummary.roles.length > 0 ? selectedUserSummary.roles.map((role) => (
+                  <span key={role} className="border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">{role}</span>
+                )) : <span className="text-ink/55">None</span>}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-ink">Effective permissions</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedUserSummary.effective_permissions.length > 0 ? selectedUserSummary.effective_permissions.map((permission) => (
+                  <span key={permission} className="border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">{permission}</span>
+                )) : <span className="text-ink/55">None</span>}
+              </div>
+            </div>
+            <div>
+              <div className="font-semibold text-ink">Workspaces</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedUserWorkspaceSlugs.length > 0 ? selectedUserWorkspaceSlugs.map((workspaceSlug) => (
+                  <span key={workspaceSlug} className="border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">{workspaceSlug}</span>
+                )) : <span className="text-ink/55">None</span>}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "edit"}
+        title="Edit user"
+        description="Update the user's profile, active state, roles, and workspace memberships."
+        onClose={closeModal}
+      >
+        <form onSubmit={(event) => void handleUpdate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Display name" value={editForm.displayName} onChange={(displayName) => setEditForm((prev) => ({ ...prev, displayName }))} />
+            <InlineField label="Password" value={editForm.password} onChange={(password) => setEditForm((prev) => ({ ...prev, password }))} type="password" placeholder="Leave blank to keep current password" />
+            <CheckboxField label="Active" checked={editForm.isActive} onChange={(isActive) => setEditForm((prev) => ({ ...prev, isActive }))} />
+          </div>
+          <AdminRelationshipTree
+            title="Roles"
+            description="Adjust the role bundles assigned to this user."
+            values={roleNames}
+            selectedValues={editForm.roles}
+            onChange={(roles) => setEditForm((prev) => ({ ...prev, roles }))}
+            delimiter={null}
+            emptyMessage="No roles available."
+          />
+          <AdminRelationshipTree
+            title="Workspaces"
+            description="Adjust the workspace memberships assigned to this user."
+            values={workspaceSlugs}
+            selectedValues={editForm.workspaceSlugs}
+            onChange={(workspaceSlugs) => setEditForm((prev) => ({ ...prev, workspaceSlugs }))}
+            delimiter="/"
+            emptyMessage="No workspaces available."
+          />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "update"} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
+              {actionState === "update" ? "Saving..." : "Save user"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "delete"}
+        title="Delete user"
+        description="This will permanently remove the user and clean the user-role and workspace membership records."
+        onClose={closeModal}
+      >
+        <div className="space-y-4 text-sm text-ink/75">
+          <p>
+            Delete <span className="font-semibold text-ink">{selectedUserSummary?.email}</span> and all related assignments?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleDelete()} disabled={actionState === "delete"} className="border border-clay/30 bg-clay px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "delete" ? "Deleting..." : "Delete user"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "activate"}
+        title="Activate user"
+        description="Restore the user's active status without changing their assignments."
+        onClose={closeModal}
+      >
+        <div className="space-y-4 text-sm text-ink/75">
+          <p>
+            Activate <span className="font-semibold text-ink">{selectedUserSummary?.email}</span>?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleActivate()} disabled={actionState === "activate"} className="border border-emerald-200 bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+              {actionState === "activate" ? "Activating..." : "Activate user"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </AdminEntityModal>
     </SectionFrame>
   );
 }
@@ -517,14 +771,16 @@ export function RoleManager() {
   const [roles, setRoles] = useState<AdminRoleData[]>([]);
   const [selectedRoleId, setSelectedRoleId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<AdminRoleData | null>(null);
+  const [modal, setModal] = useState<"view" | "create" | "edit" | "delete" | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
   const [sortBy, setSortBy] = useState("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [total, setTotal] = useState(0);
-  const [createForm, setCreateForm] = useState({ name: "", description: "", permissions: "" });
-  const [editForm, setEditForm] = useState({ name: "", description: "", permissions: "" });
+  const [permissionOptions, setPermissionOptions] = useState<AdminPermissionData[]>([]);
+  const [createForm, setCreateForm] = useState({ name: "", description: "", permissions: [] as string[] });
+  const [editForm, setEditForm] = useState({ name: "", description: "", permissions: [] as string[] });
 
   async function loadRoles(preferredId?: string | null) {
     setState("loading");
@@ -554,6 +810,28 @@ export function RoleManager() {
   }, [page, pageSize, sortBy, sortOrder]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadOptions() {
+      try {
+        const nextPermissions = await listAdminPermissions({ page: 1, pageSize: 100, sortBy: "name", sortOrder: "asc" });
+        if (!cancelled) {
+          setPermissionOptions(nextPermissions);
+        }
+      } catch {
+        if (!cancelled) {
+          setPermissionOptions([]);
+        }
+      }
+    }
+
+    void loadOptions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedRoleId) {
       setSelectedRole(null);
       return;
@@ -571,7 +849,7 @@ export function RoleManager() {
         setEditForm({
           name: role.name,
           description: role.description ?? "",
-          permissions: joinCsv(role.permissions),
+          permissions: role.permissions,
         });
       } catch (caughtError) {
         if (!cancelled) {
@@ -587,6 +865,7 @@ export function RoleManager() {
   }, [selectedRoleId]);
 
   const selectedRoleSummary = selectedRole ?? roles.find((role) => role.id === selectedRoleId) ?? null;
+  const permissionNames = permissionOptions.map((permission) => permission.name);
 
   const roleColumns: AdminDataTableColumn<AdminRoleData>[] = [
     {
@@ -634,6 +913,42 @@ export function RoleManager() {
     setPageSize(nextPageSize);
   }
 
+  function openCreateModal() {
+    setModal("create");
+  }
+
+  function openViewModal(roleId?: string) {
+    if (roleId) {
+      setSelectedRoleId(roleId);
+    }
+    setModal("view");
+  }
+
+  function openEditModal(roleId?: string) {
+    if (roleId) {
+      setSelectedRoleId(roleId);
+    }
+    if (selectedRoleSummary) {
+      setEditForm({
+        name: selectedRoleSummary.name,
+        description: selectedRoleSummary.description ?? "",
+        permissions: selectedRoleSummary.permissions,
+      });
+    }
+    setModal("edit");
+  }
+
+  function openDeleteModal(roleId?: string) {
+    if (roleId) {
+      setSelectedRoleId(roleId);
+    }
+    setModal("delete");
+  }
+
+  function closeModal() {
+    setModal(null);
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionState("create");
@@ -642,9 +957,10 @@ export function RoleManager() {
       await createAdminRole({
         name: createForm.name,
         description: createForm.description || null,
-        permissions: splitCsv(createForm.permissions),
+        permissions: createForm.permissions,
       });
-      setCreateForm({ name: "", description: "", permissions: "" });
+      setCreateForm({ name: "", description: "", permissions: [] });
+      closeModal();
       await loadRoles();
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to create role."));
@@ -664,8 +980,9 @@ export function RoleManager() {
       await updateAdminRole(selectedRoleSummary.id, {
         name: editForm.name,
         description: editForm.description || null,
-        permissions: splitCsv(editForm.permissions),
+        permissions: editForm.permissions,
       });
+      closeModal();
       await loadRoles(selectedRoleSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to update role."));
@@ -678,13 +995,11 @@ export function RoleManager() {
     if (!selectedRoleSummary) {
       return;
     }
-    if (!window.confirm(`Delete role ${selectedRoleSummary.name}?`)) {
-      return;
-    }
     setActionState("delete");
     setError(null);
     try {
       await deleteAdminRole(selectedRoleSummary.id);
+      closeModal();
       await loadRoles(selectedRoleSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to delete role."));
@@ -726,50 +1041,154 @@ export function RoleManager() {
               onPageSizeChange={handleRolePageSizeChange}
             />
           ) : null}
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="w-full border border-tide/40 bg-tide px-4 py-3 text-sm font-semibold text-paper transition hover:opacity-95"
+          >
+            Create role
+          </button>
         </div>
         <div className="space-y-4">
-          <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
-            <h4 className="text-base font-semibold text-ink">Create role</h4>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
-              <TextAreaField label="Description" value={createForm.description} onChange={(description) => setCreateForm((prev) => ({ ...prev, description }))} />
-            </div>
-            <div className="mt-4">
-              <InlineField label="Permissions" value={createForm.permissions} onChange={(permissions) => setCreateForm((prev) => ({ ...prev, permissions }))} placeholder="document.view, document.delete" />
-            </div>
-            <button type="submit" disabled={actionState === "create"} className="mt-4 border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
-              {actionState === "create" ? "Creating..." : "Create role"}
-            </button>
-          </form>
-
           {selectedRoleSummary ? (
-            <form onSubmit={(event) => void handleUpdate(event)} className="border border-ink/10 bg-white p-4">
+            <section className="border border-ink/10 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-base font-semibold text-ink">Edit role</h4>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedRoleSummary.id}</p>
+                  <h4 className="text-base font-semibold text-ink">Selected role</h4>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedRoleSummary.name}</p>
                 </div>
-                <button type="button" onClick={() => void handleDelete()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
-                  {actionState === "delete" ? "Deleting..." : "Delete"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    View
+                  </button>
+                  <button type="button" onClick={() => openEditModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => openDeleteModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
-                <TextAreaField label="Description" value={editForm.description} onChange={(description) => setEditForm((prev) => ({ ...prev, description }))} />
-              </div>
-              <div className="mt-4">
-                <InlineField label="Permissions" value={editForm.permissions} onChange={(permissions) => setEditForm((prev) => ({ ...prev, permissions }))} placeholder="document.view, document.reindex" />
+              <div className="mt-4 grid gap-3 text-sm text-ink/75 md:grid-cols-2">
+                <div><span className="font-semibold text-ink">Name:</span> {selectedRoleSummary.name}</div>
+                <div><span className="font-semibold text-ink">Permissions:</span> {selectedRoleSummary.permissions.length}</div>
+                <div className="md:col-span-2"><span className="font-semibold text-ink">Description:</span> {selectedRoleSummary.description ?? "No description"}</div>
               </div>
               <div className="mt-4 text-xs leading-6 text-ink/55">
                 Created {formatDateTime(selectedRoleSummary.created_at)}. Updated {formatDateTime(selectedRoleSummary.updated_at)}.
               </div>
-              <button type="submit" disabled={actionState === "update"} className="mt-4 border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
-                {actionState === "update" ? "Saving..." : "Save role"}
-              </button>
-            </form>
+            </section>
           ) : null}
         </div>
       </div>
+
+      <AdminEntityModal
+        open={modal === "create"}
+        title="Create role"
+        description="Create a role and assign permissions from the relationship tree."
+        onClose={closeModal}
+      >
+        <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
+            <TextAreaField label="Description" value={createForm.description} onChange={(description) => setCreateForm((prev) => ({ ...prev, description }))} />
+          </div>
+          <AdminRelationshipTree
+            title="Permissions"
+            description="Select the permissions bundled into this role."
+            values={permissionNames}
+            selectedValues={createForm.permissions}
+            onChange={(permissions) => setCreateForm((prev) => ({ ...prev, permissions }))}
+            delimiter="."
+            emptyMessage="No permissions available."
+          />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "create"} className="border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "create" ? "Creating..." : "Create role"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "view"}
+        title="View role"
+        description="Read-only details for the selected role."
+        onClose={closeModal}
+      >
+        {selectedRoleSummary ? (
+          <div className="space-y-4 text-sm text-ink/75">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><span className="font-semibold text-ink">Name:</span> {selectedRoleSummary.name}</div>
+              <div><span className="font-semibold text-ink">Role ID:</span> {selectedRoleSummary.id}</div>
+              <div className="md:col-span-2"><span className="font-semibold text-ink">Description:</span> {selectedRoleSummary.description ?? "No description"}</div>
+            </div>
+            <div>
+              <div className="font-semibold text-ink">Permissions</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {selectedRoleSummary.permissions.length > 0 ? selectedRoleSummary.permissions.map((permission) => (
+                  <span key={permission} className="border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">{permission}</span>
+                )) : <span className="text-ink/55">None</span>}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "edit"}
+        title="Edit role"
+        description="Update the role metadata and its permission bundle."
+        onClose={closeModal}
+      >
+        <form onSubmit={(event) => void handleUpdate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
+            <TextAreaField label="Description" value={editForm.description} onChange={(description) => setEditForm((prev) => ({ ...prev, description }))} />
+          </div>
+          <AdminRelationshipTree
+            title="Permissions"
+            description="Adjust the permissions bundled into this role."
+            values={permissionNames}
+            selectedValues={editForm.permissions}
+            onChange={(permissions) => setEditForm((prev) => ({ ...prev, permissions }))}
+            delimiter="."
+            emptyMessage="No permissions available."
+          />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "update"} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
+              {actionState === "update" ? "Saving..." : "Save role"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal
+        open={modal === "delete"}
+        title="Delete role"
+        description="This will remove the role and clean its user-role and role-permission assignments."
+        onClose={closeModal}
+      >
+        <div className="space-y-4 text-sm text-ink/75">
+          <p>
+            Delete <span className="font-semibold text-ink">{selectedRoleSummary?.name}</span>?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleDelete()} disabled={actionState === "delete"} className="border border-clay/30 bg-clay px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "delete" ? "Deleting..." : "Delete role"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </AdminEntityModal>
     </SectionFrame>
   );
 }
@@ -780,6 +1199,7 @@ export function PermissionManager() {
   const [permissions, setPermissions] = useState<AdminPermissionData[]>([]);
   const [selectedPermissionId, setSelectedPermissionId] = useState<string | null>(null);
   const [selectedPermission, setSelectedPermission] = useState<AdminPermissionData | null>(null);
+  const [modal, setModal] = useState<"view" | "create" | "edit" | "delete" | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -894,6 +1314,41 @@ export function PermissionManager() {
     setPageSize(nextPageSize);
   }
 
+  function openCreateModal() {
+    setModal("create");
+  }
+
+  function openViewModal(permissionId?: string) {
+    if (permissionId) {
+      setSelectedPermissionId(permissionId);
+    }
+    setModal("view");
+  }
+
+  function openEditModal(permissionId?: string) {
+    if (permissionId) {
+      setSelectedPermissionId(permissionId);
+    }
+    if (selectedPermissionSummary) {
+      setEditForm({
+        name: selectedPermissionSummary.name,
+        description: selectedPermissionSummary.description ?? "",
+      });
+    }
+    setModal("edit");
+  }
+
+  function openDeleteModal(permissionId?: string) {
+    if (permissionId) {
+      setSelectedPermissionId(permissionId);
+    }
+    setModal("delete");
+  }
+
+  function closeModal() {
+    setModal(null);
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionState("create");
@@ -904,6 +1359,7 @@ export function PermissionManager() {
         description: createForm.description || null,
       });
       setCreateForm({ name: "", description: "" });
+      closeModal();
       await loadPermissions();
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to create permission."));
@@ -924,6 +1380,7 @@ export function PermissionManager() {
         name: editForm.name,
         description: editForm.description || null,
       });
+      closeModal();
       await loadPermissions(selectedPermissionSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to update permission."));
@@ -936,13 +1393,11 @@ export function PermissionManager() {
     if (!selectedPermissionSummary) {
       return;
     }
-    if (!window.confirm(`Delete permission ${selectedPermissionSummary.name}?`)) {
-      return;
-    }
     setActionState("delete");
     setError(null);
     try {
       await deleteAdminPermission(selectedPermissionSummary.id);
+      closeModal();
       await loadPermissions(selectedPermissionSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to delete permission."));
@@ -984,44 +1439,108 @@ export function PermissionManager() {
               onPageSizeChange={handlePageSizeChange}
             />
           ) : null}
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="w-full border border-tide/40 bg-tide px-4 py-3 text-sm font-semibold text-paper transition hover:opacity-95"
+          >
+            Create permission
+          </button>
         </div>
         <div className="space-y-4">
-          <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
-            <h4 className="text-base font-semibold text-ink">Create permission</h4>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
-              <TextAreaField label="Description" value={createForm.description} onChange={(description) => setCreateForm((prev) => ({ ...prev, description }))} />
-            </div>
-            <button type="submit" disabled={actionState === "create"} className="mt-4 border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
-              {actionState === "create" ? "Creating..." : "Create permission"}
-            </button>
-          </form>
-
           {selectedPermissionSummary ? (
-            <form onSubmit={(event) => void handleUpdate(event)} className="border border-ink/10 bg-white p-4">
+            <section className="border border-ink/10 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-base font-semibold text-ink">Edit permission</h4>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedPermissionSummary.id}</p>
+                  <h4 className="text-base font-semibold text-ink">Selected permission</h4>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedPermissionSummary.name}</p>
                 </div>
-                <button type="button" onClick={() => void handleDelete()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
-                  {actionState === "delete" ? "Deleting..." : "Delete"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    View
+                  </button>
+                  <button type="button" onClick={() => openEditModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => openDeleteModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
-                <TextAreaField label="Description" value={editForm.description} onChange={(description) => setEditForm((prev) => ({ ...prev, description }))} />
+              <div className="mt-4 grid gap-3 text-sm text-ink/75 md:grid-cols-2">
+                <div><span className="font-semibold text-ink">Name:</span> {selectedPermissionSummary.name}</div>
+                <div><span className="font-semibold text-ink">Permission ID:</span> {selectedPermissionSummary.id}</div>
+                <div className="md:col-span-2"><span className="font-semibold text-ink">Description:</span> {selectedPermissionSummary.description ?? "No description"}</div>
               </div>
               <div className="mt-4 text-xs leading-6 text-ink/55">
                 Created {formatDateTime(selectedPermissionSummary.created_at)}. Updated {formatDateTime(selectedPermissionSummary.updated_at)}.
               </div>
-              <button type="submit" disabled={actionState === "update"} className="mt-4 border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
-                {actionState === "update" ? "Saving..." : "Save permission"}
-              </button>
-            </form>
+            </section>
           ) : null}
         </div>
       </div>
+
+      <AdminEntityModal open={modal === "create"} title="Create permission" description="Create a new permission definition." onClose={closeModal}>
+        <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
+            <TextAreaField label="Description" value={createForm.description} onChange={(description) => setCreateForm((prev) => ({ ...prev, description }))} />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "create"} className="border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "create" ? "Creating..." : "Create permission"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "view"} title="View permission" description="Read-only details for the selected permission." onClose={closeModal}>
+        {selectedPermissionSummary ? (
+          <div className="space-y-4 text-sm text-ink/75">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><span className="font-semibold text-ink">Name:</span> {selectedPermissionSummary.name}</div>
+              <div><span className="font-semibold text-ink">Permission ID:</span> {selectedPermissionSummary.id}</div>
+              <div className="md:col-span-2"><span className="font-semibold text-ink">Description:</span> {selectedPermissionSummary.description ?? "No description"}</div>
+            </div>
+          </div>
+        ) : null}
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "edit"} title="Edit permission" description="Update the permission name and description." onClose={closeModal}>
+        <form onSubmit={(event) => void handleUpdate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
+            <TextAreaField label="Description" value={editForm.description} onChange={(description) => setEditForm((prev) => ({ ...prev, description }))} />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "update"} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
+              {actionState === "update" ? "Saving..." : "Save permission"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "delete"} title="Delete permission" description="This will remove the permission and clean its role-permission assignments." onClose={closeModal}>
+        <div className="space-y-4 text-sm text-ink/75">
+          <p>
+            Delete <span className="font-semibold text-ink">{selectedPermissionSummary?.name}</span>?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleDelete()} disabled={actionState === "delete"} className="border border-clay/30 bg-clay px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "delete" ? "Deleting..." : "Delete permission"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </AdminEntityModal>
     </SectionFrame>
   );
 }
@@ -1032,6 +1551,7 @@ export function WorkspaceManager() {
   const [workspaces, setWorkspaces] = useState<AdminWorkspaceData[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [selectedWorkspace, setSelectedWorkspace] = useState<AdminWorkspaceData | null>(null);
+  const [modal, setModal] = useState<"view" | "create" | "edit" | "delete" | null>(null);
   const [actionState, setActionState] = useState<"create" | "update" | "delete" | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
@@ -1161,6 +1681,42 @@ export function WorkspaceManager() {
     setPageSize(nextPageSize);
   }
 
+  function openCreateModal() {
+    setModal("create");
+  }
+
+  function openViewModal(workspaceId?: string) {
+    if (workspaceId) {
+      setSelectedWorkspaceId(workspaceId);
+    }
+    setModal("view");
+  }
+
+  function openEditModal(workspaceId?: string) {
+    if (workspaceId) {
+      setSelectedWorkspaceId(workspaceId);
+    }
+    if (selectedWorkspaceSummary) {
+      setEditForm({
+        slug: selectedWorkspaceSummary.slug,
+        name: selectedWorkspaceSummary.name,
+        isDefault: selectedWorkspaceSummary.is_default,
+      });
+    }
+    setModal("edit");
+  }
+
+  function openDeleteModal(workspaceId?: string) {
+    if (workspaceId) {
+      setSelectedWorkspaceId(workspaceId);
+    }
+    setModal("delete");
+  }
+
+  function closeModal() {
+    setModal(null);
+  }
+
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setActionState("create");
@@ -1172,6 +1728,7 @@ export function WorkspaceManager() {
         is_default: createForm.isDefault,
       });
       setCreateForm({ slug: "", name: "", isDefault: false });
+      closeModal();
       await loadWorkspaces();
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to create workspace."));
@@ -1193,6 +1750,7 @@ export function WorkspaceManager() {
         name: editForm.name,
         is_default: editForm.isDefault,
       });
+      closeModal();
       await loadWorkspaces(selectedWorkspaceSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to update workspace."));
@@ -1205,13 +1763,11 @@ export function WorkspaceManager() {
     if (!selectedWorkspaceSummary) {
       return;
     }
-    if (!window.confirm(`Delete workspace ${selectedWorkspaceSummary.slug}?`)) {
-      return;
-    }
     setActionState("delete");
     setError(null);
     try {
       await deleteAdminWorkspace(selectedWorkspaceSummary.id);
+      closeModal();
       await loadWorkspaces(selectedWorkspaceSummary.id);
     } catch (caughtError) {
       setError(formatError(caughtError, "Unable to delete workspace."));
@@ -1253,50 +1809,112 @@ export function WorkspaceManager() {
               onPageSizeChange={handleWorkspacePageSizeChange}
             />
           ) : null}
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="w-full border border-tide/40 bg-tide px-4 py-3 text-sm font-semibold text-paper transition hover:opacity-95"
+          >
+            Create workspace
+          </button>
         </div>
         <div className="space-y-4">
-          <form onSubmit={(event) => void handleCreate(event)} className="border border-ink/10 bg-paper/70 p-4">
-            <h4 className="text-base font-semibold text-ink">Create workspace</h4>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <InlineField label="Slug" value={createForm.slug} onChange={(slug) => setCreateForm((prev) => ({ ...prev, slug }))} />
-              <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
-            </div>
-            <div className="mt-4">
-              <CheckboxField label="Default workspace" checked={createForm.isDefault} onChange={(isDefault) => setCreateForm((prev) => ({ ...prev, isDefault }))} />
-            </div>
-            <button type="submit" disabled={actionState === "create"} className="mt-4 border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
-              {actionState === "create" ? "Creating..." : "Create workspace"}
-            </button>
-          </form>
-
           {selectedWorkspaceSummary ? (
-            <form onSubmit={(event) => void handleUpdate(event)} className="border border-ink/10 bg-white p-4">
+            <section className="border border-ink/10 bg-white p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h4 className="text-base font-semibold text-ink">Edit workspace</h4>
-                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedWorkspaceSummary.id}</p>
+                  <h4 className="text-base font-semibold text-ink">Selected workspace</h4>
+                  <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedWorkspaceSummary.slug}</p>
                 </div>
-                <button type="button" onClick={() => void handleDelete()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
-                  {actionState === "delete" ? "Deleting..." : "Delete"}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    View
+                  </button>
+                  <button type="button" onClick={() => openEditModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => openDeleteModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
+                    Delete
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <InlineField label="Slug" value={editForm.slug} onChange={(slug) => setEditForm((prev) => ({ ...prev, slug }))} />
-                <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
-              </div>
-              <div className="mt-4">
-                <CheckboxField label="Default workspace" checked={editForm.isDefault} onChange={(isDefault) => setEditForm((prev) => ({ ...prev, isDefault }))} />
+              <div className="mt-4 grid gap-3 text-sm text-ink/75 md:grid-cols-2">
+                <div><span className="font-semibold text-ink">Slug:</span> {selectedWorkspaceSummary.slug}</div>
+                <div><span className="font-semibold text-ink">Name:</span> {selectedWorkspaceSummary.name}</div>
+                <div><span className="font-semibold text-ink">Default:</span> {selectedWorkspaceSummary.is_default ? "Yes" : "No"}</div>
+                <div><span className="font-semibold text-ink">Workspace ID:</span> {selectedWorkspaceSummary.id}</div>
               </div>
               <div className="mt-4 text-xs leading-6 text-ink/55">
                 Created {formatDateTime(selectedWorkspaceSummary.created_at)}. Updated {formatDateTime(selectedWorkspaceSummary.updated_at)}.
               </div>
-              <button type="submit" disabled={actionState === "update"} className="mt-4 border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
-                {actionState === "update" ? "Saving..." : "Save workspace"}
-              </button>
-            </form>
+            </section>
           ) : null}
         </div>
       </div>
+
+      <AdminEntityModal open={modal === "create"} title="Create workspace" description="Create a workspace and mark it as default if needed." onClose={closeModal}>
+        <form onSubmit={(event) => void handleCreate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Slug" value={createForm.slug} onChange={(slug) => setCreateForm((prev) => ({ ...prev, slug }))} />
+            <InlineField label="Name" value={createForm.name} onChange={(name) => setCreateForm((prev) => ({ ...prev, name }))} />
+          </div>
+          <CheckboxField label="Default workspace" checked={createForm.isDefault} onChange={(isDefault) => setCreateForm((prev) => ({ ...prev, isDefault }))} />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "create"} className="border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "create" ? "Creating..." : "Create workspace"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "view"} title="View workspace" description="Read-only details for the selected workspace." onClose={closeModal}>
+        {selectedWorkspaceSummary ? (
+          <div className="space-y-4 text-sm text-ink/75">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div><span className="font-semibold text-ink">Slug:</span> {selectedWorkspaceSummary.slug}</div>
+              <div><span className="font-semibold text-ink">Name:</span> {selectedWorkspaceSummary.name}</div>
+              <div><span className="font-semibold text-ink">Default:</span> {selectedWorkspaceSummary.is_default ? "Yes" : "No"}</div>
+              <div><span className="font-semibold text-ink">Workspace ID:</span> {selectedWorkspaceSummary.id}</div>
+            </div>
+          </div>
+        ) : null}
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "edit"} title="Edit workspace" description="Update the slug, display name, and default flag." onClose={closeModal}>
+        <form onSubmit={(event) => void handleUpdate(event)} className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <InlineField label="Slug" value={editForm.slug} onChange={(slug) => setEditForm((prev) => ({ ...prev, slug }))} />
+            <InlineField label="Name" value={editForm.name} onChange={(name) => setEditForm((prev) => ({ ...prev, name }))} />
+          </div>
+          <CheckboxField label="Default workspace" checked={editForm.isDefault} onChange={(isDefault) => setEditForm((prev) => ({ ...prev, isDefault }))} />
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={actionState === "update"} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink disabled:opacity-60">
+              {actionState === "update" ? "Saving..." : "Save workspace"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </AdminEntityModal>
+
+      <AdminEntityModal open={modal === "delete"} title="Delete workspace" description="This will remove the workspace and clean its membership records." onClose={closeModal}>
+        <div className="space-y-4 text-sm text-ink/75">
+          <p>
+            Delete <span className="font-semibold text-ink">{selectedWorkspaceSummary?.slug}</span>?
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <button type="button" onClick={() => void handleDelete()} disabled={actionState === "delete"} className="border border-clay/30 bg-clay px-4 py-2.5 text-sm font-semibold text-paper disabled:opacity-60">
+              {actionState === "delete" ? "Deleting..." : "Delete workspace"}
+            </button>
+            <button type="button" onClick={closeModal} className="border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink">
+              Cancel
+            </button>
+          </div>
+        </div>
+      </AdminEntityModal>
     </SectionFrame>
   );
 }
