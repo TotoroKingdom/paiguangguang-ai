@@ -148,6 +148,14 @@ backend/dev.env
 ```env
 APP_NAME=Paiguangguang Backend
 API_V1_PREFIX=/api/v1
+DATABASE_URL=postgresql://...
+TEST_DATABASE_URL=postgresql://...
+JWT_SECRET_KEY=change-me-in-development-secret-key
+JWT_ALGORITHM=HS256
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
+ADMIN_USER_EMAIL=admin@example.com
+ADMIN_USER_PASSWORD=change-me-in-development-admin-password
+ADMIN_USER_DISPLAY_NAME=Admin
 
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_API_KEY=your_deepseek_api_key_here

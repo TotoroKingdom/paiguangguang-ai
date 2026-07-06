@@ -5,25 +5,13 @@ from pathlib import Path
 import sys
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import create_engine, pool
 
 backend_dir = Path(__file__).resolve().parents[1]
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-import os
-from dotenv import load_dotenv
-
-
 config = context.config
-
-load_dotenv("dev.env")
-
-database_url = os.getenv("DATABASE_URL")
-if not database_url:
-    raise RuntimeError("DATABASE_URL is not set. Check backend/dev.env")
-
-config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -48,17 +36,23 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    connection = config.attributes.get("connection")
+    should_close = bool(config.attributes.get("close_connection"))
+    connectable = None
+    if connection is None:
+        connectable = create_engine(config.get_main_option("sqlalchemy.url"), poolclass=pool.NullPool)
+        connection = connectable.connect()
 
-    with connectable.connect() as connection:
+    try:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
+    finally:
+        if should_close and connection is not None:
+            connection.close()
+        elif connectable is not None:
+            connection.close()
 
 
 if context.is_offline_mode():
