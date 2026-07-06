@@ -347,6 +347,17 @@ class AdminService:
         session.refresh(user)
         return _user_to_admin_data(user)
 
+    def delete_user(self, session: Session, user_id: str) -> AdminUserData:
+        user = session.get(User, user_id)
+        if user is None:
+            raise KeyError(user_id)
+        snapshot = _user_to_admin_data(user)
+        session.execute(delete(UserRole).where(UserRole.user_id == user.id))
+        session.execute(delete(WorkspaceMembership).where(WorkspaceMembership.user_id == user.id))
+        session.execute(delete(User).where(User.id == user.id))
+        session.commit()
+        return snapshot
+
     def disable_user(self, session: Session, user_id: str) -> AdminUserData:
         return self.update_user(session, user_id, AdminUserUpdateRequest(is_active=False))
 

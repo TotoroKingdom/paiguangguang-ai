@@ -92,6 +92,12 @@ export function reindexAdminDocument(documentId: string) {
   });
 }
 
+export function restoreAdminDocument(documentId: string) {
+  return postEmptyJson<AdminDocumentData>(`/api/v1/admin/documents/${documentId}/restore`, {
+    token: getStoredAuthToken(),
+  });
+}
+
 export function listAdminIngestionJobs(options?: AdminListQuery) {
   return getJson<{ items: AdminIngestionJobData[]; total: number; page: number; page_size: number }>(
     `/api/v1/admin/ingestion-jobs${buildAdminListQuery(options)}`,
@@ -126,8 +132,18 @@ export function updateAdminUser(userId: string, request: AdminUserUpdateRequest)
   });
 }
 
-export function disableAdminUser(userId: string) {
+export function deleteAdminUser(userId: string) {
   return deleteJson<AdminUserData>(`/api/v1/admin/users/${userId}`, {
+    token: getStoredAuthToken(),
+  });
+}
+
+export function disableAdminUser(userId: string) {
+  return deleteAdminUser(userId);
+}
+
+export function activateAdminUser(userId: string) {
+  return postEmptyJson<AdminUserData>(`/api/v1/admin/users/${userId}/activate`, {
     token: getStoredAuthToken(),
   });
 }
