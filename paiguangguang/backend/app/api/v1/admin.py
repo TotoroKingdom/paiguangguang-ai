@@ -137,6 +137,21 @@ def disable_user(
         raise _handle_key_error(exc, "User") from exc
 
 
+@router.post("/users/{user_id}/activate", response_model=ApiResponse[AdminUserData])
+def activate_user(
+    user_id: str,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    service: AdminService = Depends(get_admin_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> ApiResponse[AdminUserData]:
+    _require_permission(service, session, current_user, "user.manage", rbac_service)
+    try:
+        return ApiResponse(data=service.activate_user(session, user_id))
+    except KeyError as exc:
+        raise _handle_key_error(exc, "User") from exc
+
+
 @router.get("/roles", response_model=ApiResponse[AdminPagedData[AdminRoleData]])
 def list_roles(
     page: int = 1,
@@ -428,6 +443,21 @@ def delete_document(
     _require_permission(service, session, current_user, "document.delete", rbac_service)
     try:
         return ApiResponse(data=service.delete_document(session, document_id))
+    except KeyError as exc:
+        raise _handle_key_error(exc, "Document") from exc
+
+
+@router.post("/documents/{document_id}/restore", response_model=ApiResponse[AdminDocumentData])
+def restore_document(
+    document_id: str,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    service: AdminService = Depends(get_admin_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> ApiResponse[AdminDocumentData]:
+    _require_permission(service, session, current_user, "document.delete", rbac_service)
+    try:
+        return ApiResponse(data=service.restore_document(session, document_id))
     except KeyError as exc:
         raise _handle_key_error(exc, "Document") from exc
 

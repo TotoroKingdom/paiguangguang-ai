@@ -68,6 +68,10 @@ def _user_workspace_ids(user: User) -> list[str]:
     return sorted({membership.workspace_id for membership in user.workspace_memberships})
 
 
+def _user_effective_permissions(user: User) -> list[str]:
+    return sorted({permission.name for role in user.roles for permission in role.permissions})
+
+
 def _user_to_admin_data(user: User) -> AdminUserData:
     base = user_to_data(user)
     return AdminUserData.model_validate(
@@ -75,6 +79,7 @@ def _user_to_admin_data(user: User) -> AdminUserData:
             **base.model_dump(),
             "roles": _user_roles(user),
             "workspace_ids": _user_workspace_ids(user),
+            "effective_permissions": _user_effective_permissions(user),
         }
     )
 
@@ -344,6 +349,9 @@ class AdminService:
 
     def disable_user(self, session: Session, user_id: str) -> AdminUserData:
         return self.update_user(session, user_id, AdminUserUpdateRequest(is_active=False))
+
+    def activate_user(self, session: Session, user_id: str) -> AdminUserData:
+        return self.update_user(session, user_id, AdminUserUpdateRequest(is_active=True))
 
     def list_roles(
         self,
@@ -646,6 +654,21 @@ class AdminService:
         document.is_deleted = True
         session.commit()
         self.rag_service.purge_document_artifacts(document_id)
+        session.refresh(document)
+        return _document_to_admin_data(document)
+
+    def restore_document(self, session: Session, document_id: str) -> AdminDocumentData:
+        document = session.scalar(select(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
+        if document is None:
+            raise KeyError(document_id)
+        document.status = "registered"
+        document.parse_status = "pending"
+        document.chunk_status = "pending"
+        document.embedding_status = "pending"
+        document.index_status = "pending"
+        document.is_deleted = False
+        document.error_message = None
+        session.commit()
         session.refresh(document)
         return _document_to_admin_data(document)
 

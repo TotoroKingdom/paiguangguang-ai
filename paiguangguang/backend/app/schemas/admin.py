@@ -43,6 +43,7 @@ class AdminUserData(BaseModel):
     updated_at: datetime
     roles: list[str] = Field(default_factory=list)
     workspace_ids: list[str] = Field(default_factory=list)
+    effective_permissions: list[str] = Field(default_factory=list)
 
 
 class AdminRoleCreateRequest(BaseModel):
