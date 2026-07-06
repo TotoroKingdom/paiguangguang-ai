@@ -6,8 +6,11 @@ from alembic import command
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.db.bootstrap import initialize_database
 from app.db.alembic import get_alembic_config
+from app.db.models import Role, User, Workspace
 from app.db.session import get_db_session
+from app.services.auth import AuthService
 
 
 def test_settings_load_database_url_and_test_override(monkeypatch) -> None:
@@ -23,6 +26,18 @@ def test_settings_load_database_url_and_test_override(monkeypatch) -> None:
         "postgresql+psycopg://app_user:app_pass@db.example.com/app_db"
     )
     assert settings.test_database_url == "sqlite+pysqlite:///./test-db.sqlite3"
+
+
+def test_settings_load_admin_bootstrap_configuration(monkeypatch) -> None:
+    monkeypatch.setenv("ADMIN_USER_EMAIL", "admin@example.com")
+    monkeypatch.setenv("ADMIN_USER_PASSWORD", "Secret123!")
+    monkeypatch.setenv("ADMIN_USER_DISPLAY_NAME", "Primary Admin")
+
+    settings = get_settings()
+
+    assert settings.admin_user_email == "admin@example.com"
+    assert settings.admin_user_password == "Secret123!"
+    assert settings.admin_user_display_name == "Primary Admin"
 
 
 def test_database_session_dependency_uses_test_database_url(monkeypatch, tmp_path) -> None:
@@ -60,3 +75,44 @@ def test_alembic_upgrade_runs_against_test_database_url(monkeypatch, tmp_path) -
         ).fetchall()
 
     assert rows == [("alembic_version",)]
+
+
+def test_initialize_database_runs_migrations_and_bootstraps_defaults(monkeypatch, tmp_path) -> None:
+    test_db_path = tmp_path / "bootstrap-task17.sqlite3"
+    monkeypatch.setenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://app_user:app_pass@db.example.com/app_db",
+    )
+    monkeypatch.setenv("TEST_DATABASE_URL", f"sqlite+pysqlite:///{test_db_path.as_posix()}")
+    monkeypatch.setenv("ADMIN_USER_EMAIL", "admin@example.com")
+    monkeypatch.setenv("ADMIN_USER_PASSWORD", "Secret123!")
+    monkeypatch.setenv("ADMIN_USER_DISPLAY_NAME", "Primary Admin")
+
+    initialize_database()
+    initialize_database()
+
+    assert test_db_path.exists()
+    alembic_config = get_alembic_config()
+    engine_url = alembic_config.get_main_option("sqlalchemy.url")
+    assert engine_url == f"sqlite+pysqlite:///{test_db_path.as_posix()}"
+
+    session_generator = get_db_session()
+    session = next(session_generator)
+    try:
+        default_workspace = session.query(Workspace).filter(Workspace.slug == "default").one_or_none()
+        role_names = sorted(role.name for role in session.query(Role).all())
+        admin_user = session.query(User).filter(User.email == "admin@example.com").one_or_none()
+        auth_service = AuthService()
+        authenticated_user = auth_service.authenticate_user(session, "admin@example.com", "Secret123!")
+    finally:
+        session_generator.close()
+
+    assert default_workspace is not None
+    assert default_workspace.is_default is True
+    assert role_names == ["document_admin", "system_admin", "user"]
+    assert admin_user is not None
+    assert admin_user.display_name == "Primary Admin"
+    assert admin_user.is_active is True
+    assert authenticated_user is not None
+    assert any(role.name == "system_admin" for role in admin_user.roles)
+    assert any(membership.workspace_id == default_workspace.id for membership in admin_user.workspace_memberships)

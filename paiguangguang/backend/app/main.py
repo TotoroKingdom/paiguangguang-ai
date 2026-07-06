@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import logging
 
 from fastapi import FastAPI, HTTPException, Request
@@ -10,12 +11,20 @@ from fastapi.responses import JSONResponse
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import ExternalModelError, RetrievalFailureError, ServiceRateLimitError, ServiceTimeoutError
+from app.db.bootstrap import initialize_database
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
