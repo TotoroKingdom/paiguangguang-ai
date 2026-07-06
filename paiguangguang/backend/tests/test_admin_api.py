@@ -102,9 +102,16 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         token = login_response.json()["data"]["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        users_response = client.get("/api/v1/admin/users", headers=headers)
+        users_response = client.get(
+            "/api/v1/admin/users?page=1&page_size=2&sort_by=email&sort_order=asc",
+            headers=headers,
+        )
         assert users_response.status_code == 200
-        users = users_response.json()["data"]
+        users_payload = users_response.json()["data"]
+        assert users_payload["page"] == 1
+        assert users_payload["page_size"] == 2
+        assert users_payload["total"] >= 2
+        users = users_payload["items"]
         assert {user["email"] for user in users} >= {"admin@example.com", "reader@example.com"}
 
         created_user_response = client.post(
@@ -139,9 +146,17 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert disabled_user_response.status_code == 200
         assert disabled_user_response.json()["data"]["is_active"] is False
 
-        roles_response = client.get("/api/v1/admin/roles", headers=headers)
+        roles_response = client.get(
+            "/api/v1/admin/roles?page=1&page_size=1&sort_by=name&sort_order=asc",
+            headers=headers,
+        )
         assert roles_response.status_code == 200
-        assert any(role["name"] == "user" for role in roles_response.json()["data"])
+        roles_payload = roles_response.json()["data"]
+        assert roles_payload["page"] == 1
+        assert roles_payload["page_size"] == 1
+        assert roles_payload["total"] >= 3
+        assert len(roles_payload["items"]) == 1
+        assert roles_payload["items"][0]["name"] == "document_admin"
 
         created_role_response = client.post(
             "/api/v1/admin/roles",
@@ -178,9 +193,17 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert deleted_role_response.status_code == 200
         assert deleted_role_response.json()["data"]["name"] == "docs_auditor"
 
-        permissions_response = client.get("/api/v1/admin/permissions", headers=headers)
+        permissions_response = client.get(
+            "/api/v1/admin/permissions?page=1&page_size=2&sort_by=name&sort_order=asc",
+            headers=headers,
+        )
         assert permissions_response.status_code == 200
-        assert any(permission["name"] == "document.view" for permission in permissions_response.json()["data"])
+        permissions_payload = permissions_response.json()["data"]
+        assert permissions_payload["page"] == 1
+        assert permissions_payload["page_size"] == 2
+        assert permissions_payload["total"] >= 8
+        assert len(permissions_payload["items"]) == 2
+        assert permissions_payload["items"][0]["name"] == "document.delete"
 
         created_permission_response = client.post(
             "/api/v1/admin/permissions",
@@ -206,9 +229,17 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         assert deleted_permission_response.status_code == 200
         assert deleted_permission_response.json()["data"]["name"] == "document.audit.logs"
 
-        workspaces_response = client.get("/api/v1/admin/workspaces", headers=headers)
+        workspaces_response = client.get(
+            "/api/v1/admin/workspaces?page=1&page_size=1&sort_by=slug&sort_order=asc",
+            headers=headers,
+        )
         assert workspaces_response.status_code == 200
-        assert any(workspace["slug"] == defaults.default_workspace.slug for workspace in workspaces_response.json()["data"])
+        workspaces_payload = workspaces_response.json()["data"]
+        assert workspaces_payload["page"] == 1
+        assert workspaces_payload["page_size"] == 1
+        assert workspaces_payload["total"] >= 1
+        assert len(workspaces_payload["items"]) == 1
+        assert workspaces_payload["items"][0]["slug"] == defaults.default_workspace.slug
 
         created_workspace_response = client.post(
             "/api/v1/admin/workspaces",
@@ -276,9 +307,17 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
         ]
         assert vector_store.index_calls[-1]["lifecycle_version"] == 1
 
-        documents_response = client.get("/api/v1/admin/documents", headers=headers)
+        documents_response = client.get(
+            "/api/v1/admin/documents?page=1&page_size=1&sort_by=updated_at&sort_order=desc",
+            headers=headers,
+        )
         assert documents_response.status_code == 200
-        assert any(document["doc_id"] == created_document["doc_id"] for document in documents_response.json()["data"])
+        documents_payload = documents_response.json()["data"]
+        assert documents_payload["page"] == 1
+        assert documents_payload["page_size"] == 1
+        assert documents_payload["total"] >= 1
+        assert len(documents_payload["items"]) == 1
+        assert documents_payload["items"][0]["doc_id"] == created_document["doc_id"]
 
         document_delete_response = client.delete(
             f"/api/v1/admin/documents/{created_document['doc_id']}",
@@ -291,11 +330,18 @@ def test_admin_api_supports_document_lifecycle_and_catalog_management(tmp_path) 
             "doc_id": created_document["doc_id"],
         }
 
-        jobs_response = client.get("/api/v1/admin/ingestion-jobs", headers=headers)
+        jobs_response = client.get(
+            "/api/v1/admin/ingestion-jobs?page=1&page_size=1&sort_by=created_at&sort_order=desc",
+            headers=headers,
+        )
         assert jobs_response.status_code == 200
-        assert any(job["document_id"] == created_document["doc_id"] for job in jobs_response.json()["data"])
+        jobs_payload = jobs_response.json()["data"]
+        assert jobs_payload["page"] == 1
+        assert jobs_payload["page_size"] == 1
+        assert jobs_payload["total"] >= 1
+        assert len(jobs_payload["items"]) == 1
 
-        latest_job_id = jobs_response.json()["data"][0]["job_id"]
+        latest_job_id = jobs_payload["items"][0]["job_id"]
         job_detail_response = client.get(f"/api/v1/admin/ingestion-jobs/{latest_job_id}", headers=headers)
         assert job_detail_response.status_code == 200
         assert job_detail_response.json()["data"]["job_id"] == latest_job_id
