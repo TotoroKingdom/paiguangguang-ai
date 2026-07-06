@@ -1,0 +1,1 @@
+npx chromadb-admin --port 3434 --chromadb-url http://your-chromadb:8000
