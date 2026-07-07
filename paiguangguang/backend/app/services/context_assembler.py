@@ -42,12 +42,10 @@ class ContextAssembler:
 
         selected: list[HybridRetrievalHit] = []
         selected_keys: set[tuple[str, str]] = set()
-        doc_order: dict[str, int] = {}
         used_chars = 0
         truncated = False
 
         for hit in primary_hits:
-            doc_order.setdefault(hit.doc_id, len(doc_order))
             tagged_hit = self._tag_hit(hit, "primary")
             if not self._can_fit(tagged_hit, used_chars, selection_type="primary", is_first=not selected):
                 truncated = True
@@ -56,29 +54,29 @@ class ContextAssembler:
             selected_keys.add((tagged_hit.doc_id, tagged_hit.chunk_id))
             used_chars += self._entry_length(tagged_hit, is_first=len(selected) == 1, selection_type="primary")
 
-        if self.include_adjacent_chunks and self.adjacent_chunk_window > 0:
-            for hit in list(selected):
-                document = self._get_document(hit.doc_id)
-                if document is None:
-                    continue
-                chunk_map = self._chunk_map(hit.doc_id)
-                for neighbor in self._neighbor_chunks(document, chunk_map, hit.chunk_index):
-                    key = (neighbor.doc_id, neighbor.chunk_id)
-                    if key in selected_keys:
-                        continue
-                    tagged_neighbor = self._tag_hit(neighbor, "adjacent")
-                    if not self._can_fit(tagged_neighbor, used_chars, selection_type="adjacent", is_first=not selected):
-                        truncated = True
-                        continue
-                    selected.append(tagged_neighbor)
-                    selected_keys.add(key)
-                    used_chars += self._entry_length(
-                        tagged_neighbor,
-                        is_first=len(selected) == 1,
-                        selection_type="adjacent",
-                    )
+            if not (self.include_adjacent_chunks and self.adjacent_chunk_window > 0):
+                continue
 
-        selected.sort(key=lambda item: (doc_order.get(item.doc_id, 10**9), item.chunk_index, item.chunk_id))
+            document = self._get_document(hit.doc_id)
+            if document is None:
+                continue
+            chunk_map = self._chunk_map(hit.doc_id)
+            for neighbor in self._neighbor_chunks(document, chunk_map, hit.chunk_index):
+                key = (neighbor.doc_id, neighbor.chunk_id)
+                if key in selected_keys:
+                    continue
+                tagged_neighbor = self._tag_hit(neighbor, "adjacent")
+                if not self._can_fit(tagged_neighbor, used_chars, selection_type="adjacent", is_first=not selected):
+                    truncated = True
+                    continue
+                selected.append(tagged_neighbor)
+                selected_keys.add(key)
+                used_chars += self._entry_length(
+                    tagged_neighbor,
+                    is_first=len(selected) == 1,
+                    selection_type="adjacent",
+                )
+
         context_lines: list[str] = []
         total_chars = 0
         for index, hit in enumerate(selected, start=1):
