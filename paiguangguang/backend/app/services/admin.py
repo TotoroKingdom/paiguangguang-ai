@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
 from fastapi import HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -21,6 +22,8 @@ from app.db.models import (
     WorkspaceMembership,
 )
 from app.schemas.admin import (
+    AdminCacheClearDetailRequest,
+    AdminCacheClearListRequest,
     AdminDocumentCreateRequest,
     AdminDocumentData,
     AdminDocumentUpdateRequest,
@@ -42,6 +45,14 @@ from app.schemas.admin import (
 )
 from app.schemas.rag import RagIngestRequest
 from app.services.auth import AuthService, get_auth_service, user_to_data
+from app.storage.cache import (
+    CacheAdapter,
+    build_admin_detail_cache_key,
+    build_admin_list_cache_key,
+    build_auth_user_context_cache_key,
+    build_entity_cache_prefix,
+    get_cache_adapter,
+)
 from app.services.rag_ingestion import (
     RagIngestionService,
     get_rag_ingestion_service,
@@ -52,6 +63,8 @@ from app.services.rag_ingestion import (
 from app.services.rbac import RBACService, get_rbac_service
 
 SortOrder = Literal["asc", "desc"]
+AdminModelT = TypeVar("AdminModelT", bound=BaseModel)
+ADMIN_READ_CACHE_TTL_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -253,6 +266,73 @@ class AdminService:
     auth_service: AuthService
     rbac_service: RBACService
     rag_service: RagIngestionService
+    cache: CacheAdapter | None = None
+
+    def __post_init__(self) -> None:
+        if self.cache is None:
+            self.cache = get_cache_adapter()
+
+    def _get_cached_model(self, cache_key: str, schema: type[AdminModelT]) -> AdminModelT | None:
+        assert self.cache is not None
+        cached = self.cache.get(cache_key)
+        if cached is None:
+            return None
+        return schema.model_validate(cached)
+
+    def _set_cached_model(self, cache_key: str, data: BaseModel) -> None:
+        assert self.cache is not None
+        self.cache.set(cache_key, data.model_dump(mode="json"), ttl_seconds=ADMIN_READ_CACHE_TTL_SECONDS)
+
+    def _invalidate_admin_entity_cache(self, entity: str, *, entity_id: str | None = None) -> None:
+        assert self.cache is not None
+        if entity_id is not None:
+            self.cache.delete(build_admin_detail_cache_key(entity, entity_id))
+        self.cache.delete_prefix(build_entity_cache_prefix("admin", entity=entity, kind="list"))
+
+    def _invalidate_user_context_cache(self, user_id: str) -> None:
+        assert self.cache is not None
+        self.cache.delete(build_auth_user_context_cache_key(user_id))
+
+    def _invalidate_user_contexts_for_role(self, session: Session, role_id: str) -> None:
+        user_ids = session.scalars(select(UserRole.user_id).where(UserRole.role_id == role_id)).all()
+        for user_id in user_ids:
+            self._invalidate_user_context_cache(user_id)
+
+    def _invalidate_user_contexts_for_permission(self, session: Session, permission_id: str) -> None:
+        role_ids = session.scalars(select(RolePermission.role_id).where(RolePermission.permission_id == permission_id)).all()
+        if not role_ids:
+            return
+        user_ids = session.scalars(
+            select(UserRole.user_id).where(UserRole.role_id.in_(role_ids))
+        ).all()
+        for user_id in user_ids:
+            self._invalidate_user_context_cache(user_id)
+
+    def _invalidate_user_contexts_for_workspace(self, session: Session, workspace_id: str) -> None:
+        user_ids = session.scalars(
+            select(WorkspaceMembership.user_id).where(WorkspaceMembership.workspace_id == workspace_id)
+        ).all()
+        for user_id in user_ids:
+            self._invalidate_user_context_cache(user_id)
+
+    def clear_entity_list_cache(
+        self,
+        entity: str,
+        *,
+        page: int | None = None,
+        page_size: int | None = None,
+        sort_by: str | None = None,
+        sort_order: str | None = None,
+    ) -> dict[str, str]:
+        del page, page_size, sort_by, sort_order
+        assert self.cache is not None
+        self.cache.delete_prefix(build_entity_cache_prefix("admin", entity=entity, kind="list"))
+        return {"cleared": "list", "entity": entity}
+
+    def clear_entity_detail_cache(self, entity: str, entity_id: str) -> dict[str, str]:
+        assert self.cache is not None
+        self.cache.delete(build_admin_detail_cache_key(entity, entity_id))
+        return {"cleared": "detail", "entity": entity, "entity_id": entity_id}
 
     def require_permission(self, session: Session, user: User, permission_name: str) -> None:
         if not self.rbac_service.has_permission(session, user.id, permission_name):
@@ -270,23 +350,49 @@ class AdminService:
         sort_by: str | None = None,
         sort_order: str = "desc",
     ) -> AdminPagedData[AdminUserData]:
-        return _build_paged_data(
-            session,
-            User,
+        query = normalize_admin_list_query(
             page=page,
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
             allowed_sort_by={"email", "display_name", "is_active", "updated_at", "created_at"},
             default_sort_by="created_at",
+        )
+        cache_key = build_admin_list_cache_key(
+            "users",
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        cached = self._get_cached_model(cache_key, AdminPagedData[AdminUserData])
+        if cached is not None:
+            return cached
+        data = _build_paged_data(
+            session,
+            User,
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+            allowed_sort_by={"email", "display_name", "is_active", "updated_at", "created_at"},
+            default_sort_by="created_at",
             item_mapper=_user_to_admin_data,
         )
+        self._set_cached_model(cache_key, data)
+        return data
 
     def get_user(self, session: Session, user_id: str) -> AdminUserData:
+        cache_key = build_admin_detail_cache_key("users", user_id)
+        cached = self._get_cached_model(cache_key, AdminUserData)
+        if cached is not None:
+            return cached
         user = session.get(User, user_id)
         if user is None:
             raise KeyError(user_id)
-        return _user_to_admin_data(user)
+        data = _user_to_admin_data(user)
+        self._set_cached_model(cache_key, data)
+        return data
 
     def _apply_user_relationships(
         self,
@@ -328,6 +434,7 @@ class AdminService:
         )
         session.commit()
         session.refresh(user)
+        self._invalidate_admin_entity_cache("users", entity_id=user.id)
         return _user_to_admin_data(user)
 
     def update_user(self, session: Session, user_id: str, request: AdminUserUpdateRequest) -> AdminUserData:
@@ -348,6 +455,8 @@ class AdminService:
         )
         session.commit()
         session.refresh(user)
+        self._invalidate_admin_entity_cache("users", entity_id=user.id)
+        self._invalidate_user_context_cache(user.id)
         return _user_to_admin_data(user)
 
     def delete_user(self, session: Session, user_id: str) -> AdminUserData:
@@ -359,6 +468,8 @@ class AdminService:
         session.execute(delete(WorkspaceMembership).where(WorkspaceMembership.user_id == user.id))
         session.execute(delete(User).where(User.id == user.id))
         session.commit()
+        self._invalidate_admin_entity_cache("users", entity_id=user.id)
+        self._invalidate_user_context_cache(user.id)
         return snapshot
 
     def disable_user(self, session: Session, user_id: str) -> AdminUserData:
@@ -376,23 +487,50 @@ class AdminService:
         sort_by: str | None = None,
         sort_order: str = "asc",
     ) -> AdminPagedData[AdminRoleData]:
-        return _build_paged_data(
-            session,
-            Role,
+        query = normalize_admin_list_query(
             page=page,
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
             allowed_sort_by={"name", "updated_at", "created_at"},
             default_sort_by="name",
+            default_sort_order="asc",
+        )
+        cache_key = build_admin_list_cache_key(
+            "roles",
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        cached = self._get_cached_model(cache_key, AdminPagedData[AdminRoleData])
+        if cached is not None:
+            return cached
+        data = _build_paged_data(
+            session,
+            Role,
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+            allowed_sort_by={"name", "updated_at", "created_at"},
+            default_sort_by="name",
             item_mapper=_role_to_admin_data,
         )
+        self._set_cached_model(cache_key, data)
+        return data
 
     def get_role(self, session: Session, role_id: str) -> AdminRoleData:
+        cache_key = build_admin_detail_cache_key("roles", role_id)
+        cached = self._get_cached_model(cache_key, AdminRoleData)
+        if cached is not None:
+            return cached
         role = session.get(Role, role_id)
         if role is None:
             raise KeyError(role_id)
-        return _role_to_admin_data(role)
+        data = _role_to_admin_data(role)
+        self._set_cached_model(cache_key, data)
+        return data
 
     def _apply_role_permissions(
         self,
@@ -416,6 +554,7 @@ class AdminService:
         self._apply_role_permissions(session, role, request.permissions)
         session.commit()
         session.refresh(role)
+        self._invalidate_admin_entity_cache("roles", entity_id=role.id)
         return _role_to_admin_data(role)
 
     def update_role(self, session: Session, role_id: str, request: AdminRoleUpdateRequest) -> AdminRoleData:
@@ -429,6 +568,8 @@ class AdminService:
         self._apply_role_permissions(session, role, request.permissions)
         session.commit()
         session.refresh(role)
+        self._invalidate_admin_entity_cache("roles", entity_id=role.id)
+        self._invalidate_user_contexts_for_role(session, role.id)
         return _role_to_admin_data(role)
 
     def delete_role(self, session: Session, role_id: str) -> AdminRoleData:
@@ -436,10 +577,14 @@ class AdminService:
         if role is None:
             raise KeyError(role_id)
         snapshot = _role_to_admin_data(role)
+        affected_user_ids = session.scalars(select(UserRole.user_id).where(UserRole.role_id == role.id)).all()
         session.execute(delete(UserRole).where(UserRole.role_id == role.id))
         session.execute(delete(RolePermission).where(RolePermission.role_id == role.id))
         session.execute(delete(Role).where(Role.id == role.id))
         session.commit()
+        self._invalidate_admin_entity_cache("roles", entity_id=role.id)
+        for user_id in affected_user_ids:
+            self._invalidate_user_context_cache(user_id)
         return snapshot
 
     def list_permissions(
@@ -451,29 +596,57 @@ class AdminService:
         sort_by: str | None = None,
         sort_order: str = "asc",
     ) -> AdminPagedData[AdminPermissionData]:
-        return _build_paged_data(
-            session,
-            Permission,
+        query = normalize_admin_list_query(
             page=page,
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
             allowed_sort_by={"name", "updated_at", "created_at"},
             default_sort_by="name",
+            default_sort_order="asc",
+        )
+        cache_key = build_admin_list_cache_key(
+            "permissions",
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        cached = self._get_cached_model(cache_key, AdminPagedData[AdminPermissionData])
+        if cached is not None:
+            return cached
+        data = _build_paged_data(
+            session,
+            Permission,
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+            allowed_sort_by={"name", "updated_at", "created_at"},
+            default_sort_by="name",
             item_mapper=_permission_to_admin_data,
         )
+        self._set_cached_model(cache_key, data)
+        return data
 
     def get_permission(self, session: Session, permission_id: str) -> AdminPermissionData:
+        cache_key = build_admin_detail_cache_key("permissions", permission_id)
+        cached = self._get_cached_model(cache_key, AdminPermissionData)
+        if cached is not None:
+            return cached
         permission = session.get(Permission, permission_id)
         if permission is None:
             raise KeyError(permission_id)
-        return _permission_to_admin_data(permission)
+        data = _permission_to_admin_data(permission)
+        self._set_cached_model(cache_key, data)
+        return data
 
     def create_permission(self, session: Session, request: AdminPermissionCreateRequest) -> AdminPermissionData:
         permission = Permission(name=request.name, description=request.description)
         session.add(permission)
         session.commit()
         session.refresh(permission)
+        self._invalidate_admin_entity_cache("permissions", entity_id=permission.id)
         return _permission_to_admin_data(permission)
 
     def update_permission(
@@ -491,6 +664,8 @@ class AdminService:
             permission.description = request.description
         session.commit()
         session.refresh(permission)
+        self._invalidate_admin_entity_cache("permissions", entity_id=permission.id)
+        self._invalidate_user_contexts_for_permission(session, permission.id)
         return _permission_to_admin_data(permission)
 
     def delete_permission(self, session: Session, permission_id: str) -> AdminPermissionData:
@@ -498,9 +673,18 @@ class AdminService:
         if permission is None:
             raise KeyError(permission_id)
         snapshot = _permission_to_admin_data(permission)
+        affected_role_ids = session.scalars(
+            select(RolePermission.role_id).where(RolePermission.permission_id == permission.id)
+        ).all()
+        affected_user_ids = session.scalars(
+            select(UserRole.user_id).where(UserRole.role_id.in_(affected_role_ids))
+        ).all()
         session.execute(delete(RolePermission).where(RolePermission.permission_id == permission.id))
         session.execute(delete(Permission).where(Permission.id == permission.id))
         session.commit()
+        self._invalidate_admin_entity_cache("permissions", entity_id=permission.id)
+        for user_id in affected_user_ids:
+            self._invalidate_user_context_cache(user_id)
         return snapshot
 
     def list_workspaces(
@@ -512,23 +696,50 @@ class AdminService:
         sort_by: str | None = None,
         sort_order: str = "asc",
     ) -> AdminPagedData[AdminWorkspaceData]:
-        return _build_paged_data(
-            session,
-            Workspace,
+        query = normalize_admin_list_query(
             page=page,
             page_size=page_size,
             sort_by=sort_by,
             sort_order=sort_order,
             allowed_sort_by={"slug", "name", "is_default", "updated_at", "created_at"},
             default_sort_by="slug",
+            default_sort_order="asc",
+        )
+        cache_key = build_admin_list_cache_key(
+            "workspaces",
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        cached = self._get_cached_model(cache_key, AdminPagedData[AdminWorkspaceData])
+        if cached is not None:
+            return cached
+        data = _build_paged_data(
+            session,
+            Workspace,
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+            allowed_sort_by={"slug", "name", "is_default", "updated_at", "created_at"},
+            default_sort_by="slug",
             item_mapper=_workspace_to_admin_data,
         )
+        self._set_cached_model(cache_key, data)
+        return data
 
     def get_workspace(self, session: Session, workspace_id: str) -> AdminWorkspaceData:
+        cache_key = build_admin_detail_cache_key("workspaces", workspace_id)
+        cached = self._get_cached_model(cache_key, AdminWorkspaceData)
+        if cached is not None:
+            return cached
         workspace = session.get(Workspace, workspace_id)
         if workspace is None:
             raise KeyError(workspace_id)
-        return _workspace_to_admin_data(workspace)
+        data = _workspace_to_admin_data(workspace)
+        self._set_cached_model(cache_key, data)
+        return data
 
     def create_workspace(self, session: Session, request: AdminWorkspaceCreateRequest) -> AdminWorkspaceData:
         if request.is_default:
@@ -538,6 +749,7 @@ class AdminService:
         session.add(workspace)
         session.commit()
         session.refresh(workspace)
+        self._invalidate_admin_entity_cache("workspaces", entity_id=workspace.id)
         return _workspace_to_admin_data(workspace)
 
     def update_workspace(
@@ -560,6 +772,8 @@ class AdminService:
             workspace.is_default = request.is_default
         session.commit()
         session.refresh(workspace)
+        self._invalidate_admin_entity_cache("workspaces", entity_id=workspace.id)
+        self._invalidate_user_contexts_for_workspace(session, workspace.id)
         return _workspace_to_admin_data(workspace)
 
     def delete_workspace(self, session: Session, workspace_id: str) -> AdminWorkspaceData:
@@ -567,9 +781,15 @@ class AdminService:
         if workspace is None:
             raise KeyError(workspace_id)
         snapshot = _workspace_to_admin_data(workspace)
+        affected_user_ids = session.scalars(
+            select(WorkspaceMembership.user_id).where(WorkspaceMembership.workspace_id == workspace.id)
+        ).all()
         session.execute(delete(WorkspaceMembership).where(WorkspaceMembership.workspace_id == workspace.id))
         session.execute(delete(Workspace).where(Workspace.id == workspace.id))
         session.commit()
+        self._invalidate_admin_entity_cache("workspaces", entity_id=workspace.id)
+        for user_id in affected_user_ids:
+            self._invalidate_user_context_cache(user_id)
         return snapshot
 
     def list_documents(
@@ -581,9 +801,7 @@ class AdminService:
         sort_by: str | None = None,
         sort_order: str = "desc",
     ) -> AdminPagedData[AdminDocumentData]:
-        return _build_paged_data(
-            session,
-            RagDocumentModel,
+        query = normalize_admin_list_query(
             page=page,
             page_size=page_size,
             sort_by=sort_by,
@@ -598,14 +816,50 @@ class AdminService:
                 "created_at",
             },
             default_sort_by="updated_at",
+        )
+        cache_key = build_admin_list_cache_key(
+            "documents",
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+        )
+        cached = self._get_cached_model(cache_key, AdminPagedData[AdminDocumentData])
+        if cached is not None:
+            return cached
+        data = _build_paged_data(
+            session,
+            RagDocumentModel,
+            page=query.page,
+            page_size=query.page_size,
+            sort_by=query.sort_by,
+            sort_order=query.sort_order,
+            allowed_sort_by={
+                "title",
+                "original_filename",
+                "status",
+                "owner_user_id",
+                "workspace_id",
+                "updated_at",
+                "created_at",
+            },
+            default_sort_by="updated_at",
             item_mapper=_document_to_admin_data,
         )
+        self._set_cached_model(cache_key, data)
+        return data
 
     def get_document(self, session: Session, document_id: str) -> AdminDocumentData:
+        cache_key = build_admin_detail_cache_key("documents", document_id)
+        cached = self._get_cached_model(cache_key, AdminDocumentData)
+        if cached is not None:
+            return cached
         document = session.scalar(select(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
         if document is None:
             raise KeyError(document_id)
-        return _document_to_admin_data(document)
+        data = _document_to_admin_data(document)
+        self._set_cached_model(cache_key, data)
+        return data
 
     def create_document(self, session: Session, request: AdminDocumentCreateRequest) -> AdminDocumentData:
         normalized_text = normalize_text(request.text)
@@ -632,6 +886,7 @@ class AdminService:
         session.add(document)
         session.commit()
         session.refresh(document)
+        self._invalidate_admin_entity_cache("documents", entity_id=document.document_id)
         return _document_to_admin_data(document)
 
     def update_document(
@@ -672,6 +927,7 @@ class AdminService:
             document.is_deleted = request.is_deleted
         session.commit()
         session.refresh(document)
+        self._invalidate_admin_entity_cache("documents", entity_id=document.document_id)
         return _document_to_admin_data(document)
 
     def delete_document(self, session: Session, document_id: str) -> AdminDocumentData:
@@ -683,6 +939,7 @@ class AdminService:
         session.execute(delete(RagIngestionJobModel).where(RagIngestionJobModel.document_id == document_id))
         session.execute(delete(RagDocumentModel).where(RagDocumentModel.document_id == document_id))
         session.commit()
+        self._invalidate_admin_entity_cache("documents", entity_id=document_id)
         self.rag_service.purge_document_artifacts(document_id)
         return snapshot
 
@@ -699,6 +956,7 @@ class AdminService:
         document.error_message = None
         session.commit()
         session.refresh(document)
+        self._invalidate_admin_entity_cache("documents", entity_id=document.document_id)
         return _document_to_admin_data(document)
 
     def reindex_document(
@@ -725,6 +983,7 @@ class AdminService:
         )
         service.ingest_document(request)
         session.refresh(document)
+        self._invalidate_admin_entity_cache("documents", entity_id=document_id)
         return _document_to_admin_data(document)
 
     def list_jobs(

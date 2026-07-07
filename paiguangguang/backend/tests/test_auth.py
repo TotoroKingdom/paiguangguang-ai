@@ -13,6 +13,7 @@ from app.db.models import User
 from app.db.session import get_db_session
 from app.core.config import get_settings
 from app.services.auth import AuthService, get_auth_service
+from app.storage.cache import InMemoryCacheAdapter
 
 
 def _build_test_app(session: Session, auth_service: AuthService) -> FastAPI:
@@ -113,6 +114,78 @@ def test_auth_login_rejects_invalid_password(monkeypatch, tmp_path) -> None:
     body = response.json()
     assert body["success"] is False
     assert body["error"]["message"] == "Invalid email or password"
+
+    app.dependency_overrides.clear()
+    session.close()
+
+
+def test_auth_login_populates_cached_user_context(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-task18-login-tests")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+
+    engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / 'auth-cache.sqlite3').as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = session_factory()
+    auth_service = AuthService()
+    _create_user(session, auth_service)
+    cache = InMemoryCacheAdapter()
+    monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
+
+    app = _build_test_app(session, auth_service)
+    client = TestClient(app)
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "Secret123!"},
+    )
+
+    assert login_response.status_code == 200
+    cached_entries = [cache.get(key) for key in cache._values]
+    assert any(
+        entry is not None
+        and entry["email"] == "admin@example.com"
+        and "effective_permissions" in entry
+        and "workspace_ids" in entry
+        for entry in cached_entries
+    )
+
+    app.dependency_overrides.clear()
+    session.close()
+
+
+def test_auth_me_uses_cached_user_context(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-task18-login-tests")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+
+    engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / 'auth-me-cache.sqlite3').as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = session_factory()
+    auth_service = AuthService()
+    _create_user(session, auth_service)
+    cache = InMemoryCacheAdapter()
+    monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
+
+    app = _build_test_app(session, auth_service)
+    client = TestClient(app)
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "Secret123!"},
+    )
+    access_token = login_response.json()["data"]["access_token"]
+    auth_service.get_user_by_id = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("database lookup should be skipped"))  # type: ignore[method-assign]
+
+    me_response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert me_response.status_code == 200
+    assert me_response.json()["data"]["email"] == "admin@example.com"
 
     app.dependency_overrides.clear()
     session.close()

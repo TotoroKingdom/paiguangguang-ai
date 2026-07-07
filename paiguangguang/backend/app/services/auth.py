@@ -12,10 +12,12 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.auth import AuthTokenData, LoginRequest, UserData
+from app.schemas.auth import AuthTokenData, AuthenticatedUserContextData, LoginRequest, UserData
+from app.storage.cache import build_auth_user_context_cache_key, get_cache_adapter
 
 password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
+AUTH_USER_CONTEXT_TTL_SECONDS = 600
 
 
 class AuthService:
@@ -79,6 +81,59 @@ class AuthService:
         }
         return jwt.encode(payload, self.settings.jwt_secret_key, algorithm=self.settings.jwt_algorithm)
 
+    def _build_user_context(self, user: User) -> AuthenticatedUserContextData:
+        return AuthenticatedUserContextData(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            roles=sorted({role.name for role in user.roles}),
+            workspace_ids=sorted({membership.workspace_id for membership in user.workspace_memberships}),
+            effective_permissions=sorted({permission.name for role in user.roles for permission in role.permissions}),
+        )
+
+    def cache_user_context(self, user: User) -> AuthenticatedUserContextData:
+        user_context = self._build_user_context(user)
+        cache = get_cache_adapter(self.settings)
+        cache.set(
+            build_auth_user_context_cache_key(user.id),
+            user_context.model_dump(mode="json"),
+            ttl_seconds=AUTH_USER_CONTEXT_TTL_SECONDS,
+        )
+        return user_context
+
+    def get_cached_user_context(self, user_id: str) -> AuthenticatedUserContextData | None:
+        cache = get_cache_adapter(self.settings)
+        cached = cache.get(build_auth_user_context_cache_key(user_id))
+        if cached is None:
+            return None
+        return AuthenticatedUserContextData.model_validate(cached)
+
+    def _decode_token_subject(self, credentials: HTTPAuthorizationCredentials | None) -> str:
+        if credentials is None or credentials.scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication credentials were not provided",
+            )
+
+        try:
+            payload = self.decode_access_token(credentials.credentials)
+        except jwt.PyJWTError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+            ) from exc
+
+        subject = payload.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+            )
+        return subject
+
     def decode_access_token(self, token: str) -> dict[str, object]:
         if not self.settings.jwt_secret_key:
             raise ValueError("JWT_SECRET_KEY is required")
@@ -101,33 +156,18 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
             )
+        self.cache_user_context(user)
         return AuthTokenData(access_token=self.create_access_token(user))
 
-    def get_current_user(
+    def get_current_user_context(
         self,
         session: Session,
         credentials: HTTPAuthorizationCredentials | None,
-    ) -> User:
-        if credentials is None or credentials.scheme.lower() != "bearer":
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication credentials were not provided",
-            )
-
-        try:
-            payload = self.decode_access_token(credentials.credentials)
-        except jwt.PyJWTError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token",
-            ) from exc
-
-        subject = payload.get("sub")
-        if not isinstance(subject, str) or not subject.strip():
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token",
-            )
+    ) -> AuthenticatedUserContextData:
+        subject = self._decode_token_subject(credentials)
+        cached_user_context = self.get_cached_user_context(subject)
+        if cached_user_context is not None:
+            return cached_user_context
 
         user = self.get_user_by_id(session, subject)
         if user is None or not user.is_active:
@@ -135,6 +175,32 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication token",
             )
+        return self.cache_user_context(user)
+
+    def get_current_user(
+        self,
+        session: Session,
+        credentials: HTTPAuthorizationCredentials | None,
+    ) -> User:
+        subject = self._decode_token_subject(credentials)
+        cached_user_context = self.get_cached_user_context(subject)
+        if cached_user_context is not None:
+            return User(
+                id=cached_user_context.id,
+                email=cached_user_context.email,
+                display_name=cached_user_context.display_name,
+                hashed_password="",
+                is_active=cached_user_context.is_active,
+                created_at=cached_user_context.created_at,
+                updated_at=cached_user_context.updated_at,
+            )
+        user = self.get_user_by_id(session, subject)
+        if user is None or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+            )
+        self.cache_user_context(user)
         return user
 
 
@@ -151,6 +217,14 @@ def get_current_user(
     service: AuthService = Depends(get_auth_service),
 ) -> User:
     return service.get_current_user(session, credentials)
+
+
+def get_current_user_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    session: Session = Depends(get_db_session),
+    service: AuthService = Depends(get_auth_service),
+) -> AuthenticatedUserContextData:
+    return service.get_current_user_context(session, credentials)
 
 
 def user_to_data(user: User) -> UserData:

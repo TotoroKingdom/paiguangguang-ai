@@ -4,6 +4,19 @@ export type AdminPagedResponse<T> = T[] & {
   page_size: number;
 };
 
+export type AdminCacheClearListRequest = {
+  entity: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+};
+
+export type AdminCacheClearDetailRequest = {
+  entity: string;
+  entityId: string;
+};
+
 export type AdminDocumentData = {
   doc_id: string;
   title: string | null;

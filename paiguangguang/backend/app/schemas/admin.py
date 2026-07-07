@@ -140,5 +140,18 @@ class AdminIngestionJobUpdateRequest(BaseModel):
     chunk_overlap: int | None = Field(default=None, ge=0, le=1000)
 
 
+class AdminCacheClearListRequest(BaseModel):
+    entity: str = Field(min_length=1, max_length=50)
+    page: int | None = Field(default=None, ge=1)
+    page_size: int | None = Field(default=None, ge=1, le=100)
+    sort_by: str | None = Field(default=None, max_length=100)
+    sort_order: str | None = Field(default=None, pattern="^(asc|desc)$")
+
+
+class AdminCacheClearDetailRequest(BaseModel):
+    entity: str = Field(min_length=1, max_length=50)
+    entity_id: str = Field(min_length=1, max_length=128)
+
+
 AdminDocumentData = RagDocumentData
 AdminIngestionJobData = RagIngestionJobData

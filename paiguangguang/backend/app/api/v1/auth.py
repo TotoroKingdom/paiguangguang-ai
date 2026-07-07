@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 
-from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.auth import AuthTokenData, LoginRequest, UserData
+from app.schemas.auth import AuthTokenData, AuthenticatedUserContextData, LoginRequest, UserData
 from app.schemas.common import ApiResponse
-from app.services.auth import AuthService, get_auth_service, get_current_user, user_to_data
+from app.services.auth import AuthService, get_auth_service, get_current_user_context
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -21,5 +20,5 @@ def login(
 
 
 @router.get("/me", response_model=ApiResponse[UserData])
-def me(current_user: User = Depends(get_current_user)) -> ApiResponse[UserData]:
-    return ApiResponse(data=user_to_data(current_user))
+def me(current_user: AuthenticatedUserContextData = Depends(get_current_user_context)) -> ApiResponse[UserData]:
+    return ApiResponse(data=UserData.model_validate(current_user.model_dump()))
