@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { ApiError } from "@/lib/api";
 import {
+  clearAdminEntityDetailCache,
+  clearAdminEntityListCache,
   activateAdminUser,
   createAdminPermission,
   createAdminRole,
@@ -58,10 +60,12 @@ function formatError(error: unknown, fallback: string) {
 function SectionFrame({
   title,
   description,
+  actions,
   children,
 }: {
   title: string;
   description: string;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -72,6 +76,7 @@ function SectionFrame({
           <h3 className="mt-2 text-2xl font-semibold text-ink">{title}</h3>
           <p className="mt-2 max-w-3xl text-sm leading-7 text-ink/70">{description}</p>
         </div>
+        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
       </div>
       <div className="mt-5">{children}</div>
     </section>
@@ -149,6 +154,29 @@ function CheckboxField({
 
 function StateBadge({ value }: { value: string }) {
   return <span className="border border-ink/15 bg-paper px-2.5 py-1 text-xs font-semibold text-ink">{value}</span>;
+}
+
+function RedisActionButton({
+  label,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/30 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
+      title={label}
+      aria-label={label}
+    >
+      Redis
+    </button>
+  );
 }
 
 function ResourceListButton({
@@ -380,6 +408,17 @@ export function UserManager() {
     setPageSize(nextPageSize);
   }
 
+  async function handleClearUserListCache() {
+    await clearAdminEntityListCache({
+      entity: "users",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+    await loadUsers(selectedUserId);
+  }
+
   function openCreateModal() {
     setModal("create");
   }
@@ -506,10 +545,19 @@ export function UserManager() {
     }
   }
 
+  async function handleClearUserDetailCache() {
+    if (!selectedUserSummary) {
+      return;
+    }
+    await clearAdminEntityDetailCache({ entity: "users", entityId: selectedUserSummary.id });
+    await loadUsers(selectedUserSummary.id);
+  }
+
   return (
     <SectionFrame
       title="Users"
       description="Create users, edit display names and status, and assign roles or default workspace memberships."
+      actions={<RedisActionButton label="清理当前用户列表 Redis 缓存" onClick={() => void handleClearUserListCache()} />}
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
 
@@ -556,6 +604,7 @@ export function UserManager() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedUserSummary.email}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <RedisActionButton label="清理当前用户 Redis 缓存" onClick={() => void handleClearUserDetailCache()} />
                   <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
                     View
                   </button>
@@ -913,6 +962,17 @@ export function RoleManager() {
     setPageSize(nextPageSize);
   }
 
+  async function handleClearRoleListCache() {
+    await clearAdminEntityListCache({
+      entity: "roles",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+    await loadRoles(selectedRoleId);
+  }
+
   function openCreateModal() {
     setModal("create");
   }
@@ -1008,10 +1068,19 @@ export function RoleManager() {
     }
   }
 
+  async function handleClearRoleDetailCache() {
+    if (!selectedRoleSummary) {
+      return;
+    }
+    await clearAdminEntityDetailCache({ entity: "roles", entityId: selectedRoleSummary.id });
+    await loadRoles(selectedRoleSummary.id);
+  }
+
   return (
     <SectionFrame
       title="Roles"
       description="Create roles, edit their permissions, and inspect the permission bundles assigned to staff accounts."
+      actions={<RedisActionButton label="清理当前角色列表 Redis 缓存" onClick={() => void handleClearRoleListCache()} />}
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
 
@@ -1058,6 +1127,7 @@ export function RoleManager() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedRoleSummary.name}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <RedisActionButton label="清理当前角色 Redis 缓存" onClick={() => void handleClearRoleDetailCache()} />
                   <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
                     View
                   </button>
@@ -1314,6 +1384,17 @@ export function PermissionManager() {
     setPageSize(nextPageSize);
   }
 
+  async function handleClearPermissionListCache() {
+    await clearAdminEntityListCache({
+      entity: "permissions",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+    await loadPermissions(selectedPermissionId);
+  }
+
   function openCreateModal() {
     setModal("create");
   }
@@ -1406,10 +1487,19 @@ export function PermissionManager() {
     }
   }
 
+  async function handleClearPermissionDetailCache() {
+    if (!selectedPermissionSummary) {
+      return;
+    }
+    await clearAdminEntityDetailCache({ entity: "permissions", entityId: selectedPermissionSummary.id });
+    await loadPermissions(selectedPermissionSummary.id);
+  }
+
   return (
     <SectionFrame
       title="Permissions"
       description="Create and edit permission definitions that can be assigned to roles."
+      actions={<RedisActionButton label="清理当前权限列表 Redis 缓存" onClick={() => void handleClearPermissionListCache()} />}
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
 
@@ -1456,6 +1546,7 @@ export function PermissionManager() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedPermissionSummary.name}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <RedisActionButton label="清理当前权限 Redis 缓存" onClick={() => void handleClearPermissionDetailCache()} />
                   <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
                     View
                   </button>
@@ -1681,6 +1772,17 @@ export function WorkspaceManager() {
     setPageSize(nextPageSize);
   }
 
+  async function handleClearWorkspaceListCache() {
+    await clearAdminEntityListCache({
+      entity: "workspaces",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+    await loadWorkspaces(selectedWorkspaceId);
+  }
+
   function openCreateModal() {
     setModal("create");
   }
@@ -1776,10 +1878,19 @@ export function WorkspaceManager() {
     }
   }
 
+  async function handleClearWorkspaceDetailCache() {
+    if (!selectedWorkspaceSummary) {
+      return;
+    }
+    await clearAdminEntityDetailCache({ entity: "workspaces", entityId: selectedWorkspaceSummary.id });
+    await loadWorkspaces(selectedWorkspaceSummary.id);
+  }
+
   return (
     <SectionFrame
       title="Workspaces"
       description="Maintain workspace records and mark the current default workspace for permission scoping."
+      actions={<RedisActionButton label="清理当前工作区列表 Redis 缓存" onClick={() => void handleClearWorkspaceListCache()} />}
     >
       {error && state === "ready" ? <div className="mb-4 border border-clay/20 bg-clay/10 p-4 text-sm">{error}</div> : null}
 
@@ -1826,6 +1937,7 @@ export function WorkspaceManager() {
                   <p className="mt-1 text-xs uppercase tracking-wide text-clay">{selectedWorkspaceSummary.slug}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <RedisActionButton label="清理当前工作区 Redis 缓存" onClick={() => void handleClearWorkspaceDetailCache()} />
                   <button type="button" onClick={() => openViewModal()} className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink">
                     View
                   </button>

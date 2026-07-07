@@ -10,8 +10,15 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.db.base import Base
 from app.main import app as fastapi_app
 from app.db.session import get_db_session
+from app.services.admin import AdminService, get_admin_service
 from app.services.auth import AuthService, get_auth_service
 from app.storage.rag_documents import RagDocumentRepository
+from app.storage.cache import (
+    InMemoryCacheAdapter,
+    build_admin_detail_cache_key,
+    build_admin_list_cache_key,
+    build_auth_user_context_cache_key,
+)
 from app.services.rag_ingestion import RagIngestionService, get_rag_ingestion_service
 from app.services.rbac import RBACService, get_rbac_service
 
@@ -21,6 +28,7 @@ def _build_test_app(
     auth_service: AuthService,
     rbac_service: RBACService,
     rag_service: RagIngestionService,
+    admin_service: AdminService | None = None,
 ) -> FastAPI:
     app = fastapi_app
     app.dependency_overrides.clear()
@@ -32,6 +40,8 @@ def _build_test_app(
     app.dependency_overrides[get_auth_service] = lambda: auth_service
     app.dependency_overrides[get_rbac_service] = lambda: rbac_service
     app.dependency_overrides[get_rag_ingestion_service] = lambda: rag_service
+    if admin_service is not None:
+        app.dependency_overrides[get_admin_service] = lambda: admin_service
     return app
 
 
@@ -454,6 +464,219 @@ def test_admin_api_denies_non_admin_users_across_endpoint_groups(tmp_path) -> No
             response = client.get(path, headers=headers)
             assert response.status_code == 403
             assert response.json()["success"] is False
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_admin_user_reads_use_cache_on_repeated_requests(monkeypatch, tmp_path) -> None:
+    session, session_factory = _create_session(tmp_path, "admin-api-cache.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    admin_user = _create_user(auth_service, session, email="admin@example.com", password="Secret123!")
+    target_user = _create_user(auth_service, session, email="cached@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, admin_user.id, "system_admin")
+    rbac_service.assign_role_to_user(session, target_user.id, "user")
+    rbac_service.add_user_to_workspace(session, admin_user.id, defaults.default_workspace.slug)
+    rbac_service.add_user_to_workspace(session, target_user.id, defaults.default_workspace.slug)
+
+    cache = InMemoryCacheAdapter()
+    monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
+    monkeypatch.setattr("app.services.admin.get_cache_adapter", lambda settings=None: cache, raising=False)
+
+    rag_service = RagIngestionService(
+        repository=RagDocumentRepository(session_factory=session_factory),
+        index_to_vector_store=False,
+    )
+    admin_service = AdminService(
+        auth_service=auth_service,
+        rbac_service=rbac_service,
+        rag_service=rag_service,
+    )
+    app = _build_test_app(session, auth_service, rbac_service, rag_service, admin_service=admin_service)
+    client = TestClient(app)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        first_list_response = client.get(
+            "/api/v1/admin/users?page=1&page_size=20&sort_by=email&sort_order=asc",
+            headers=headers,
+        )
+        assert first_list_response.status_code == 200
+
+        monkeypatch.setattr(
+            "app.services.admin._build_paged_data",
+            lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("list query should be served from cache")),
+        )
+        second_list_response = client.get(
+            "/api/v1/admin/users?page=1&page_size=20&sort_by=email&sort_order=asc",
+            headers=headers,
+        )
+        assert second_list_response.status_code == 200
+        assert second_list_response.json()["data"] == first_list_response.json()["data"]
+
+        first_detail_response = client.get(
+            f"/api/v1/admin/users/{target_user.id}",
+            headers=headers,
+        )
+        assert first_detail_response.status_code == 200
+
+        original_get = session.get
+
+        def fail_user_lookup(entity, ident, *args, **kwargs):
+            if entity.__name__ == "User" and ident == target_user.id:
+                raise AssertionError("detail lookup should be served from cache")
+            return original_get(entity, ident, *args, **kwargs)
+
+        monkeypatch.setattr(session, "get", fail_user_lookup)
+        second_detail_response = client.get(
+            f"/api/v1/admin/users/{target_user.id}",
+            headers=headers,
+        )
+        assert second_detail_response.status_code == 200
+        assert second_detail_response.json()["data"] == first_detail_response.json()["data"]
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_admin_cache_cleanup_endpoints_clear_requested_entries(monkeypatch, tmp_path) -> None:
+    session, session_factory = _create_session(tmp_path, "admin-api-cache-clear.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    admin_user = _create_user(auth_service, session, email="admin@example.com", password="Secret123!")
+    target_user = _create_user(auth_service, session, email="cached@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, admin_user.id, "system_admin")
+    rbac_service.assign_role_to_user(session, target_user.id, "user")
+    rbac_service.add_user_to_workspace(session, admin_user.id, defaults.default_workspace.slug)
+    rbac_service.add_user_to_workspace(session, target_user.id, defaults.default_workspace.slug)
+
+    cache = InMemoryCacheAdapter()
+    monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
+    monkeypatch.setattr("app.services.admin.get_cache_adapter", lambda settings=None: cache, raising=False)
+
+    rag_service = RagIngestionService(
+        repository=RagDocumentRepository(session_factory=session_factory),
+        index_to_vector_store=False,
+    )
+    admin_service = AdminService(
+        auth_service=auth_service,
+        rbac_service=rbac_service,
+        rag_service=rag_service,
+    )
+    app = _build_test_app(session, auth_service, rbac_service, rag_service, admin_service=admin_service)
+    client = TestClient(app)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        list_response = client.get(
+            "/api/v1/admin/users?page=1&page_size=20&sort_by=email&sort_order=asc",
+            headers=headers,
+        )
+        assert list_response.status_code == 200
+        detail_response = client.get(f"/api/v1/admin/users/{target_user.id}", headers=headers)
+        assert detail_response.status_code == 200
+
+        list_key = build_admin_list_cache_key("users", page=1, page_size=20, sort_by="email", sort_order="asc")
+        detail_key = build_admin_detail_cache_key("users", target_user.id)
+        assert cache.get(list_key) is not None
+        assert cache.get(detail_key) is not None
+
+        clear_list_response = client.post(
+            "/api/v1/admin/cache/clear-list",
+            headers=headers,
+            json={"entity": "users", "page": 1, "page_size": 20, "sort_by": "email", "sort_order": "asc"},
+        )
+        assert clear_list_response.status_code == 200
+        assert clear_list_response.json()["data"] == {"cleared": "list", "entity": "users"}
+
+        clear_detail_response = client.post(
+            "/api/v1/admin/cache/clear-detail",
+            headers=headers,
+            json={"entity": "users", "entity_id": target_user.id},
+        )
+        assert clear_detail_response.status_code == 200
+        assert clear_detail_response.json()["data"] == {
+            "cleared": "detail",
+            "entity": "users",
+            "entity_id": target_user.id,
+        }
+
+        assert cache.get(list_key) is None
+        assert cache.get(detail_key) is None
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+
+def test_admin_user_relationship_changes_invalidate_cached_user_context(monkeypatch, tmp_path) -> None:
+    session, session_factory = _create_session(tmp_path, "admin-api-context-invalidate.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    admin_user = _create_user(auth_service, session, email="admin@example.com", password="Secret123!")
+    target_user = _create_user(auth_service, session, email="cached@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, admin_user.id, "system_admin")
+    rbac_service.assign_role_to_user(session, target_user.id, "user")
+    rbac_service.add_user_to_workspace(session, admin_user.id, defaults.default_workspace.slug)
+    rbac_service.add_user_to_workspace(session, target_user.id, defaults.default_workspace.slug)
+
+    cache = InMemoryCacheAdapter()
+    monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
+    monkeypatch.setattr("app.services.admin.get_cache_adapter", lambda settings=None: cache, raising=False)
+
+    rag_service = RagIngestionService(
+        repository=RagDocumentRepository(session_factory=session_factory),
+        index_to_vector_store=False,
+    )
+    admin_service = AdminService(
+        auth_service=auth_service,
+        rbac_service=rbac_service,
+        rag_service=rag_service,
+    )
+    app = _build_test_app(session, auth_service, rbac_service, rag_service, admin_service=admin_service)
+    client = TestClient(app)
+
+    try:
+        target_login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "cached@example.com", "password": "Secret123!"},
+        )
+        target_token = target_login_response.json()["data"]["access_token"]
+        target_headers = {"Authorization": f"Bearer {target_token}"}
+        assert client.get("/api/v1/auth/me", headers=target_headers).status_code == 200
+
+        target_context_key = build_auth_user_context_cache_key(target_user.id)
+        assert cache.get(target_context_key) is not None
+
+        admin_login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "Secret123!"},
+        )
+        admin_token = admin_login_response.json()["data"]["access_token"]
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+        update_response = client.patch(
+            f"/api/v1/admin/users/{target_user.id}",
+            headers=admin_headers,
+            json={"roles": ["document_admin"]},
+        )
+        assert update_response.status_code == 200
+        assert cache.get(target_context_key) is None
     finally:
         app.dependency_overrides.clear()
         session.close()

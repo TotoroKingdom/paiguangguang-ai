@@ -65,6 +65,86 @@ def build_cache_key(namespace: str, context: CacheKeyContext) -> str:
     )
 
 
+def build_entity_cache_key(
+    namespace: str,
+    *,
+    entity: str,
+    kind: str,
+    entity_id: str | None = None,
+    page: int | None = None,
+    page_size: int | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
+    user_id: str | None = None,
+) -> str:
+    parts = [_CACHE_ROOT_PREFIX, _normalize_key_component(namespace), _normalize_key_component(entity), _normalize_key_component(kind)]
+    if entity_id is not None:
+        parts.append(f"id={_normalize_key_component(entity_id)}")
+    if page is not None:
+        parts.append(f"page={page}")
+    if page_size is not None:
+        parts.append(f"page_size={page_size}")
+    if sort_by is not None:
+        parts.append(f"sort_by={_normalize_key_component(sort_by)}")
+    if sort_order is not None:
+        parts.append(f"sort_order={_normalize_key_component(sort_order)}")
+    if user_id is not None:
+        parts.append(f"user={_normalize_key_component(user_id)}")
+    return ":".join(parts)
+
+
+def build_entity_cache_prefix(namespace: str, *, entity: str, kind: str | None = None) -> str:
+    parts = [_CACHE_ROOT_PREFIX, _normalize_key_component(namespace), _normalize_key_component(entity)]
+    if kind is not None:
+        parts.append(_normalize_key_component(kind))
+    return ":".join(parts)
+
+
+def build_auth_user_context_cache_key(user_id: str) -> str:
+    return ":".join(
+        [
+            _CACHE_ROOT_PREFIX,
+            "auth",
+            "user-context",
+            f"user={_normalize_key_component(user_id)}",
+        ]
+    )
+
+
+def build_admin_list_cache_key(
+    entity: str,
+    *,
+    page: int,
+    page_size: int,
+    sort_by: str,
+    sort_order: str,
+) -> str:
+    return ":".join(
+        [
+            _CACHE_ROOT_PREFIX,
+            "admin",
+            _normalize_key_component(entity),
+            "list",
+            f"page={page}",
+            f"page_size={page_size}",
+            f"sort_by={_normalize_key_component(sort_by)}",
+            f"sort_order={_normalize_key_component(sort_order)}",
+        ]
+    )
+
+
+def build_admin_detail_cache_key(entity: str, entity_id: str) -> str:
+    return ":".join(
+        [
+            _CACHE_ROOT_PREFIX,
+            "admin",
+            _normalize_key_component(entity),
+            "detail",
+            f"id={_normalize_key_component(entity_id)}",
+        ]
+    )
+
+
 class CacheAdapter(Protocol):
     backend_name: str
 

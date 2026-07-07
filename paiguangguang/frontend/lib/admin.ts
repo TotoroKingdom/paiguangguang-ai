@@ -18,6 +18,8 @@ import type {
   AdminWorkspaceCreateRequest,
   AdminWorkspaceData,
   AdminWorkspaceUpdateRequest,
+  AdminCacheClearDetailRequest,
+  AdminCacheClearListRequest,
 } from "@/types/admin";
 
 type AdminListQuery = {
@@ -247,4 +249,20 @@ export function deleteAdminWorkspace(workspaceId: string) {
   return deleteJson<AdminWorkspaceData>(`/api/v1/admin/workspaces/${workspaceId}`, {
     token: getStoredAuthToken(),
   });
+}
+
+export function clearAdminEntityListCache(request: AdminCacheClearListRequest) {
+  return postJson<{ cleared: "list"; entity: string }, AdminCacheClearListRequest>("/api/v1/admin/cache/clear-list", request, {
+    token: getStoredAuthToken(),
+  });
+}
+
+export function clearAdminEntityDetailCache(request: AdminCacheClearDetailRequest) {
+  return postJson<{ cleared: "detail"; entity: string; entity_id: string }, AdminCacheClearDetailRequest>(
+    "/api/v1/admin/cache/clear-detail",
+    request,
+    {
+      token: getStoredAuthToken(),
+    }
+  );
 }

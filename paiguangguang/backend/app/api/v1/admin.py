@@ -25,6 +25,8 @@ from app.schemas.admin import (
     AdminWorkspaceCreateRequest,
     AdminWorkspaceData,
     AdminWorkspaceUpdateRequest,
+    AdminCacheClearDetailRequest,
+    AdminCacheClearListRequest,
 )
 from app.schemas.common import ApiResponse
 from app.services.document_parser import DocumentParser, DocumentParseError
@@ -60,6 +62,19 @@ def _require_permission(
 
 def _handle_key_error(exc: KeyError, entity_name: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{entity_name} {exc.args[0]} not found")
+
+
+def _permission_for_cache_entity(entity: str) -> str:
+    normalized = entity.strip().lower()
+    if normalized == "users":
+        return "user.manage"
+    if normalized in {"roles", "permissions"}:
+        return "role.manage"
+    if normalized == "workspaces":
+        return "workspace.manage"
+    if normalized == "documents":
+        return "document.delete"
+    raise HTTPException(status_code=400, detail=f"Unsupported cache entity: {entity}")
 
 
 @router.get("/users", response_model=ApiResponse[AdminPagedData[AdminUserData]])
@@ -565,3 +580,35 @@ def update_ingestion_job(
         return ApiResponse(data=service.update_job(session, job_id, request))
     except KeyError as exc:
         raise _handle_key_error(exc, "Ingestion job") from exc
+
+
+@router.post("/cache/clear-list", response_model=ApiResponse[dict[str, str]])
+def clear_admin_list_cache(
+    request: AdminCacheClearListRequest,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    service: AdminService = Depends(get_admin_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> ApiResponse[dict[str, str]]:
+    _require_permission(service, session, current_user, _permission_for_cache_entity(request.entity), rbac_service)
+    return ApiResponse(
+        data=service.clear_entity_list_cache(
+            request.entity,
+            page=request.page,
+            page_size=request.page_size,
+            sort_by=request.sort_by,
+            sort_order=request.sort_order,
+        )
+    )
+
+
+@router.post("/cache/clear-detail", response_model=ApiResponse[dict[str, str]])
+def clear_admin_detail_cache(
+    request: AdminCacheClearDetailRequest,
+    session: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    service: AdminService = Depends(get_admin_service),
+    rbac_service: RBACService = Depends(get_rbac_service),
+) -> ApiResponse[dict[str, str]]:
+    _require_permission(service, session, current_user, _permission_for_cache_entity(request.entity), rbac_service)
+    return ApiResponse(data=service.clear_entity_detail_cache(request.entity, request.entity_id))

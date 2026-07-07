@@ -22,3 +22,9 @@ class UserData(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+
+class AuthenticatedUserContextData(UserData):
+    roles: list[str] = Field(default_factory=list)
+    workspace_ids: list[str] = Field(default_factory=list)
+    effective_permissions: list[str] = Field(default_factory=list)

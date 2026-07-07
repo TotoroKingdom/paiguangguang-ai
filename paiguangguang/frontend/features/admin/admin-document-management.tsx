@@ -7,6 +7,8 @@ import type { FormEvent } from "react";
 import { AuthGate } from "@/components/auth-gate";
 import { ApiError } from "@/lib/api";
 import {
+  clearAdminEntityDetailCache,
+  clearAdminEntityListCache,
   deleteAdminDocument,
   getAdminDocument,
   listAdminDocuments,
@@ -319,6 +321,25 @@ export function AdminDocumentManagement() {
     await loadData(selectedDocumentId);
   }
 
+  async function handleClearDocumentListCache() {
+    await clearAdminEntityListCache({
+      entity: "documents",
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
+    });
+    await loadData(selectedDocumentId);
+  }
+
+  async function handleClearDocumentDetailCache(documentId: string) {
+    await clearAdminEntityDetailCache({
+      entity: "documents",
+      entityId: documentId,
+    });
+    await loadData(documentId);
+  }
+
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setUploadError(null);
@@ -507,13 +528,23 @@ export function AdminDocumentManagement() {
                   <p className="text-sm font-semibold uppercase tracking-wide text-clay">文档列表</p>
                   <h2 className="mt-2 text-2xl font-semibold text-ink">文档与入库状态</h2>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleReload()}
-                  className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/30 hover:bg-paper"
-                >
-                  刷新
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleClearDocumentListCache()}
+                    className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/30 hover:bg-paper"
+                    title="清理当前列表 Redis 缓存"
+                  >
+                    Redis 清理
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleReload()}
+                    className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/30 hover:bg-paper"
+                  >
+                    刷新
+                  </button>
+                </div>
               </div>
 
               <div className="mt-4 text-sm leading-7 text-ink/70">
@@ -578,6 +609,14 @@ export function AdminDocumentManagement() {
                 <div className="flex flex-wrap gap-2">
                   {selectedDocumentSummary ? (
                     <>
+                      <button
+                        type="button"
+                        onClick={() => void handleClearDocumentDetailCache(selectedDocumentSummary.doc_id)}
+                        className="border border-ink/15 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/30 hover:bg-paper"
+                        title="清理当前文档 Redis 缓存"
+                      >
+                        Redis
+                      </button>
                       <button
                         type="button"
                         onClick={() => void handleReindex(selectedDocumentSummary.doc_id)}
