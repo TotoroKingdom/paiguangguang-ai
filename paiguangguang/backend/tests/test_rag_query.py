@@ -13,7 +13,7 @@ from app.db.models import User
 from app.main import app
 from app.schemas.rag import RagQueryRequest
 from app.ai.rerank import RerankResult
-from app.services.context_assembler import ContextAssemblyResult
+from app.services.context_assembler import ContextAssemblyResult, ContextAssembler
 from app.services.auth import AuthService, get_auth_service
 from app.services.hybrid_retrieval import HybridRetrievalHit
 from app.services.hybrid_retrieval import HybridRetrievalService
@@ -23,6 +23,7 @@ from app.services.rbac import RBACService, get_rbac_service
 from app.db.session import get_db_session
 from app.storage.cache import InMemoryCacheAdapter
 from app.storage.chroma_store import get_chroma_rag_store
+from app.storage.rag_documents import RagChunkRecord, RagDocumentRecord, RagDocumentRepository
 
 
 class FakeSearchStore:
@@ -120,6 +121,13 @@ def _create_session(tmp_path, filename: str) -> Session:
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return session_factory()
+
+
+def _create_repository(tmp_path, filename: str) -> RagDocumentRepository:
+    engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / filename).as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    return RagDocumentRepository(session_factory=session_factory)
 
 
 def _build_query_service(vector_hits, keyword_hits, handler, rerank_provider=None, context_assembler=None):
@@ -977,6 +985,217 @@ def test_rag_query_applies_rerank_before_prompt_context(tmp_path) -> None:
     assert body["sources"][1]["rerank_score"] == 0.2
     assert "doc_id=doc-beta" in captured_bodies[0]
     assert captured_bodies[0].index("doc_id=doc-beta") < captured_bodies[0].index("doc_id=doc-alpha")
+
+
+def test_rag_query_preserves_rerank_top_k_order_for_sources_citations_and_context(tmp_path) -> None:
+    session = _create_session(tmp_path, "rag-query-rerank-order.sqlite3")
+    repository = _create_repository(tmp_path, "rag-query-rerank-order.sqlite3")
+    auth_service = AuthService()
+    rbac_service = RBACService()
+    defaults = rbac_service.bootstrap_defaults(session)
+    user = _create_user(session, auth_service, email="rank@example.com", password="Secret123!")
+    rbac_service.assign_role_to_user(session, user.id, "user")
+    rbac_service.add_user_to_workspace(session, user.id, defaults.default_workspace.slug)
+
+    document = RagDocumentRecord(
+        document_id="doc-alpha",
+        title="Alpha Notes",
+        text="Chunk five\nChunk one\nChunk three",
+        content_hash="hash-alpha",
+        owner_user_id=user.id,
+        workspace_id=defaults.default_workspace.id,
+        permission_scope="workspace",
+        status="indexed",
+        parse_status="completed",
+        chunk_status="completed",
+        embedding_status="completed",
+        index_status="completed",
+        is_deleted=False,
+    )
+    repository.upsert_document(document)
+    repository.replace_chunks(
+        "doc-alpha",
+        [
+            RagChunkRecord(
+                chunk_id="doc-alpha-chunk-0005",
+                document_id="doc-alpha",
+                chunk_index=5,
+                text="Chunk five",
+                start_char=50,
+                end_char=60,
+                page_number=1,
+                metadata={"chunk_index": 5, "start_char": 50, "end_char": 60},
+            ),
+            RagChunkRecord(
+                chunk_id="doc-alpha-chunk-0001",
+                document_id="doc-alpha",
+                chunk_index=1,
+                text="Chunk one",
+                start_char=10,
+                end_char=19,
+                page_number=1,
+                metadata={"chunk_index": 1, "start_char": 10, "end_char": 19},
+            ),
+            RagChunkRecord(
+                chunk_id="doc-alpha-chunk-0003",
+                document_id="doc-alpha",
+                chunk_index=3,
+                text="Chunk three",
+                start_char=30,
+                end_char=41,
+                page_number=1,
+                metadata={"chunk_index": 3, "start_char": 30, "end_char": 41},
+            ),
+        ],
+    )
+
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": "Ordered rerank response.",
+                        }
+                    }
+                ]
+            },
+        )
+
+    vector_hits = [
+        SimpleNamespace(
+            doc_id="doc-alpha",
+            chunk_id="doc-alpha-chunk-0005",
+            title="Alpha Notes",
+            page_number=1,
+            chunk_index=5,
+            text="Chunk five",
+            score=0.95,
+            start_char=50,
+            end_char=60,
+            metadata={
+                "doc_id": "doc-alpha",
+                "chunk_id": "doc-alpha-chunk-0005",
+                "title": "Alpha Notes",
+                "page_number": 1,
+                "chunk_index": 5,
+                "workspace_id": defaults.default_workspace.id,
+                "permission_scope": "workspace",
+                "owner_user_id": user.id,
+                "content_hash": "hash-alpha",
+                "lifecycle_version": 1,
+                "start_char": 50,
+                "end_char": 60,
+            },
+        ),
+        SimpleNamespace(
+            doc_id="doc-alpha",
+            chunk_id="doc-alpha-chunk-0001",
+            title="Alpha Notes",
+            page_number=1,
+            chunk_index=1,
+            text="Chunk one",
+            score=0.94,
+            start_char=10,
+            end_char=19,
+            metadata={
+                "doc_id": "doc-alpha",
+                "chunk_id": "doc-alpha-chunk-0001",
+                "title": "Alpha Notes",
+                "page_number": 1,
+                "chunk_index": 1,
+                "workspace_id": defaults.default_workspace.id,
+                "permission_scope": "workspace",
+                "owner_user_id": user.id,
+                "content_hash": "hash-alpha",
+                "lifecycle_version": 1,
+                "start_char": 10,
+                "end_char": 19,
+            },
+        ),
+        SimpleNamespace(
+            doc_id="doc-alpha",
+            chunk_id="doc-alpha-chunk-0003",
+            title="Alpha Notes",
+            page_number=1,
+            chunk_index=3,
+            text="Chunk three",
+            score=0.93,
+            start_char=30,
+            end_char=41,
+            metadata={
+                "doc_id": "doc-alpha",
+                "chunk_id": "doc-alpha-chunk-0003",
+                "title": "Alpha Notes",
+                "page_number": 1,
+                "chunk_index": 3,
+                "workspace_id": defaults.default_workspace.id,
+                "permission_scope": "workspace",
+                "owner_user_id": user.id,
+                "content_hash": "hash-alpha",
+                "lifecycle_version": 1,
+                "start_char": 30,
+                "end_char": 41,
+            },
+        ),
+    ]
+    context_assembler = ContextAssembler(repository=repository, include_adjacent_chunks=False, max_context_chars=4000)
+    rerank_provider = FakeRerankProvider(
+        {
+            "Chunk five": 0.9,
+            "Chunk one": 0.7,
+            "Chunk three": 0.5,
+        }
+    )
+    service, _vector_store, _keyword_retriever, _rerank_provider, _context_assembler = _build_query_service(
+        vector_hits,
+        vector_hits,
+        handler,
+        rerank_provider=rerank_provider,
+        context_assembler=context_assembler,
+    )
+    client = _build_test_client(session, auth_service, service, rbac_service)
+
+    try:
+        login_response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "rank@example.com", "password": "Secret123!"},
+        )
+        token = login_response.json()["data"]["access_token"]
+        response = client.post(
+            "/api/v1/rag/query",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "question": "Which chunks rank highest?",
+                "collection": "portfolio_knowledge",
+                "top_k": 2,
+                "include_debug": True,
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert [source["chunk_id"] for source in body["sources"]] == [
+        "doc-alpha-chunk-0005",
+        "doc-alpha-chunk-0001",
+    ]
+    assert [citation["chunk_id"] for citation in body["debug"]["citations"]] == [
+        "doc-alpha-chunk-0005",
+        "doc-alpha-chunk-0001",
+    ]
+    assert [item["metadata"]["top_k_rank"] for item in body["sources"]] == [1, 2]
+    assert [item["metadata"]["final_rank"] for item in body["sources"]] == [1, 2]
+    assert [item["metadata"]["top_k_rank"] for item in body["debug"]["citations"]] == [1, 2]
+    assert [item["metadata"]["final_rank"] for item in body["debug"]["citations"]] == [1, 2]
+    assert [item["chunk_id"] for item in body["debug"]["selected_context"][:2]] == [
+        "doc-alpha-chunk-0005",
+        "doc-alpha-chunk-0001",
+    ]
 
 
 def test_rag_query_uses_context_assembler_output(tmp_path) -> None:

@@ -104,8 +104,8 @@ def test_context_assembler_includes_adjacent_chunks_within_budget(tmp_path) -> N
     ])
 
     assert [source.chunk_id for source in result.selected_sources] == [
-        "doc-alpha-chunk-0000",
         "doc-alpha-chunk-0001",
+        "doc-alpha-chunk-0000",
         "doc-alpha-chunk-0002",
     ]
     assert "selection=primary" in result.context_text
@@ -127,3 +127,18 @@ def test_context_assembler_enforces_context_budget(tmp_path) -> None:
     assert len(result.selected_sources) == 1
     assert result.selected_sources[0].chunk_id == "doc-alpha-chunk-0000"
     assert result.truncated is True
+
+
+def test_context_assembler_preserves_primary_hit_order(tmp_path) -> None:
+    repository = _create_repository(tmp_path)
+    _seed_document(repository, document_id="doc-alpha", chunks=["Alpha one"])
+    _seed_document(repository, document_id="doc-beta", chunks=["Beta one"])
+    assembler = ContextAssembler(repository=repository, include_adjacent_chunks=False, max_context_chars=2000)
+
+    result = assembler.assemble([
+        _make_hit("doc-beta", 0, "Beta one"),
+        _make_hit("doc-alpha", 0, "Alpha one"),
+    ])
+
+    assert [source.doc_id for source in result.selected_sources] == ["doc-beta", "doc-alpha"]
+    assert all(source.metadata["context_selection"] == "primary" for source in result.selected_sources)

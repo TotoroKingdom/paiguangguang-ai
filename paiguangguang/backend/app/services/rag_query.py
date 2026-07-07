@@ -115,7 +115,9 @@ class RagQueryService:
             hits = trace.fusion_hits
             fusion_hits = list(hits)
             hits = self._apply_rerank(request.question, hits)
+            self._annotate_ranks(hits)
             assembly = self.context_assembler.assemble(hits)
+            top_k_hits = hits[:request.top_k]
 
             cached_result, answer_cache_hit = self._load_answer_cache(
                 collection_name=collection_name,
@@ -167,7 +169,7 @@ class RagQueryService:
 
             answer, model_usage = self._ask_model(request.question, assembly)
 
-            sources = [self._hit_to_source_data(hit) for hit in hits]
+            sources = [self._hit_to_source_data(hit) for hit in top_k_hits]
             debug = self._build_debug_data(
                 request,
                 rewrite=rewrite,
@@ -386,6 +388,14 @@ class RagQueryService:
         return reranked_hits
 
     @staticmethod
+    def _annotate_ranks(hits: list[HybridRetrievalHit]) -> None:
+        for index, hit in enumerate(hits, start=1):
+            metadata = dict(hit.metadata)
+            metadata["top_k_rank"] = index
+            metadata["final_rank"] = index
+            hit.metadata = metadata
+
+    @staticmethod
     def _hit_to_source_data(hit: HybridRetrievalHit) -> RagSourceData:
         return RagSourceData(
             doc_id=hit.doc_id,
@@ -599,7 +609,7 @@ class RagQueryService:
             fusion=[self._hit_to_source_data(hit) for hit in fusion_hits],
             rerank=[self._hit_to_source_data(hit) for hit in reranked_hits],
             selected_context=[self._hit_to_source_data(hit) for hit in assembly.selected_sources],
-            citations=[self._hit_to_source_data(hit) for hit in reranked_hits],
+            citations=[self._hit_to_source_data(hit) for hit in reranked_hits[: request.top_k]],
             chunk_hit_rate=chunk_hit_rate,
             route_hit_counts=route_hit_counts,
             latency_ms=latency_ms,
