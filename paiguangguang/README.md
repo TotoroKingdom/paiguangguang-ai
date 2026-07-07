@@ -27,25 +27,61 @@ v1 阶段重点是先搭建一个清晰、可运行、可扩展的工程基础�
 
 ---
 
-## 2. 当前版本状态
+## 2. rag流程
 
 当前版本：`v1`
 
-v1 阶段已完成的主要内容：
+1. 用户请求 POST /query
 
-* 前端基础项目结构
-* 后端 FastAPI 项目结构
-* 前后端基础联通
-* Agent 页面入口
-* 后端 API 路由骨架
-* DeepSeek API 配置预留
-* Chroma 向量数据库目录预留
-* Redis 配置预留
-* Dockerfile 配置
-* Docker Compose 本地启动配置
-* 开发环境变量配置示例
+2. 路由层：
+   - get_current_user
+   - rate limit: rag:query:{user_id}
+   - 调用 query_for_user
 
-v1 阶段的核心目标是：**确保项目可以稳定启动、可以展示基础页面、可以作为 v2 的开发基座。**
+3. query_for_user：
+   - 检查 knowledge.query 权限
+   - 构造 access_context
+   - 进入 query()
+
+4. query rewrite：
+   - 用 DeepSeek，temperature=0.0
+   - 要求返回 JSON
+   - 得到 rewritten_queries
+   - rewrite 结果写入共享缓存
+
+5. hybrid retrieval：
+   - queries = 原始问题 + rewritten_queries
+   - 每个 query 跑 vector search
+   - 每个 query 跑 keyword/BM25 search
+   - 每个 query 跑 direct match search
+
+6. fusion：
+   - 按 (doc_id, chunk_id) 去重
+   - 用 RRF 加分
+   - score += 1 / (60 + rank)
+   - route_scores 保留各路线原始分数
+   - 最终取 fusion top_k
+
+7. rerank：
+   - 对 fusion_hits 用 rerank provider 重排
+   - 使用原始 question 和 hit.text
+   - top_n = len(hits)
+   - 不主动删除未返回的 hits，只追加到后面
+
+8. context assembly：
+   - 从 reranked hits 里选择最终上下文
+   - 生成 context_text 和 selected_sources
+
+9. answer cache：
+   - 如果命中，跳过 DeepSeek 生成
+   - 如果未命中，调用 DeepSeek 生成答案
+
+10. 返回：
+   - answer
+   - sources
+   - rewrite
+   - debug
+   - cache hit 信息
 
 ---
 
@@ -148,44 +184,11 @@ backend/.env.example
 backend/dev.env
 ```
 
-示例配置：
-
-```env
-APP_NAME=Paiguangguang Backend
-API_V1_PREFIX=/api/v1
-DATABASE_URL=postgresql+psycopg://...
-TEST_DATABASE_URL=postgresql+psycopg://...
-JWT_SECRET_KEY=change-me-in-development-secret-key
-JWT_ALGORITHM=HS256
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=60
-ADMIN_USER_EMAIL=admin@example.com
-ADMIN_USER_PASSWORD=change-me-in-development-admin-password
-ADMIN_USER_DISPLAY_NAME=Admin
-
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_API_KEY=your_deepseek_api_key_here
-DEEPSEEK_CHAT_MODEL=deepseek-chat
-DEEPSEEK_TIMEOUT_SECONDS=30
-
-CHROMA_PATH=./chroma
-RAG_COLLECTION_NAME=portfolio_knowledge
-
-REDIS_URL=redis://redis:6379/0
-
-CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
-```
-
 前端环境变量示例：
 
 ```env
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
-
-注意：
-
-* 不要把真实的 `DEEPSEEK_API_KEY` 提交到 GitHub。
-* `.env`、`dev.env`、`pro.env` 等真实配置文件应该加入 `.gitignore`。
-* `.env.example` 只保留示例值，不要写真实密钥。
 
 ---
 
@@ -440,310 +443,9 @@ v1 阶段完成后，需要满足以下验收标准：
 * README 说明了项目定位和技术栈
 * README 说明了环境变量配置
 * README 说明了 v1 当前能力和 v2 后续方向
-
----
-## 12. v1 已完成能力
-
-当前 v1 阶段已经完成了项目的基础闭环,已经具备了一个可运行、可展示、可继续扩展的 AI Agent 作品集雏形。
-
-v1 已完成的核心模块包括：
-
-* Home 个人问答页面
-* Knowledge 企业知识库 RAG 页面
-* Browser Agent 页面
-* Office Agent 页面
-* Architecture 架构可视化页面
-* FastAPI 后端 API 骨架
-* DeepSeek API 调用封装
-* Chroma 向量检索基础能力
-* Redis 集成
-* 前后端 API 联通
-* Docker 本地开发环境
-* 基础错误处理和加载状态
-* 基础响应结构封装
-
-v1 已经能“项目能演示”。可以通过前端页面体验不同 Agent 模块，也可以通过后端接口验证主要能力是否可用。
-
 ---
 
-## 13. 当前模块说明
-
-### 13.1 Home：个人问答
-
-Home 页面用于展示个人作品集问答能力。
-
-该模块的目标是让访问者可以通过对话方式了解项目作者的技术背景、项目经历、AI Agent 学习路线和作品集定位。
-
-当前能力包括：
-
-* 用户输入问题
-* 前端调用 Portfolio Chat API
-* 后端调用 DeepSeek 生成回答
-* 支持基础会话能力
-* 返回个人作品集相关回答
-
----
-
-### 13.2 Knowledge：企业知识库 RAG
-
-Knowledge 页面是当前项目最核心的 AI 工程能力展示模块。
-
-该模块用于演示企业知识库 Agent 的基础 RAG 流程，包括文本录入、文档切分、向量存储、问题检索、上下文组装、LLM 回答和来源展示。
-
-当前能力包括：
-
-* 支持文本录入
-* 支持文档 ingest
-* 支持文本 chunk 切分
-* 支持 Chroma 向量存储
-* 支持基于问题的相似度检索
-* 支持调用 DeepSeek 生成回答
-* 支持展示 sources / citations
-* 支持基础错误状态和加载状态
-
-该模块展示的是一个最小可用 RAG 闭环。后续 v2 阶段会重点围绕该模块做工程化增强，例如更好的文档管理、引用展示、检索质量优化、会话记忆、权限隔离和评测能力。
-
----
-
-### 13.3 Browser Agent
-
-Browser Agent 页面用于展示浏览器研究型 Agent 的产品形态。
-
-当前阶段该模块主要用于模拟浏览器研究工作流，不直接接入真实浏览器自动化，也不依赖外部搜索 API。
-
-当前能力包括：
-
-* 用户输入研究任务
-* 后端生成执行计划
-* 返回模拟搜索步骤
-* 展示中间执行过程
-* 展示最终总结结果
-
-该模块的目标是展示 Agent 的任务拆解和工具调用思路，而不是在 v1 阶段实现真实浏览器控制。后续可以继续扩展为真实搜索、网页读取、信息抽取和报告生成能力。
-
----
-
-### 13.4 Office Agent
-
-Office Agent 页面用于展示办公自动化 Agent 的产品形态。
-
-当前阶段该模块主要用于模拟 Office 工作流，例如生成报告、总结数据、撰写邮件等，不直接修改真实 Office 文件。
-
-当前能力包括：
-
-* 用户选择或输入办公任务
-* 后端模拟工具调用流程
-* 展示 step-by-step 执行步骤
-* 返回结构化最终结果
-* 支持基础错误处理
-
-该模块的目标是展示 Office 自动化 Agent 的工作流设计能力。后续可以继续扩展为真实文档解析、Excel 数据分析、Word 报告生成、邮件草稿生成等能力。
-
----
-
-### 13.5 Architecture：架构可视化
-
-Architecture 页面用于展示当前项目的系统架构。
-
-当前能力包括：
-
-* 前端请求架构图数据
-* 后端返回节点和边数据
-* 前端渲染架构关系
-* 支持节点信息展示
-* 展示前端、后端、LLM、RAG、Redis、Agent 模块之间的关系
-
-该页面的目标是让项目不仅能运行，还能被清楚地讲解。对于作品集项目来说，架构可视化可以帮助面试官快速理解系统设计，而不是只看到页面效果。
-
----
-
-## 14. Redis 集成说明
-
-当前项目已经集成 Redis。
-
-Redis 在 v1 阶段主要作为后续 Agent 工程化能力的基础设施，适合用于以下场景：
-
-* 会话状态存储
-* Agent 任务状态存储
-* 长任务执行进度记录
-* 缓存 LLM 调用结果
-* 缓存 RAG 查询结果
-* SSE 事件流状态管理
-* 后续任务队列或异步任务扩展
-
-当前 v1 阶段不要求 Redis 承担完整生产级队列能力，但 Redis 的接入为后续 v2 做长任务、任务状态查询、事件流推送和缓存优化打下了基础。
-
-
-## 15. v1 已知限制
-
-虽然 v1 已经完成了基本功能闭环，但它仍然是一个作品集项目的早期版本，还不是生产级系统。
-
-当前已知限制包括：
-
-* RAG 检索策略仍然较基础
-* 文档管理能力较弱
-* 暂未支持复杂文件格式解析
-* 暂未支持 PDF、Word、Excel 等真实文件的完整解析
-* RAG 暂未加入 rerank
-* RAG 暂未加入 query rewrite
-* RAG 暂未加入混合检索
-* RAG 暂未加入权限隔离
-* Browser Agent 仍是 mock workflow
-* Browser Agent 暂未接入真实搜索和网页读取
-* Office Agent 仍是 mock workflow
-* Office Agent 暂未接入真实 Office 文件操作
-* Agent 执行流程暂未完全异步化
-* SSE 事件流能力仍需进一步完善
-* 暂未加入用户登录和权限系统
-* 暂未加入完整生产部署方案
-* 暂未加入系统级评测和监控
-
----
-
-## 16. v2 规划方向
-
-v2 阶段不建议继续盲目堆新页面，而应该围绕现有 v1 做工程化增强。
-
-v2 的核心目标是：
-
-**把当前可演示的 AI Agent 项目，升级为更接近真实业务场景的 AI 工程作品。**
-
-v2 建议优先围绕 Knowledge RAG 模块推进，因为它最能体现 AI Agent 工程能力，也最适合作为求职作品讲解。
-
----
-
-### 17.1 Knowledge RAG 增强
-
-v2 阶段建议优先增强 Knowledge 模块。
-
-重点方向包括：
-
-* 支持真实文件上传
-* 支持 PDF 文本解析
-* 支持 Word 文档解析
-* 支持 Markdown 文档解析
-* 支持文档列表管理
-* 支持删除文档
-* 支持按 collection 管理知识库
-* 支持 chunk metadata 展示
-* 支持更清晰的引用来源展示
-* 支持 top_k 参数调整
-* 支持无检索结果时的友好提示
-* 支持 RAG prompt 优化
-* 支持 query rewrite
-* 支持 rerank
-* 支持混合检索
-* 支持基础 RAG 评测样例
-
-这一部分是 v2 最值得优先投入的方向。因为它能直接展示你对 RAG 系统的理解，而不仅仅是会调用 LLM API。
-
----
-
-### 17.2 Redis 与任务状态增强
-
-当前项目已经集成 Redis，v2 可以继续把 Redis 用得更真实。
-
-重点方向包括：
-
-* 使用 Redis 保存会话历史
-* 使用 Redis 保存 Agent 任务状态
-* 使用 Redis 保存任务执行事件
-* 使用 Redis 缓存高频问答结果
-* 使用 Redis 缓存 RAG 检索结果
-* 为 Browser 和 Office Agent 增加 task_id
-* 支持任务状态查询
-* 支持长任务进度展示
-* 支持 SSE 事件流推送
-
-这一部分可以让项目从“同步请求响应”升级为“更像真实 Agent 应用”的任务执行模式。
-
----
-
-### 17.3 Browser Agent 增强
-
-Browser Agent 在 v1 阶段已经完成基础页面和 mock workflow。v2 可以逐步增强为更真实的研究型 Agent。
-
-可选方向包括：
-
-* 接入真实搜索 API
-* 支持网页内容读取
-* 支持网页摘要
-* 支持多来源信息整理
-* 支持生成研究报告
-* 支持展示引用链接
-* 支持任务执行步骤可视化
-* 支持失败重试和错误提示
-
-该模块不建议在 v2 初期做得过重。优先级应该低于 Knowledge RAG，除非项目目标转向浏览器自动化。
-
----
-
-### 17.4 Office Agent 增强
-
-Office Agent 在 v1 阶段已经完成基础页面和 mock workflow。v2 可以逐步增强为真实办公自动化能力。
-
-可选方向包括：
-
-* 支持上传文本或表格数据
-* 支持生成邮件草稿
-* 支持生成结构化报告
-* 支持总结表格数据
-* 支持导出 Markdown 报告
-* 支持导出 Word 文档
-* 支持更清晰的工具调用步骤
-* 支持任务执行结果预览
-
-该模块适合作为展示“Agent + 工具调用 + 办公场景”的辅助模块，但不建议优先级超过 Knowledge RAG。
-
----
-
-### 17.5 Architecture 页面增强
-
-Architecture 页面在 v1 阶段已经完成基础展示。v2 可以继续增强它的讲解能力。
-
-可选方向包括：
-
-* 展示 RAG 调用链路
-* 展示 Agent 执行链路
-* 展示 Redis 在任务状态中的作用
-* 展示 Chroma 在知识库中的作用
-* 展示 DeepSeek 调用链路
-* 展示前后端 API 交互流程
-* 为每个节点增加更详细说明
-* 增加“当前已完成 / 后续规划”标记
-
-这个页面对求职作品很重要。它可以帮助你在面试中讲清楚系统，而不是只展示页面效果。
-
----
-
-## 18. v2 推荐优先级
-
-v2 建议按照以下顺序推进：
-
-第一优先级是 Knowledge RAG 工程化增强。这个模块最能体现 AI 工程能力，也最适合写进简历和面试项目介绍。
-
-第二优先级是 Redis 任务状态和 SSE。这个能力可以让 Browser Agent、Office Agent 和后续长任务都具备更真实的工程形态。
-
-第三优先级是 Architecture 页面增强。它可以让项目更容易被讲清楚，也能提升作品集展示效果。
-
-第四优先级是 Browser Agent 接入真实搜索或网页读取。这个方向很有展示价值，但复杂度和不稳定性会更高。
-
-第五优先级是 Office Agent 接入真实文件处理。这个方向适合后续扩展，但不适合作为 v2 的第一重点。
-
-推荐 v2 路线如下：
-
-```text
-v2.1：Knowledge RAG 文件上传与文档管理
-v2.2：RAG 引用来源、检索参数、Prompt 优化
-v2.3：Redis 会话历史、任务状态、SSE 事件流
-v2.4：Architecture 页面增强
-v2.5：Browser Agent 真实搜索能力
-v2.6：Office Agent 文件处理能力
-```
-
----
-
-## 19. 项目目标
+## 6. 项目目标
 
 本项目最终目标是作为 AI Agent 工程方向的个人作品集项目，展示从前端页面、后端 API、LLM 调用、RAG 检索、Agent 工作流到 Docker 部署的完整工程能力。
 
@@ -762,7 +464,7 @@ v2.6：Office Agent 文件处理能力
 * 面向真实业务场景的系统拆解能力
 ---
 
-## 20. 开发原则
+## 7. 开发原则
 
 本项目后续开发遵循以下原则：
 
@@ -781,6 +483,6 @@ v2.6：Office Agent 文件处理能力
 
 ---
 
-## 21. License
+## 8. License
 
 This project is for personal portfolio and learning purposes.
