@@ -17,11 +17,13 @@ export type HomepageProject = {
   tags: string[];
   href: string;
   proof: string;
+  imageSrc?: string;
 };
 
 export type HomepageTech = {
   name: string;
   category: "frontend" | "backend" | "ai" | "storage" | "delivery";
+  imageSrc?: string;
 };
 
 export const heroProofPoints = [
@@ -93,27 +95,30 @@ export const portfolioProjects: HomepageProject[] = [
     description: "A live assistant surface for explaining the portfolio, architecture, and project phases.",
     tags: ["Next.js", "FastAPI", "DeepSeek"],
     href: "/",
-    proof: "Shows frontend state, API round trip, session memory, and error handling."
+    proof: "Shows frontend state, API round trip, session memory, and error handling.",
+    imageSrc: "/homepage/project/aigc.png"
   },
   {
     name: "Knowledge Agent",
     description: "A RAG product track with document lifecycle, permissions, retrieval quality, and citations.",
     tags: ["RAG", "Chroma", "RBAC"],
     href: "/agents/knowledge",
-    proof: "Demonstrates enterprise-style retrieval architecture and debug visibility."
+    proof: "Demonstrates enterprise-style retrieval architecture and debug visibility.",
+    imageSrc: "/homepage/project/particles.png"
   },
   {
     name: "Agent Workflows",
     description: "Browser and Office demos that reveal planning, tool calls, and final outputs.",
     tags: ["Agents", "Tools", "SSE"],
     href: "/agents/browser",
-    proof: "Shows workflow decomposition instead of hiding work behind a single answer."
+    proof: "Shows workflow decomposition instead of hiding work behind a single answer.",
+    imageSrc: "/homepage/project/su7.png"
   }
 ];
 
 export const techStack: HomepageTech[] = [
   { name: "Next.js", category: "frontend" },
-  { name: "TypeScript", category: "frontend" },
+  { name: "TypeScript", category: "frontend", imageSrc: "/homepage/tech/typescript.png" },
   { name: "Tailwind CSS", category: "frontend" },
   { name: "FastAPI", category: "backend" },
   { name: "Pydantic", category: "backend" },
@@ -121,5 +126,5 @@ export const techStack: HomepageTech[] = [
   { name: "RAG", category: "ai" },
   { name: "Chroma", category: "storage" },
   { name: "Redis", category: "storage" },
-  { name: "Docker", category: "delivery" }
+  { name: "Docker", category: "delivery", imageSrc: "/homepage/tech/docker.png" }
 ];

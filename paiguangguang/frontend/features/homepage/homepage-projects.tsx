@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { portfolioProjects } from "./homepage-data";
@@ -12,6 +13,11 @@ export function HomepageProjects() {
       <div className="grid gap-4 lg:grid-cols-3">
         {portfolioProjects.map((project) => (
           <article key={project.name} className="flex min-h-[18rem] flex-col border border-ink/10 bg-white/65 p-5">
+            {project.imageSrc ? (
+              <div className="relative mb-4 aspect-[16/9] overflow-hidden border border-ink/10 bg-paper">
+                <Image src={project.imageSrc} alt={project.name} fill className="object-cover" />
+              </div>
+            ) : null}
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-ink">{project.name}</h3>
               <p className="mt-3 text-sm leading-7 text-ink/70">{project.description}</p>
