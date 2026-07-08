@@ -10,6 +10,8 @@ python chroma_view.py
 
 uv run python -m uvicorn app.main:app --reload --env-file dev.env    
 
+npm run dev
+
 ---
 
 ## 1. 项目定位
@@ -232,64 +234,6 @@ docker compose ps
 
 ```bash
 docker compose logs -f
-```
-
----
-
-### 方式二：前后端分别启动
-
-#### 启动后端
-
-进入后端目录：
-
-```bash
-cd backend
-```
-
-安装依赖：
-
-```bash
-pip install -r requirements.txt
-```
-
-启动 FastAPI：
-
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-访问后端接口文档：
-
-```text
-http://localhost:8000/docs
-```
-
----
-
-#### 启动前端
-
-进入前端目录：
-
-```bash
-cd frontend
-```
-
-安装依赖：
-
-```bash
-npm install
-```
-
-启动开发服务：
-
-```bash
-npm run dev
-```
-
-访问前端页面：
-
-```text
-http://localhost:3000
 ```
 
 ---
