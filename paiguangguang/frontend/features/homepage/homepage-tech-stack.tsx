@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 import type { HomepageTech } from "./homepage-data";
 import { techStack } from "./homepage-data";
 
@@ -20,7 +22,14 @@ export function HomepageTechStack() {
         {techStack.map((item) => (
           <div key={`${item.category}-${item.name}`} className="border border-ink/10 bg-white/65 p-4">
             <p className="text-xs font-semibold uppercase text-moss">{categoryLabels[item.category]}</p>
-            <p className="mt-2 text-base font-semibold text-ink">{item.name}</p>
+            <div className="mt-3 flex items-center gap-3">
+              {item.imageSrc ? (
+                <div className="relative h-10 w-10 shrink-0 overflow-hidden border border-ink/10 bg-paper">
+                  <Image src={item.imageSrc} alt={item.name} fill className="object-contain p-1" />
+                </div>
+              ) : null}
+              <p className="text-base font-semibold text-ink">{item.name}</p>
+            </div>
           </div>
         ))}
       </div>
