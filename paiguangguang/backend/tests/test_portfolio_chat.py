@@ -41,7 +41,7 @@ def test_portfolio_chat_returns_reply_and_session_id() -> None:
     client = TestClient(app)
 
     try:
-        response = client.post("/api/v1/chat/portfolio", json={"message": "What is this project?"})
+        response = client.post("/api/v1/chat/chat", json={"message": "What is this project?"})
     finally:
         app.dependency_overrides.clear()
 
@@ -80,10 +80,10 @@ def test_portfolio_chat_uses_session_memory() -> None:
     client = TestClient(app)
 
     try:
-        first_response = client.post("/api/v1/chat/portfolio", json={"message": "Hi"})
+        first_response = client.post("/api/v1/chat/chat", json={"message": "Hi"})
         session_id = first_response.json()["data"]["session_id"]
         second_response = client.post(
-            "/api/v1/chat/portfolio",
+            "/api/v1/chat/chat",
             json={"message": "What did I ask before?", "session_id": session_id},
         )
     finally:
@@ -101,8 +101,16 @@ def test_portfolio_chat_uses_session_memory() -> None:
 def test_portfolio_chat_validation_error_is_enveloped() -> None:
     client = TestClient(app)
 
-    response = client.post("/api/v1/chat/portfolio", json={"message": ""})
+    response = client.post("/api/v1/chat/chat", json={"message": ""})
 
     assert response.status_code == 422
     assert response.json()["success"] is False
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+
+
+def test_portfolio_chat_legacy_endpoint_is_not_available() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/v1/chat/portfolio", json={"message": "What is this project?"})
+
+    assert response.status_code == 404

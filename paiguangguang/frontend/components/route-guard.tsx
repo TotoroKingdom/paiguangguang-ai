@@ -17,7 +17,7 @@ function buildLoginHref(pathname: string, searchParams: Pick<URLSearchParams, "t
 }
 
 function isPublicRoute(pathname: string) {
-  return pathname === "/" || pathname === "/login";
+  return pathname === "/" || pathname === "/chat-bot" || pathname === "/login";
 }
 
 export function RouteGuard({ children }: RouteGuardProps) {
