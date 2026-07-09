@@ -12,6 +12,9 @@ uv run python -m uvicorn app.main:app --reload --env-file dev.env
 
 npm run dev
 
+#清掉cdoex启动的进程
+netstat -ano | findstr :3000
+taskkill /PID 12345 /F
 ---
 
 ## 1. 项目定位

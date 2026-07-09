@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 
 import { projectCards } from "./homepage-data";
@@ -16,21 +17,27 @@ const scenarioProjectCards = projectCards.slice(4);
 
 function ProjectTile({ project, index }: { project: (typeof projectCards)[number]; index: number }) {
   return (
-    <motion.article
+    <Link
       key={project.name}
-      initial={{ opacity: 0, y: 18 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.25 }}
-      transition={{ duration: 0.45, delay: index * 0.05 }}
-      className="group relative flex aspect-square w-full max-w-[280px] overflow-hidden rounded-[26px] border border-white/10 bg-white/5 p-6 text-center transition duration-500 hover:-translate-y-2 hover:border-cyan-300/35 hover:bg-white/[0.07]"
+      href={project.href}
+      aria-label={`${project.name} ${project.description}`}
+      className="group block w-full max-w-[280px] rounded-[26px] outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-0"
     >
-      <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${projectGradients[index % projectGradients.length]} opacity-0 transition duration-500 group-hover:opacity-100`} />
-      <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-200/10 blur-3xl opacity-0 transition duration-500 group-hover:opacity-100" />
-      <div className="relative z-10 flex h-full flex-col items-center justify-center">
-        <h3 className="text-2xl font-semibold text-white">{project.name}</h3>
-        <p className="mt-4 text-sm leading-7 text-slate-300">{project.description}</p>
-      </div>
-    </motion.article>
+      <motion.article
+        initial={{ opacity: 0, y: 18 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true, amount: 0.25 }}
+        transition={{ duration: 0.45, delay: index * 0.05 }}
+        className="relative flex aspect-square w-full overflow-hidden rounded-[26px] border border-white/10 bg-white/5 p-6 text-center transition duration-500 hover:-translate-y-2 hover:border-cyan-300/35 hover:bg-white/[0.07]"
+      >
+        <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${projectGradients[index % projectGradients.length]} opacity-0 transition duration-500 group-hover:opacity-100`} />
+        <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-200/10 blur-3xl opacity-0 transition duration-500 group-hover:opacity-100" />
+        <div className="relative z-10 flex h-full flex-col items-center justify-center">
+          <h3 className="text-2xl font-semibold text-white">{project.name}</h3>
+          <p className="mt-4 text-sm leading-7 text-slate-300">{project.description}</p>
+        </div>
+      </motion.article>
+    </Link>
   );
 }
 
