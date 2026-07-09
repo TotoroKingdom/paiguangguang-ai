@@ -1,6 +1,6 @@
 "use client";
 
-import {useMemo, type ReactNode} from "react";
+import {useEffect, useMemo, useRef, useState, type ReactNode} from "react";
 import {motion} from "framer-motion";
 
 import type {RagFlowStep} from "./homepage-data";
@@ -27,7 +27,6 @@ const COL_STEP = NODE_SIZE + COL_GAP;
 const ROW_STEP = NODE_SIZE + ROW_GAP;
 const BOARD_WIDTH = NODE_SIZE * 8 + COL_GAP * 7;
 const BOARD_HEIGHT = NODE_SIZE * 5 + ROW_GAP * 4;
-
 const userAvatarStep: RagFlowStep = {
     id: "user-avatar",
     title: "用户",
@@ -127,7 +126,7 @@ function curve(from: { x: number; y: number }, to: { x: number; y: number }) {
     return `M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`;
 }
 
-function FlowBoardConnectors() {
+function FlowBoardConnectors({particlesActive}: { particlesActive: boolean }) {
     const BRANCH_PULL = 48;
 
     function branchTopRight() {
@@ -245,50 +244,50 @@ function FlowBoardConnectors() {
                     <path
                         id={path.id}
                         d={path.d}
-                        stroke="rgba(103,232,249,0.18)"
-                        strokeWidth="2"
+                        stroke="rgba(103,232,249,0.22)"
+                        strokeWidth="2.2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         markerEnd="url(#flow-arrow)"
                     />
-
-                    <motion.path
+                    <path
                         d={path.d}
                         stroke="url(#flow-line-gradient)"
-                        strokeWidth="2.5"
+                        strokeWidth={particlesActive ? "2.8" : "2.4"}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         markerEnd="url(#flow-arrow)"
                         filter="url(#flow-glow)"
-                        strokeDasharray="12 18"
-                        initial={{strokeDashoffset: 80, opacity: 0.4}}
-                        animate={{strokeDashoffset: 0, opacity: 1}}
-                        transition={{
-                            strokeDashoffset: {
-                                duration: 1.45,
-                                repeat: Infinity,
-                                ease: "linear"
-                            },
-                            opacity: {
-                                duration: 0.35,
-                                delay: index * 0.01
-                            }
-                        }}
-                    />
-
-                    <circle
-                        r="4.5"
-                        fill="rgba(207,250,254,0.98)"
-                        filter="url(#flow-glow)"
+                        opacity={0.72 + (index % 3) * 0.08}
+                        strokeDasharray={particlesActive ? "12 18" : undefined}
                     >
-                        <animateMotion
-                            dur="1.45s"
-                            repeatCount="indefinite"
-                            begin={`${(index % 3) * 0.16}s`}
+                        {particlesActive ? (
+                            <animate
+                                attributeName="stroke-dashoffset"
+                                from="60"
+                                to="0"
+                                dur="2.4s"
+                                repeatCount="indefinite"
+                                begin={`${(index % 6) * 0.08}s`}
+                            />
+                        ) : null}
+                    </path>
+                    {particlesActive ? (
+                        <circle
+                            r="4.5"
+                            fill="rgba(207,250,254,0.98)"
+                            filter="url(#flow-glow)"
+                            opacity="0.95"
                         >
-                            <mpath href={`#${path.id}`}/>
-                        </animateMotion>
-                    </circle>
+                            <animateMotion
+                                dur="2.4s"
+                                repeatCount="indefinite"
+                                begin={`${(index % 5) * 0.22}s`}
+                            >
+                                <mpath href={`#${path.id}`}/>
+                            </animateMotion>
+                        </circle>
+                    ) : null}
                 </g>
             ))}
         </svg>
@@ -535,6 +534,32 @@ function LaneLabel({
 }
 
 export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) {
+    const boardRef = useRef<HTMLDivElement>(null);
+    const [particlesActive, setParticlesActive] = useState(false);
+
+    useEffect(() => {
+        const board = boardRef.current;
+        if (!board) {
+            return;
+        }
+
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (prefersReducedMotion || !("IntersectionObserver" in window)) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setParticlesActive(entry.isIntersecting);
+            },
+            {threshold: 0.18}
+        );
+
+        observer.observe(board);
+
+        return () => observer.disconnect();
+    }, []);
+
     const ingestionFlowSteps = useMemo(
         () => ingestionSteps.slice(0, 8),
         [ingestionSteps]
@@ -621,7 +646,7 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
 
                     <div
                         className="w-fit rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-3 py-1 text-xs font-medium text-fuchsia-100">
-                        Power by SVG animateMotion
+                        Optimized particle flow
                     </div>
                 </div>
 
@@ -630,6 +655,7 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
 
                     <div className="w-full overflow-x-auto pb-4">
                         <div
+                            ref={boardRef}
                             className="relative grid min-w-full shrink-0"
                             style={{
                                 width: BOARD_WIDTH,
@@ -640,7 +666,7 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                                 rowGap: ROW_GAP
                             }}
                         >
-                            <FlowBoardConnectors/>
+                            <FlowBoardConnectors particlesActive={particlesActive}/>
 
                             <LaneLabel row={1}>Document Ingestion</LaneLabel>
                             <LaneLabel row={3}>Query Runtime</LaneLabel>
