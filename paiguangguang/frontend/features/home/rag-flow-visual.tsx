@@ -21,7 +21,7 @@ const kindStyles: Record<RagFlowStep["kind"], string> = {
 
 const NODE_SIZE = 154;
 // 从左到右卡片间距拉大，避免右侧空白太明显
-const COL_GAP = 72;
+const COL_GAP = 100;
 const ROW_GAP = 48;
 const COL_STEP = NODE_SIZE + COL_GAP;
 const ROW_STEP = NODE_SIZE + ROW_GAP;
@@ -83,7 +83,8 @@ function formatOrder(order: number) {
 
 function OrderBadge({order}: { order: number }) {
     return (
-        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
+        <span
+            className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-300">
             {formatOrder(order)}
         </span>
     );
@@ -127,6 +128,40 @@ function curve(from: { x: number; y: number }, to: { x: number; y: number }) {
 }
 
 function FlowBoardConnectors() {
+    const BRANCH_PULL = 48;
+
+    function branchTopRight() {
+        const p = right(7, 2);
+        return {
+            x: p.x,
+            y: p.y + BRANCH_PULL
+        };
+    }
+
+    function branchTopLeft() {
+        const p = left(7, 2);
+        return {
+            x: p.x,
+            y: p.y + BRANCH_PULL
+        };
+    }
+
+    function branchBottomRight() {
+        const p = right(7, 4);
+        return {
+            x: p.x,
+            y: p.y - BRANCH_PULL
+        };
+    }
+
+    function branchBottomLeft() {
+        const p = left(7, 4);
+        return {
+            x: p.x,
+            y: p.y - BRANCH_PULL
+        };
+    }
+
     const paths = [
         // 文档入库链路：1 -> 8
         {id: "doc-1-2", d: line(right(1, 1), left(2, 1))},
@@ -148,13 +183,11 @@ function FlowBoardConnectors() {
         {id: "query-05-06", d: line(right(5, 3), left(6, 3))},
 
         // 06 分叉到 07 / 08
-        {id: "query-06-07", d: curve(right(6, 3), left(7, 2))},
-        {id: "query-06-08", d: curve(right(6, 3), left(7, 4))},
+        {id: "query-06-07", d: curve(right(6, 3), branchTopLeft())},
+        {id: "query-06-08", d: curve(right(6, 3), branchBottomLeft())},
 
-        // 07 / 08 汇入 09
-        {id: "query-07-09", d: curve(right(7, 2), left(8, 3))},
-        {id: "query-08-09", d: curve(right(7, 4), left(8, 3))},
-
+        {id: "query-07-09", d: curve(branchTopRight(), left(8, 3))},
+        {id: "query-08-09", d: curve(branchBottomRight(), left(8, 3))},
         // 09 向下进入后处理
         {id: "query-09-10", d: line(bottom(8, 3), top(8, 5))},
 
@@ -208,56 +241,56 @@ function FlowBoardConnectors() {
             </defs>
 
             {paths.map((path, index) => (
-    <g key={path.id}>
-        <path
-            id={path.id}
-            d={path.d}
-            stroke="rgba(103,232,249,0.18)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            markerEnd="url(#flow-arrow)"
-        />
+                <g key={path.id}>
+                    <path
+                        id={path.id}
+                        d={path.d}
+                        stroke="rgba(103,232,249,0.18)"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        markerEnd="url(#flow-arrow)"
+                    />
 
-        <motion.path
-            d={path.d}
-            stroke="url(#flow-line-gradient)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            markerEnd="url(#flow-arrow)"
-            filter="url(#flow-glow)"
-            strokeDasharray="12 18"
-            initial={{strokeDashoffset: 80, opacity: 0.4}}
-            animate={{strokeDashoffset: 0, opacity: 1}}
-            transition={{
-                strokeDashoffset: {
-                    duration: 1.45,
-                    repeat: Infinity,
-                    ease: "linear"
-                },
-                opacity: {
-                    duration: 0.35,
-                    delay: index * 0.01
-                }
-            }}
-        />
+                    <motion.path
+                        d={path.d}
+                        stroke="url(#flow-line-gradient)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        markerEnd="url(#flow-arrow)"
+                        filter="url(#flow-glow)"
+                        strokeDasharray="12 18"
+                        initial={{strokeDashoffset: 80, opacity: 0.4}}
+                        animate={{strokeDashoffset: 0, opacity: 1}}
+                        transition={{
+                            strokeDashoffset: {
+                                duration: 1.45,
+                                repeat: Infinity,
+                                ease: "linear"
+                            },
+                            opacity: {
+                                duration: 0.35,
+                                delay: index * 0.01
+                            }
+                        }}
+                    />
 
-        <circle
-            r="4.5"
-            fill="rgba(207,250,254,0.98)"
-            filter="url(#flow-glow)"
-        >
-            <animateMotion
-                dur="1.45s"
-                repeatCount="indefinite"
-                begin={`${(index % 3) * 0.16}s`}
-            >
-                <mpath href={`#${path.id}`}/>
-            </animateMotion>
-        </circle>
-    </g>
-))}
+                    <circle
+                        r="4.5"
+                        fill="rgba(207,250,254,0.98)"
+                        filter="url(#flow-glow)"
+                    >
+                        <animateMotion
+                            dur="1.45s"
+                            repeatCount="indefinite"
+                            begin={`${(index % 3) * 0.16}s`}
+                        >
+                            <mpath href={`#${path.id}`}/>
+                        </animateMotion>
+                    </circle>
+                </g>
+            ))}
         </svg>
     );
 }
@@ -311,9 +344,11 @@ function SquareNode({
 function UserAvatar() {
     return (
         <div className="relative mx-auto h-14 w-14">
-            <div className="absolute inset-0 rounded-[22px] bg-gradient-to-br from-cyan-300 via-sky-400 to-fuchsia-300 shadow-[0_0_34px_rgba(56,189,248,0.35)]"/>
+            <div
+                className="absolute inset-0 rounded-[22px] bg-gradient-to-br from-cyan-300 via-sky-400 to-fuchsia-300 shadow-[0_0_34px_rgba(56,189,248,0.35)]"/>
             <div className="absolute inset-[5px] rounded-[18px] bg-slate-950/85"/>
-            <div className="absolute left-1/2 top-[11px] h-8 w-8 -translate-x-1/2 rounded-full bg-gradient-to-br from-slate-100 to-cyan-100"/>
+            <div
+                className="absolute left-1/2 top-[11px] h-8 w-8 -translate-x-1/2 rounded-full bg-gradient-to-br from-slate-100 to-cyan-100"/>
             <div className="absolute left-[20px] top-[24px] h-1.5 w-1.5 rounded-full bg-slate-950"/>
             <div className="absolute right-[20px] top-[24px] h-1.5 w-1.5 rounded-full bg-slate-950"/>
             <div className="absolute left-1/2 top-[32px] h-1 w-4 -translate-x-1/2 rounded-full bg-slate-500/70"/>
@@ -367,7 +402,8 @@ function DiamondNode({
             transition={{duration: 0.45}}
             className="relative z-10 mx-auto flex h-[180px] w-[180px] items-center justify-center"
         >
-            <div className="flex aspect-square w-[142px] rotate-45 items-center justify-center rounded-2xl border border-fuchsia-300/35 bg-fuchsia-400/10 shadow-[0_0_55px_rgba(217,70,239,0.18)] backdrop-blur-sm">
+            <div
+                className="flex aspect-square w-[142px] rotate-45 items-center justify-center rounded-2xl border border-fuchsia-300/35 bg-fuchsia-400/10 shadow-[0_0_55px_rgba(217,70,239,0.18)] backdrop-blur-sm">
                 <div className="-rotate-45 px-3 text-center">
                     <div className="mb-1 flex justify-center">
                         <OrderBadge order={order}/>
@@ -407,7 +443,8 @@ function StripNode({
         >
             <div className="w-full">
                 <div className="mb-2 flex items-center justify-between gap-3">
-                    <div className="inline-flex rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
+                    <div
+                        className="inline-flex rounded-full border border-fuchsia-300/25 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-fuchsia-100">
                         retrieval
                     </div>
 
@@ -567,7 +604,8 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
             transition={{duration: 0.7, ease: "easeOut"}}
             className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.16),transparent_32%),radial-gradient(circle_at_right,rgba(217,70,239,0.16),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.98))] p-5 shadow-[0_30px_80px_rgba(2,6,23,0.45)]"
         >
-            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20"/>
+            <div
+                className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20"/>
 
             <div className="relative space-y-7">
                 <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
@@ -577,31 +615,18 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                         </p>
 
                         <h3 className="mt-2 text-2xl font-black text-white sm:text-3xl">
-                            正确的 RAG 问答链路
+                            RAG-链路
                         </h3>
-
-                        <p className="mt-3 max-w-4xl text-sm leading-7 text-slate-300">
-                            文档入库链路从左到右执行，完成后连接到问答链路的 Milvus 节点。
-                            用户问答链路先从 01 到 06 横向执行，再分叉到 BM25 和 Vector 两路召回，
-                            汇入 09 后向下进入后处理链路，最后从 17 回到用户。
-                        </p>
                     </div>
 
-                    <div className="w-fit rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-3 py-1 text-xs font-medium text-fuchsia-100">
-                        Draw.io aligned flow
+                    <div
+                        className="w-fit rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-3 py-1 text-xs font-medium text-fuchsia-100">
+                        Power by SVG animateMotion
                     </div>
                 </div>
 
                 <section className="relative z-10 rounded-[28px] border border-white/10 bg-white/[0.035] p-5 sm:p-6">
-                    <div className="mb-8">
-                        <p className="text-xs font-semibold uppercase tracking-[0.34em] text-cyan-200/75">
-                            Document Ingestion + Query Runtime
-                        </p>
 
-                        <h4 className="mt-2 text-xl font-black text-white sm:text-2xl">
-                            文档入库链路 + 用户问答链路
-                        </h4>
-                    </div>
 
                     <div className="w-full overflow-x-auto pb-4">
                         <div
@@ -654,11 +679,15 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                             </FlowCell>
 
                             <FlowCell col={7} row={2}>
-                                <StripNode step={bm25RetrievalStep} order={7}/>
+                                <div className="translate-y-12">
+                                    <StripNode step={bm25RetrievalStep} order={7}/>
+                                </div>
                             </FlowCell>
 
                             <FlowCell col={7} row={4}>
-                                <StripNode step={vectorRetrievalStep} order={8}/>
+                                <div className="-translate-y-12">
+                                    <StripNode step={vectorRetrievalStep} order={8}/>
+                                </div>
                             </FlowCell>
 
                             <FlowCell col={8} row={3}>
@@ -698,26 +727,6 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                     </div>
                 </section>
 
-                <div className="flex flex-wrap gap-2">
-                    {[
-                        "Ingestion",
-                        "Input Guardrails",
-                        "Rewrite",
-                        "BM25",
-                        "Vector Search",
-                        "Milvus",
-                        "RRF",
-                        "Rerank",
-                        "Output Guardrails"
-                    ].map((tag) => (
-                        <span
-                            key={tag}
-                            className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200"
-                        >
-                            {tag}
-                        </span>
-                    ))}
-                </div>
             </div>
         </motion.div>
     );
