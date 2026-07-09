@@ -20,8 +20,8 @@ export function HomepageHero() {
                     initial={{opacity: 0, y: 14}}
                     animate={{opacity: 1, y: 0}}
                     transition={{duration: 0.5, ease: "easeOut", delay: 0.08}}
-                    className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-sm"
-                >
+                    className="rounded-[28px] border border-white/10 bg-white/5 p-5 backdrop-blur-sm w-full max-w-6xl mx-auto"
+>
                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-cyan-200/80">Self
                         Introduction</p>
                     <h2 className="mt-3 text-2xl font-black text-white">TotoroKingdom</h2>
