@@ -15,8 +15,8 @@ export function HomepageOverview() {
   return (
     <section id="overview" className="space-y-6">
       <div className="max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Overview</p>
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">四张卡片说明这套 AI 系统的核心能力</h2>
+        <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Core Competencies</p>
+        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">我的核心能力</h2>
       </div>
       <div className="grid gap-4 lg:grid-cols-4 md:grid-cols-2">
         {overviewCards.map((card, index) => (
