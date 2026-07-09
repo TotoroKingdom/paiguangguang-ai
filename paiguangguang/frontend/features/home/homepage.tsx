@@ -4,6 +4,8 @@ import { HomepageOverview } from "./homepage-overview";
 import { HomepageProjects } from "./homepage-projects";
 import { HomepageRoadmap } from "./homepage-roadmap";
 import { HomepageTechStack } from "./homepage-tech-stack";
+import { RagFlowVisual } from "./rag-flow-visual";
+import { ragIngestionSteps, ragQuerySteps } from "./homepage-data";
 
 export function Homepage() {
   return (
@@ -14,6 +16,7 @@ export function Homepage() {
         <HomepageHero />
         <HomepageOverview />
         <HomepageTechStack />
+        <RagFlowVisual ingestionSteps={ragIngestionSteps} querySteps={ragQuerySteps} />
         <HomepageProjects />
         <HomepageRoadmap />
         <HomepageContact />

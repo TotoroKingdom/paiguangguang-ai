@@ -2,17 +2,14 @@
 
 import { motion } from "framer-motion";
 
-import { ragIngestionSteps, ragQuerySteps } from "./homepage-data";
-import { RagFlowVisual } from "./rag-flow-visual";
-
 export function HomepageHero() {
   return (
-    <section id="hero" className="grid gap-8 lg:grid-cols-[0.42fr_1fr] lg:items-start">
+    <section id="hero" className="px-4 sm:px-6 lg:px-8">
       <motion.div
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="space-y-7 pt-2 lg:sticky lg:top-6"
+        className="space-y-7 pt-2"
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/8 px-4 py-2 text-sm font-medium text-cyan-100">
           <span className="h-2 w-2 rounded-full bg-cyan-300" />
@@ -34,9 +31,6 @@ export function HomepageHero() {
           </p>
         </motion.article>
       </motion.div>
-      <div className="lg:pl-0">
-        <RagFlowVisual ingestionSteps={ragIngestionSteps} querySteps={ragQuerySteps} />
-      </div>
     </section>
   );
 }
