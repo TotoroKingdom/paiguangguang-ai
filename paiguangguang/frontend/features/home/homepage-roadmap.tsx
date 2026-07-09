@@ -7,7 +7,7 @@ import { roadmapStages } from "./homepage-data";
 export function HomepageRoadmap() {
   return (
     <section id="roadmap" className="space-y-6">
-      <div className="max-w-3xl">
+      <div className="mx-auto max-w-3xl text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Roadmap</p>
         <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">职业规划</h2>
       </div>

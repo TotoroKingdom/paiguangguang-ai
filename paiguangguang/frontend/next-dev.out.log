@@ -8,14 +8,15 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1964ms
+ ✓ Ready in 2.7s
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1400ms (511 modules)
+ GET /_next/static/chunks/_app-pages-browser_features_home_sun-canvas_tsx.js 404 in 1516ms
+ ✓ Compiled in 325ms (262 modules)
+ ✓ Compiled in 227ms (262 modules)
  ○ Compiling / ...
- ✓ Compiled / in 2.1s (1385 modules)
- GET / 200 in 2358ms
- GET / 200 in 82ms
- ✓ Compiled in 484ms (1385 modules)
- GET / 200 in 127ms
- GET / 200 in 75ms
- ✓ Compiled in 966ms (1385 modules)
- GET / 200 in 151ms
- GET / 200 in 65ms
+ ✓ Compiled / in 1018ms (1385 modules)
+ GET / 200 in 1347ms
+ ✓ Compiled in 369ms (694 modules)
+ GET / 200 in 64ms
+ GET / 200 in 67ms

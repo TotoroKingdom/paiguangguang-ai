@@ -229,6 +229,27 @@ export const projectCards: ProjectCard[] = [
         status: "Agent Demo",
         description: "展示报告、摘要和结构化输出的办公自动化链路。",
         tags: ["Tools", "Report", "Workflow"]
+    },
+    {
+        name: "智慧工业园",
+        href: "/",
+        status: "Scenario",
+        description: "面向园区设备、能耗、安防和运营数据的智能化管理平台。",
+        tags: ["IoT", "Energy", "Operations"]
+    },
+    {
+        name: "智慧校园",
+        href: "/",
+        status: "Scenario",
+        description: "连接教学、教务、安防和服务场景，构建校园一体化智能应用。",
+        tags: ["Campus", "Service", "AI"]
+    },
+    {
+        name: "智慧营销",
+        href: "/",
+        status: "Scenario",
+        description: "围绕客户洞察、内容生成和线索转化的 AI 营销工作台。",
+        tags: ["Marketing", "Content", "Growth"]
     }
 ];
 

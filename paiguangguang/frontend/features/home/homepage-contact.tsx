@@ -142,20 +142,6 @@ export function HomepageContact() {
                     <div
                         className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:26px_26px] opacity-[0.14]"/>
                     <LazySunCanvas/>
-                    <div
-                        className="pointer-events-none absolute inset-0 flex items-end justify-between gap-4 p-5 sm:p-6">
-                        <div
-                            className="max-w-xs rounded-2xl border border-white/10 bg-slate-950/45 p-4 backdrop-blur-md">
-                            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-amber-200/80">Open to
-                                build</p>
-                            <p className="mt-2 text-sm leading-6 text-slate-300">AI applications, RAG systems and agent
-                                workflows.</p>
-                        </div>
-                        <div
-                            className="hidden rounded-full border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium text-slate-200 backdrop-blur-sm md:block">
-                            2026 Portfolio
-                        </div>
-                    </div>
                 </motion.div>
             </div>
         </section>
