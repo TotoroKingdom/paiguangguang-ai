@@ -10,7 +10,6 @@ const navItems = [
   { href: "/agents/knowledge", label: "Knowledge" },
   { href: "/agents/browser", label: "Browser" },
   { href: "/agents/office", label: "Office" },
-  { href: "/architecture", label: "Architecture" },
   { href: "/admin", label: "Admin" }
 ];
 

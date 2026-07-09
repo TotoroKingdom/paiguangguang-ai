@@ -21,10 +21,10 @@ MOCK_BROWSER_CORPUS = (
         "tags": ("browser", "research", "workflow", "plan", "synthesis"),
     },
     {
-        "title": "Portfolio Architecture Overview",
-        "url": "https://mock.local/portfolio-architecture",
-        "summary": "Describes the frontend, backend, AI, and storage layers used in the portfolio system.",
-        "tags": ("portfolio", "architecture", "frontend", "backend", "ai"),
+        "title": "Knowledge Agent Retrieval Overview",
+        "url": "https://mock.local/knowledge-retrieval",
+        "summary": "Describes how the knowledge agent combines retrieval, citations, and answer synthesis.",
+        "tags": ("portfolio", "knowledge", "rag", "retrieval", "ai"),
     },
     {
         "title": "RAG and Knowledge Retrieval Notes",
@@ -33,10 +33,10 @@ MOCK_BROWSER_CORPUS = (
         "tags": ("rag", "retrieval", "knowledge", "citations"),
     },
     {
-        "title": "React Flow Visualization Guide",
-        "url": "https://mock.local/react-flow-guide",
-        "summary": "Shows how interactive node graphs can present system topology and detail panels.",
-        "tags": ("react", "flow", "visualization", "graph"),
+        "title": "Workflow State Visualization Guide",
+        "url": "https://mock.local/workflow-state-guide",
+        "summary": "Shows how interactive views can present workflow state and detail panels.",
+        "tags": ("react", "workflow", "visualization", "state"),
     },
     {
         "title": "DeepSeek Integration Summary",

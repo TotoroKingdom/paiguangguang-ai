@@ -137,7 +137,7 @@ export function PortfolioChatPanel() {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 rows={4}
-                placeholder="Try asking about the project phases, architecture, or the AI systems behind the site."
+                placeholder="Try asking about the project phases, agent modules, or the AI systems behind the site."
                 className="w-full resize-none border border-ink/15 bg-white px-4 py-3 text-sm leading-7 text-ink outline-none transition placeholder:text-ink/40 focus:border-tide/50 focus:ring-2 focus:ring-tide/10"
               />
             </label>

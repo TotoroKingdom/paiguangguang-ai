@@ -37,7 +37,7 @@ def test_chroma_store_indexes_and_searches_chunks() -> None:
             index=0,
             start_char=0,
             end_char=24,
-            text="Alpha system architecture",
+            text="Alpha workflow notes",
         ),
         RagChunkRecord(
             chunk_id="doc-1-chunk-0001",
@@ -62,7 +62,7 @@ def test_chroma_store_indexes_and_searches_chunks() -> None:
     assert len(hits) == 2
     assert hits[0].chunk_id == "doc-1-chunk-0000"
     assert hits[0].doc_id == "doc-1"
-    assert hits[0].text == "Alpha system architecture"
+    assert hits[0].text == "Alpha workflow notes"
     assert hits[0].score >= hits[1].score
 
 
