@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import {useEffect, useRef, useState} from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import {motion} from "framer-motion";
 
 const SunCanvas = dynamic(() => import("./sun-canvas").then((module) => module.SunCanvas), {
@@ -63,6 +63,51 @@ function LazySunCanvas() {
 }
 
 export function HomepageContact() {
+    const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+    const [submitMessage, setSubmitMessage] = useState<string | null>(null);
+
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+
+        if (submitState === "sending") {
+            return;
+        }
+
+        const form = event.currentTarget;
+        const formData = new FormData(form);
+
+        setSubmitState("sending");
+        setSubmitMessage(null);
+
+        try {
+            const response = await fetch("/api/contact", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    name: String(formData.get("name") ?? "").trim(),
+                    email: String(formData.get("email") ?? "").trim(),
+                    message: String(formData.get("message") ?? "").trim(),
+                    website: String(formData.get("website") ?? "").trim()
+                })
+            });
+
+            const payload = await response.json().catch(() => null);
+
+            if (!response.ok || !payload?.ok) {
+                throw new Error(payload?.error ?? "Failed to send message");
+            }
+
+            form.reset();
+            setSubmitState("sent");
+            setSubmitMessage("Message sent. I'll get back to you by email.");
+        } catch (error) {
+            setSubmitState("error");
+            setSubmitMessage(error instanceof Error ? error.message : "Failed to send message");
+        }
+    }
+
     return (
         <section id="contact" className="mx-auto w-full max-w-[1500px] space-y-6 px-4 pb-6 sm:px-6 lg:px-8">
             <div className="max-w-3xl">
@@ -91,12 +136,20 @@ export function HomepageContact() {
                             className="mt-5 h-1 w-36 rounded-full bg-gradient-to-r from-fuchsia-400 via-violet-400 to-cyan-300"/>
                     </div>
 
-                    <form className="relative mt-7 space-y-5">
+                    <form className="relative mt-7 space-y-5" onSubmit={handleSubmit}>
+                        <input
+                            aria-hidden="true"
+                            autoComplete="off"
+                            className="sr-only"
+                            name="website"
+                            tabIndex={-1}
+                        />
                         <label className="block space-y-2.5">
                             <span className="text-base font-medium text-white/90">Your Name</span>
                             <input
                                 name="name"
                                 placeholder="What's your name?"
+                                required
                                 className="w-full rounded-2xl border border-white/10 bg-[#17172d] px-6 py-5 text-lg text-white placeholder:text-white/35 shadow-inner shadow-black/20"
                             />
                         </label>
@@ -105,6 +158,8 @@ export function HomepageContact() {
                             <span className="text-base font-medium text-white/90">Your Email</span>
                             <input
                                 aria-label="Your email"
+                                name="email"
+                                required
                                 className="h-14 w-full rounded-[18px] border border-white/10 bg-[#16172d]/95 px-5 text-base text-white outline-none shadow-inner shadow-black/20 transition placeholder:text-slate-500 focus:border-violet-300/65 focus:bg-[#191a34]"
                                 placeholder="What's your email?"
                                 type="email"
@@ -115,6 +170,7 @@ export function HomepageContact() {
                             <span className="text-base font-medium text-white/90">Your Message</span>
                             <textarea
                                 name="message"
+                                required
                                 placeholder="What do you want to say?"
                                 className="min-h-[250px] w-full rounded-2xl border border-white/10 bg-[#17172d] px-6 py-5 text-lg text-white placeholder:text-white/35 shadow-inner shadow-black/20"
                             />
@@ -123,12 +179,22 @@ export function HomepageContact() {
                         <div className="pt-1">
                             <button
                                 aria-label="Send message"
-                                type="button"
-                                className="rounded-[18px] border border-violet-300/50 bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-4 text-base font-semibold text-white shadow-[0_18px_45px_rgba(124,58,237,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(124,58,237,0.42)]"
+                                disabled={submitState === "sending"}
+                                type="submit"
+                                className="rounded-[18px] border border-violet-300/50 bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-4 text-base font-semibold text-white shadow-[0_18px_45px_rgba(124,58,237,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(124,58,237,0.42)] disabled:cursor-not-allowed disabled:opacity-70"
                             >
-                                Send Message
+                                {submitState === "sending" ? "Sending..." : "Send Message"}
                             </button>
                         </div>
+
+                        {submitMessage ? (
+                            <p
+                                className={`text-sm ${submitState === "sent" ? "text-emerald-300" : "text-rose-300"}`}
+                                aria-live="polite"
+                            >
+                                {submitMessage}
+                            </p>
+                        ) : null}
                     </form>
                 </motion.div>
 
