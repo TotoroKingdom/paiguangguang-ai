@@ -150,7 +150,7 @@ export function HomepageTechStack() {
     <section id="tech-stack" className="space-y-6">
       <div className="max-w-3xl">
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Tech Stack</p>
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">漂浮式技术墙，强调能力而不是装饰图标</h2>
+        {/*<h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">漂浮式技术墙，强调能力而不是装饰图标</h2>*/}
       </div>
       <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.15),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.13),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 sm:p-6">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px] opacity-20" />
@@ -172,7 +172,7 @@ export function HomepageTechStack() {
                 <TechIcon item={item} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                  <p className="mt-1 text-xs text-white/55">Capability marker</p>
+                  {/*<p className="mt-1 text-xs text-white/55">Capability marker</p>*/}
                 </div>
               </div>
             </motion.div>
