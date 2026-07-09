@@ -20,7 +20,8 @@ const kindStyles: Record<RagFlowStep["kind"], string> = {
 };
 
 const NODE_SIZE = 154;
-const COL_GAP = 32;
+// 从左到右卡片间距拉大，避免右侧空白太明显
+const COL_GAP = 72;
 const ROW_GAP = 48;
 const COL_STEP = NODE_SIZE + COL_GAP;
 const ROW_STEP = NODE_SIZE + ROW_GAP;
@@ -207,47 +208,56 @@ function FlowBoardConnectors() {
             </defs>
 
             {paths.map((path, index) => (
-                <g key={path.id}>
-                    <motion.path
-                        id={path.id}
-                        d={path.d}
-                        stroke="url(#flow-line-gradient)"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        markerEnd="url(#flow-arrow)"
-                        filter="url(#flow-glow)"
-                        strokeDasharray="8 10"
-                        initial={{strokeDashoffset: 60, opacity: 0.25}}
-                        animate={{strokeDashoffset: 0, opacity: 0.95}}
-                        transition={{
-                            strokeDashoffset: {
-                                duration: 1.6,
-                                repeat: Infinity,
-                                ease: "linear"
-                            },
-                            opacity: {
-                                duration: 0.4,
-                                delay: index * 0.015
-                            }
-                        }}
-                    />
+    <g key={path.id}>
+        <path
+            id={path.id}
+            d={path.d}
+            stroke="rgba(103,232,249,0.18)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            markerEnd="url(#flow-arrow)"
+        />
 
-                    <circle
-                        r="4"
-                        fill="rgba(207,250,254,0.95)"
-                        filter="url(#flow-glow)"
-                    >
-                        <animateMotion
-                            dur="1.8s"
-                            repeatCount="indefinite"
-                            begin={`${(index % 4) * 0.18}s`}
-                        >
-                            <mpath href={`#${path.id}`}/>
-                        </animateMotion>
-                    </circle>
-                </g>
-            ))}
+        <motion.path
+            d={path.d}
+            stroke="url(#flow-line-gradient)"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            markerEnd="url(#flow-arrow)"
+            filter="url(#flow-glow)"
+            strokeDasharray="12 18"
+            initial={{strokeDashoffset: 80, opacity: 0.4}}
+            animate={{strokeDashoffset: 0, opacity: 1}}
+            transition={{
+                strokeDashoffset: {
+                    duration: 1.45,
+                    repeat: Infinity,
+                    ease: "linear"
+                },
+                opacity: {
+                    duration: 0.35,
+                    delay: index * 0.01
+                }
+            }}
+        />
+
+        <circle
+            r="4.5"
+            fill="rgba(207,250,254,0.98)"
+            filter="url(#flow-glow)"
+        >
+            <animateMotion
+                dur="1.45s"
+                repeatCount="indefinite"
+                begin={`${(index % 3) * 0.16}s`}
+            >
+                <mpath href={`#${path.id}`}/>
+            </animateMotion>
+        </circle>
+    </g>
+))}
         </svg>
     );
 }
@@ -593,9 +603,9 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                         </h4>
                     </div>
 
-                    <div className="overflow-x-auto pb-4">
+                    <div className="w-full overflow-x-auto pb-4">
                         <div
-                            className="relative grid shrink-0"
+                            className="relative grid min-w-full shrink-0"
                             style={{
                                 width: BOARD_WIDTH,
                                 height: BOARD_HEIGHT,
