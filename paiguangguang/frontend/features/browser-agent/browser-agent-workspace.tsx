@@ -6,9 +6,9 @@ import { ApiError } from "@/lib/api";
 import { runBrowserAgent } from "@/lib/browser-agent";
 import type { BrowserAgentRunData, BrowserAgentStepData, BrowserSearchResultData } from "@/types/browser-agent";
 
-const starterPrompt = "How does the portfolio use React Flow to explain the system architecture?";
+const starterPrompt = "How does the portfolio knowledge agent use retrieval?";
 const suggestedPrompts = [
-  "How does the portfolio use React Flow to explain the system architecture?",
+  "How does the portfolio knowledge agent use retrieval?",
   "What mock research workflow does the Browser Agent demonstrate?",
   "Which portfolio pages show workflow state instead of just final answers?",
 ];
@@ -144,7 +144,7 @@ export function BrowserAgentWorkspace() {
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}
                 rows={6}
-                placeholder="Ask about a workflow, page, system concept, or architecture detail."
+                placeholder="Ask about a workflow, page, system concept, or AI module detail."
                 className="w-full resize-none border border-ink/15 bg-white px-4 py-3 text-sm leading-7 text-ink outline-none transition placeholder:text-ink/40 focus:border-tide/50 focus:ring-2 focus:ring-tide/10"
               />
             </label>

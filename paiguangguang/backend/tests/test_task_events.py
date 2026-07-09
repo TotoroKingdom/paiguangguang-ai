@@ -19,7 +19,7 @@ def test_task_state_endpoint_returns_current_state() -> None:
     task_id = service.start_task(
         task_type="browser_agent",
         title="Browser research workflow",
-        metadata={"prompt": "How does the portfolio use React Flow?"},
+        metadata={"prompt": "How does the portfolio show workflow state?"},
     )
     service.record_step(
         task_id,
@@ -28,7 +28,7 @@ def test_task_state_endpoint_returns_current_state() -> None:
             "kind": "plan",
             "title": "Create research plan",
             "detail": "Identify the research focus.",
-            "data": {"prompt": "How does the portfolio use React Flow?"},
+            "data": {"prompt": "How does the portfolio show workflow state?"},
         },
         index=1,
         total=2,
@@ -120,7 +120,7 @@ def test_browser_agent_run_returns_task_id_and_publishes_task_state() -> None:
         response = client.post(
             "/api/v1/agents/browser/run",
             json={
-                "prompt": "How does the portfolio use React Flow to explain the system architecture?",
+                "prompt": "How does the portfolio knowledge agent use retrieval?",
                 "top_k": 3,
             },
         )
@@ -132,7 +132,7 @@ def test_browser_agent_run_returns_task_id_and_publishes_task_state() -> None:
         assert task_response.status_code == 200
         task_state = TaskStateData.model_validate(task_response.json()["data"])
         assert task_state.status == "completed"
-        assert task_state.output["prompt"] == "How does the portfolio use React Flow to explain the system architecture?"
+        assert task_state.output["prompt"] == "How does the portfolio knowledge agent use retrieval?"
         assert task_state.event_count >= 8
     finally:
         app.dependency_overrides.clear()

@@ -266,8 +266,8 @@ export const roadmapStages: RoadmapStage[] = [
     },
     {
         stage: "03",
-        title: "AI Application Architect",
-        description: "从业务目标出发设计 AI 应用架构、治理边界和交付体系。"
+        title: "AI Application Engineer",
+        description: "从业务目标出发建设 AI 应用能力、治理边界和交付体系。"
     }
 ];
 
