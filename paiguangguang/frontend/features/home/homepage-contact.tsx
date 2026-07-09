@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import {useEffect, useRef, useState} from "react";
 import {motion} from "framer-motion";
 
 const SunCanvas = dynamic(() => import("./sun-canvas").then((module) => module.SunCanvas), {
@@ -10,6 +11,56 @@ const SunCanvas = dynamic(() => import("./sun-canvas").then((module) => module.S
             className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.2),transparent_35%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))]"/>
     )
 });
+
+function SunCanvasFallback() {
+    return (
+        <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-[radial-gradient(circle_at_58%_42%,rgba(250,204,21,0.52),transparent_11%),radial-gradient(circle_at_58%_42%,rgba(251,146,60,0.24),transparent_23%),radial-gradient(circle_at_45%_55%,rgba(56,189,248,0.18),transparent_34%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))]"
+        />
+    );
+}
+
+function LazySunCanvas() {
+    const hostRef = useRef<HTMLDivElement>(null);
+    const [shouldMountCanvas, setShouldMountCanvas] = useState(false);
+    const [isCanvasActive, setIsCanvasActive] = useState(false);
+
+    useEffect(() => {
+        const host = hostRef.current;
+        if (!host) {
+            return;
+        }
+
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const isSmallViewport = window.matchMedia("(max-width: 767px)").matches;
+
+        if (prefersReducedMotion || isSmallViewport || !("IntersectionObserver" in window)) {
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setShouldMountCanvas(true);
+                }
+                setIsCanvasActive(entry.isIntersecting);
+            },
+            {rootMargin: "280px 0px"}
+        );
+
+        observer.observe(host);
+
+        return () => observer.disconnect();
+    }, []);
+
+    return (
+        <div ref={hostRef} className="absolute inset-0">
+            <SunCanvasFallback/>
+            {shouldMountCanvas ? <SunCanvas active={isCanvasActive}/> : null}
+        </div>
+    );
+}
 
 export function HomepageContact() {
     return (
@@ -90,7 +141,7 @@ export function HomepageContact() {
                 >
                     <div
                         className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:26px_26px] opacity-[0.14]"/>
-                    <SunCanvas/>
+                    <LazySunCanvas/>
                     <div
                         className="pointer-events-none absolute inset-0 flex items-end justify-between gap-4 p-5 sm:p-6">
                         <div
