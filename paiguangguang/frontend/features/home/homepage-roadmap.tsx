@@ -21,9 +21,10 @@ export function HomepageRoadmap() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45, delay: index * 0.06 }}
-              className="group relative w-full max-w-[320px] overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5 transition duration-500 hover:-translate-y-1 hover:border-cyan-300/35 hover:shadow-[0_24px_70px_rgba(56,189,248,0.12)]"
+              className="group relative w-full max-w-[320px] overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5 transition duration-500 hover:-translate-y-1 hover:scale-[1.01] hover:border-cyan-300/65 hover:shadow-[0_32px_90px_rgba(34,211,238,0.24)]"
             >
-              <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cyan-400/0 via-sky-300/0 to-fuchsia-500/0 opacity-0 transition duration-500 group-hover:opacity-100 group-hover:from-cyan-400/18 group-hover:via-sky-300/10 group-hover:to-fuchsia-400/18" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.04),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(236,72,153,0.04),transparent_32%),linear-gradient(135deg,rgba(56,189,248,0.05),rgba(217,70,239,0.05))] opacity-0 transition duration-500 group-hover:opacity-100" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.46),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(236,72,153,0.38),transparent_32%),linear-gradient(135deg,rgba(56,189,248,0.24),rgba(217,70,239,0.2))] opacity-0 blur-[1.5px] mix-blend-screen transition duration-500 group-hover:opacity-100" />
               <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-cyan-400/10 blur-2xl" />
               <div className="relative z-10">
                 <p className="text-sm font-semibold uppercase tracking-[0.4em] text-cyan-200/70">{stage.stage}</p>

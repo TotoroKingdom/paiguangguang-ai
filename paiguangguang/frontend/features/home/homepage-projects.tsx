@@ -32,9 +32,9 @@ function ProjectTile({ project, index }: { project: (typeof projectCards)[number
       >
         <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${projectGradients[index % projectGradients.length]} opacity-0 transition duration-500 group-hover:opacity-100`} />
         <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-200/10 blur-3xl opacity-0 transition duration-500 group-hover:opacity-100" />
-        <div className="relative z-10 flex h-full flex-col items-center justify-center">
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center px-4 text-center">
           <h3 className="text-2xl font-semibold text-white">{project.name}</h3>
-          <p className="mt-4 text-sm leading-7 text-slate-300">{project.description}</p>
+          <p className="mt-4 max-w-[16rem] text-sm leading-7 text-slate-300">{project.description}</p>
         </div>
       </motion.article>
     </Link>
