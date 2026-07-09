@@ -204,7 +204,7 @@ export const techStack: TechStackItem[] = [
 export const projectCards: ProjectCard[] = [
     {
         name: "Chat bot",
-        href: "/",
+        href: "/chat-bot",
         status: "Live",
         description: "暖心的聊天机器人",
         tags: ["Chat", "Session", "AI"]
