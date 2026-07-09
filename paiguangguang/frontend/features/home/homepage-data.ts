@@ -39,56 +39,56 @@ export type ContactLink = {
 export const ragIngestionSteps: RagFlowStep[] = [
   {
     id: "knowledge-base",
-    title: "企业知识库",
-    description: "业务文档进入 RAG 入库链路。",
-    kind: "ingestion"
-  },
-  {
-    id: "cleaning",
-    title: "数据清洗",
-    description: "整理格式、去噪、保留可追踪信息。",
+    title: "业务文档源",
+    description: "企业知识库、制度文档、FAQ、项目资料等作为 RAG 的原始数据来源。",
     kind: "ingestion"
   },
   {
     id: "upload",
     title: "文件上传",
-    description: "接收文档并创建处理任务。",
+    description: "接收 PDF、Markdown、Word、网页文本等文档，并创建入库任务。",
     kind: "ingestion"
   },
   {
     id: "async-queue",
     title: "异步队列任务",
-    description: "解析与索引进入后台任务队列。",
+    description: "将解析、切块、向量化和索引写入放到后台任务中执行。",
     kind: "system"
   },
   {
     id: "parse",
     title: "文件解析",
-    description: "提取文本、标题、页码与基础 metadata。",
+    description: "提取正文、标题、页码、段落结构和基础 metadata。",
+    kind: "ingestion"
+  },
+  {
+    id: "cleaning",
+    title: "数据清洗",
+    description: "去除噪声、修复格式、合并异常换行，并保留可追踪信息。",
     kind: "ingestion"
   },
   {
     id: "chunk",
     title: "Chunk 切分",
-    description: "按 overlap 与语义边界控制上下文粒度。",
+    description: "按照 chunk size、overlap 和语义边界切分文档内容。",
     kind: "ingestion"
   },
   {
     id: "metadata",
     title: "Metadata 构建",
-    description: "记录 workspace、权限、文件与 chunk 信息。",
+    description: "记录 document_id、chunk_id、workspace、权限、页码和版本信息。",
     kind: "ingestion"
   },
   {
     id: "embedding",
     title: "Embedding 向量化",
-    description: "通过模型生成可检索向量。",
+    description: "调用 embedding 模型，将 chunk 文本转换成可检索向量。",
     kind: "ai"
   },
   {
     id: "milvus-index",
-    title: "Milvus / HNSW-IVF",
-    description: "写入向量库并建立索引加速检索。",
+    title: "Milvus 向量库",
+    description: "写入 chunk embedding 和 metadata，并建立 HNSW / IVF 等索引。",
     kind: "storage"
   }
 ];
@@ -97,67 +97,67 @@ export const ragQuerySteps: RagFlowStep[] = [
   {
     id: "user-question",
     title: "用户问题",
-    description: "用户提出需要回答的问题。",
+    description: "用户提出问题，系统保留原始 query 用于追踪、评估和缓存。",
     kind: "query"
   },
   {
     id: "input-guardrails",
     title: "输入护栏",
-    description: "检测 Prompt Injection、PII 与敏感输入。",
+    description: "检测 Prompt Injection、越权意图、PII 和明显无效输入。",
     kind: "system"
   },
   {
     id: "rewrite",
-    title: "Rewrite",
-    description: "生成 N 个 rewrite，并与原问题一起检索。",
+    title: "Query Rewrite",
+    description: "生成多个改写问题，补全上下文，并保留原始问题一起参与召回。",
     kind: "ai"
   },
   {
     id: "hybrid-retrieval",
     title: "Hybrid Retrieval",
-    description: "同时执行 BM25 关键词检索与 Vector 检索。",
+    description: "分叉为 BM25 关键词召回和 Vector 向量召回两条并行路线。",
     kind: "branch"
   },
   {
     id: "permission-filter",
     title: "权限过滤",
-    description: "结合 RBAC、workspace 与 metadata filter 过滤结果。",
+    description: "结合 RBAC、workspace、document metadata 和 chunk metadata 过滤候选结果。",
     kind: "system"
   },
   {
     id: "rrf",
     title: "RRF 融合",
-    description: "融合多路召回结果并重新排序。",
+    description: "融合 BM25 和 Vector 两路召回结果，降低单一路召回偏差。",
     kind: "query"
   },
   {
     id: "top50",
     title: "Top 50 粗筛",
-    description: "保留候选上下文集合。",
+    description: "保留候选上下文集合，为后续 rerank 降低计算成本。",
     kind: "query"
   },
   {
     id: "rerank",
     title: "Rerank Top 5",
-    description: "将最相关的上下文提升到前列。",
+    description: "使用 rerank 模型对候选 chunk 精排，选出最相关上下文。",
     kind: "ai"
   },
   {
     id: "context",
     title: "Context Assembly",
-    description: "去重、压缩、补全相邻 chunk 并生成引用编号。",
+    description: "去重、压缩、补全相邻 chunk，并生成可引用的上下文编号。",
     kind: "query"
   },
   {
     id: "llm",
     title: "DeepSeek / LLM",
-    description: "基于上下文生成最终回答。",
+    description: "基于检索上下文生成回答，避免脱离知识库自由发挥。",
     kind: "ai"
   },
   {
     id: "citation",
     title: "Citation",
-    description: "输出答案、来源和可检查引用。",
+    description: "输出答案、来源文档、chunk 信息和可检查引用。",
     kind: "query"
   }
 ];
