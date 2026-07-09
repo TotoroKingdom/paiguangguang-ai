@@ -203,10 +203,10 @@ export const techStack: TechStackItem[] = [
 
 export const projectCards: ProjectCard[] = [
     {
-        name: "Portfolio Chat",
+        name: "Chat bot",
         href: "/",
         status: "Live",
-        description: "解释作品集、系统架构和项目阶段的对话入口。",
+        description: "暖心的聊天机器人",
         tags: ["Chat", "Session", "AI"]
     },
     {
@@ -273,7 +273,7 @@ export const roadmapStages: RoadmapStage[] = [
 
 export const contactLinks: ContactLink[] = [
     {
-        label: "入口",
+        label: "知识库",
         value: "Knowledge Agent",
         href: "/agents/knowledge"
     },
@@ -288,8 +288,8 @@ export const contactLinks: ContactLink[] = [
         href: "/agents/office"
     },
     {
-        label: "首页",
-        value: "Portfolio Chat",
+        label: "聊天",
+        value: "Chat bot",
         href: "/"
     }
 ];
