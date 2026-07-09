@@ -634,7 +634,7 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                 className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20"/>
 
             <div className="relative space-y-7">
-                <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+                <div className="flex justify-center text-center">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.4em] text-cyan-200/80">
                             RAG Control Plane
@@ -645,10 +645,6 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                         </h3>
                     </div>
 
-                    <div
-                        className="w-fit rounded-full border border-fuchsia-400/25 bg-fuchsia-400/10 px-3 py-1 text-xs font-medium text-fuchsia-100">
-                        Optimized particle flow
-                    </div>
                 </div>
 
                 <section className="relative z-10 rounded-[28px] border border-white/10 bg-white/[0.035] p-5 sm:p-6">

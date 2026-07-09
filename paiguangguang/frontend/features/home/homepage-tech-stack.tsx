@@ -67,6 +67,23 @@ function TechIcon({ item }: { item: TechStackItem }) {
             <path d="M8 10h4.5a3 3 0 0 1 0 6H8v-6Z" fill="currentColor" opacity="0.78" />
           </svg>
         );
+      case "LangGraph":
+        return (
+          <svg viewBox="0 0 24 24" className={common} aria-hidden="true">
+            <circle cx="6" cy="7" r="2.2" fill="currentColor" />
+            <circle cx="18" cy="7" r="2.2" fill="currentColor" opacity="0.75" />
+            <circle cx="12" cy="17" r="2.4" fill="currentColor" opacity="0.9" />
+            <path d="M8 7h8M7.4 8.8 10.8 15M16.6 8.8 13.2 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity="0.55" />
+          </svg>
+        );
+      case "LangChain":
+        return (
+          <svg viewBox="0 0 24 24" className={common} aria-hidden="true">
+            <path d="M8.6 13.5 7 15.1a4 4 0 1 1-5.7-5.7L4 6.7a4 4 0 0 1 5.7 0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="m15.4 10.5 1.6-1.6a4 4 0 1 1 5.7 5.7L20 17.3a4 4 0 0 1-5.7 0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+            <path d="M8.5 12h7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" opacity="0.65" />
+          </svg>
+        );
       case "Milvus":
         return (
           <svg viewBox="0 0 24 24" className={common} aria-hidden="true">
@@ -139,7 +156,7 @@ function TechIcon({ item }: { item: TechStackItem }) {
   })();
 
   return (
-    <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-[0_0_30px] ${iconStyles[item.category]}`}>
+    <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border shadow-[0_0_30px] ${iconStyles[item.category]}`}>
       {glyph}
     </div>
   );
@@ -148,13 +165,13 @@ function TechIcon({ item }: { item: TechStackItem }) {
 export function HomepageTechStack() {
   return (
     <section id="tech-stack" className="space-y-6">
-      <div className="max-w-3xl">
+      <div className="mx-auto max-w-3xl text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Tech Stack</p>
         {/*<h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">漂浮式技术墙，强调能力而不是装饰图标</h2>*/}
       </div>
-      <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.15),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.13),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 sm:p-6">
+      <div className="relative mx-auto max-w-6xl overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.15),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(217,70,239,0.13),transparent_30%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.95))] p-4 sm:p-6">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] bg-[size:28px_28px] opacity-20" />
-        <div className="relative grid justify-center gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,220px))]">
+        <div className="relative mx-auto grid max-w-[720px] justify-center justify-items-center gap-4 [grid-template-columns:repeat(2,150px)] sm:[grid-template-columns:repeat(3,150px)] xl:[grid-template-columns:repeat(4,150px)]">
           {techStack.map((item, index) => (
             <motion.div
               key={`${item.category}-${item.name}`}
@@ -163,17 +180,16 @@ export function HomepageTechStack() {
               viewport={{ once: true, amount: 0.2 }}
               transition={{ duration: 0.45, delay: index * 0.035 }}
               whileHover={{ y: -6, rotate: index % 2 === 0 ? -1 : 1 }}
-              className={`min-h-[118px] overflow-hidden rounded-2xl border bg-gradient-to-br p-3.5 backdrop-blur-sm ${categoryStyles[item.category]}`}
+              className={`group relative flex aspect-square w-full max-w-[150px] overflow-hidden rounded-2xl border bg-white/[0.035] p-4 text-center backdrop-blur-sm transition duration-500 hover:border-cyan-200/35 ${categoryStyles[item.category]}`}
             >
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/60">
-                {categoryLabels[item.category]}
-              </p>
-              <div className="mt-4 flex items-center gap-3">
+              <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${categoryStyles[item.category]} opacity-0 transition duration-500 group-hover:opacity-100`} />
+              <div className="pointer-events-none absolute -right-8 -top-8 h-20 w-20 rounded-full bg-white/10 blur-2xl opacity-0 transition duration-500 group-hover:opacity-100" />
+              <div className="relative z-10 flex h-full w-full flex-col items-center justify-center">
                 <TechIcon item={item} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                  {/*<p className="mt-1 text-xs text-white/55">Capability marker</p>*/}
-                </div>
+                <p className="mt-4 text-[9px] font-semibold uppercase tracking-[0.2em] text-white/55">
+                  {categoryLabels[item.category]}
+                </p>
+                <p className="mt-1 max-w-full truncate text-sm font-semibold text-white">{item.name}</p>
               </div>
             </motion.div>
           ))}

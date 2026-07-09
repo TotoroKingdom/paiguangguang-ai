@@ -258,10 +258,6 @@ export function HomepageOverview() {
                         {/* 卡片主体 */}
                         <div
                             className="relative flex h-full flex-col overflow-hidden rounded-[37px] bg-[radial-gradient(circle_at_50%_18%,rgba(125,211,252,0.18),transparent_34%),radial-gradient(circle_at_50%_88%,rgba(217,70,239,0.16),transparent_40%),linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.99))] p-8 text-center backdrop-blur-sm transition duration-500 group-hover:bg-slate-950/70">
-                            {/* 细网格背景 */}
-                            <div
-                                className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.055)_1px,transparent_1px)] bg-[size:18px_18px] opacity-18 transition duration-500 group-hover:opacity-30"/>
-
                             {/* 顶部淡光 */}
                             <div
                                 className={`pointer-events-none absolute left-1/2 top-10 h-40 w-40 -translate-x-1/2 rounded-full bg-gradient-to-br ${glyphStyles[card.accent]} opacity-15 blur-3xl transition duration-700 group-hover:opacity-30`}
