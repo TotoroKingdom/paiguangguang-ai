@@ -16,7 +16,8 @@ const kindStyles: Record<RagFlowStep["kind"], string> = {
     branch: "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-100",
     system: "border-amber-400/30 bg-amber-400/10 text-amber-100",
     ai: "border-violet-400/30 bg-violet-400/10 text-violet-100",
-    storage: "border-slate-200/30 bg-slate-200/10 text-slate-100"
+    storage: "border-slate-200/30 bg-slate-200/10 text-slate-100",
+    response: "border-slate-200/30 bg-slate-200/10 text-slate-100"
 };
 
 const NODE_SIZE = 154;
@@ -73,7 +74,7 @@ const finalAnswerStep: RagFlowStep = {
     id: "final-answer",
     title: "最终回答",
     description: "把通过输出护栏的回答返回给用户，完成一次问答闭环。",
-    kind: "query"
+    kind: "response"
 };
 
 function formatOrder(order: number) {
@@ -668,9 +669,9 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
                         >
                             <FlowBoardConnectors particlesActive={particlesActive}/>
 
-                            <LaneLabel row={1}>Document Ingestion</LaneLabel>
-                            <LaneLabel row={3}>Query Runtime</LaneLabel>
-                            <LaneLabel row={5}>Answer Pipeline</LaneLabel>
+                            {/*<LaneLabel row={1}>Document Ingestion</LaneLabel>*/}
+                            {/*<LaneLabel row={3}>Query Runtime</LaneLabel>*/}
+                            {/*<LaneLabel row={5}>Answer Pipeline</LaneLabel>*/}
 
                             {ingestionFlowSteps.map((step, index) => (
                                 <FlowCell key={step.id} col={index + 1} row={1}>
