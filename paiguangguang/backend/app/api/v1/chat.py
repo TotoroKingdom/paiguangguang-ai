@@ -11,7 +11,7 @@ from app.services.portfolio_chat import (
 router = APIRouter(prefix="/api/v1/chat", tags=["chat"])
 
 
-@router.post("/portfolio", response_model=ApiResponse[PortfolioChatData])
+@router.post("/chat", response_model=ApiResponse[PortfolioChatData])
 def portfolio_chat(
     request: PortfolioChatRequest,
     service: PortfolioChatService = Depends(get_portfolio_chat_service),
