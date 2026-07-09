@@ -225,7 +225,7 @@ const logos: ReactNode[] = [
 
 export function HomepageOverview() {
     return (
-        <section id="overview" className="mx-auto max-w-[1500px] space-y-8 px-4 text-center">
+        <section id="overview" className="mx-auto w-full max-w-[1500px] space-y-8 px-4 text-center">
             <div className="mx-auto max-w-3xl">
                 <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">
                     Core Competencies
@@ -236,7 +236,7 @@ export function HomepageOverview() {
                 </h2>
             </div>
 
-            <div className="mx-auto grid max-w-[1440px] justify-center gap-8 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="mx-auto grid w-full max-w-6xl justify-center justify-items-center gap-8 sm:grid-cols-2 xl:grid-cols-4">
                 {overviewCards.map((card, index) => (
                     <motion.article
                         key={card.title}

@@ -1,0 +1,21 @@
+
+> paiguangguang-frontend@0.1.0 dev
+> next dev --hostname 127.0.0.1 --port 3000
+
+  ▲ Next.js 14.2.0
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1964ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.1s (1385 modules)
+ GET / 200 in 2358ms
+ GET / 200 in 82ms
+ ✓ Compiled in 484ms (1385 modules)
+ GET / 200 in 127ms
+ GET / 200 in 75ms
+ ✓ Compiled in 966ms (1385 modules)
+ GET / 200 in 151ms
+ GET / 200 in 65ms

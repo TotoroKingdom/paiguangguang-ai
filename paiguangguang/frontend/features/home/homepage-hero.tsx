@@ -11,10 +11,12 @@ export function HomepageHero() {
                 transition={{duration: 0.6, ease: "easeOut"}}
                 className="space-y-7 pt-2"
             >
-                <div
-                    className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/8 px-4 py-2 text-sm font-medium text-cyan-100">
-                    <span className="h-2 w-2 rounded-full bg-cyan-300"/>
-                    Overview
+                <div className="mx-auto flex w-full max-w-6xl">
+                    <div
+                        className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/8 px-4 py-2 text-sm font-medium text-cyan-100">
+                        <span className="h-2 w-2 rounded-full bg-cyan-300"/>
+                        Overview
+                    </div>
                 </div>
                 <motion.article
                     initial={{opacity: 0, y: 14}}

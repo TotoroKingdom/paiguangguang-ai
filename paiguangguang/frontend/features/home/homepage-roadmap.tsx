@@ -11,7 +11,9 @@ export function HomepageRoadmap() {
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Roadmap</p>
         <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">三阶段职业规划，保持可交付而不是空泛目标</h2>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="relative mx-auto max-w-5xl">
+        <div className="pointer-events-none absolute left-[12%] right-[12%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-cyan-300/10 via-cyan-200/60 to-fuchsia-300/10 lg:block" />
+        <div className="relative z-10 grid justify-center justify-items-center gap-6 lg:grid-cols-3">
         {roadmapStages.map((stage, index) => (
           <motion.article
             key={stage.stage}
@@ -19,7 +21,7 @@ export function HomepageRoadmap() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.2 }}
             transition={{ duration: 0.45, delay: index * 0.06 }}
-            className="relative overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5"
+            className="relative w-full max-w-[320px] overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5"
           >
             <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-cyan-400/10 blur-2xl" />
             <p className="text-sm font-semibold uppercase tracking-[0.4em] text-cyan-200/70">{stage.stage}</p>
@@ -29,6 +31,7 @@ export function HomepageRoadmap() {
             <div className="mt-4 text-xs uppercase tracking-[0.28em] text-slate-400">Hover-ready milestone</div>
           </motion.article>
         ))}
+        </div>
       </div>
     </section>
   );
