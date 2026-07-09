@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 import type { RagFlowStep } from "./homepage-data";
@@ -18,47 +19,71 @@ const kindStyles: Record<RagFlowStep["kind"], string> = {
   storage: "border-slate-200/30 bg-slate-200/10 text-slate-100"
 };
 
-function FlowColumn({
-  title,
-  steps
-}: {
-  title: string;
-  steps: RagFlowStep[];
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.28em] text-slate-300">{title}</h3>
-        <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-slate-300">
-          {steps.length} steps
-        </span>
-      </div>
-      <div className="relative space-y-3 pl-5 before:absolute before:bottom-3 before:left-[0.6rem] before:top-3 before:w-px before:bg-gradient-to-b before:from-cyan-300/80 before:via-fuchsia-400/70 before:to-transparent">
-        {steps.map((step, index) => (
-          <motion.div
-            key={step.id}
-            initial={{ opacity: 0, y: 14 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.45, delay: index * 0.04 }}
-            className="relative rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
-          >
-            <span className={`absolute -left-5 top-5 h-3 w-3 rounded-full border ${kindStyles[step.kind]}`} />
-            <div className="flex items-center gap-2">
-              <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${kindStyles[step.kind]}`}>
-                {step.kind}
-              </span>
-            </div>
-            <h4 className="mt-3 text-base font-semibold text-white">{step.title}</h4>
-            <p className="mt-2 text-sm leading-6 text-slate-300">{step.description}</p>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
+type Point = {
+  x: number;
+  y: number;
+  row: number;
+};
 
 export function RagFlowVisual({ ingestionSteps, querySteps }: RagFlowVisualProps) {
+  const steps = useMemo(() => [...ingestionSteps, ...querySteps], [ingestionSteps, querySteps]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const [points, setPoints] = useState<Point[]>([]);
+
+  useEffect(() => {
+    const measure = () => {
+      const container = containerRef.current;
+      if (!container) {
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const nextPoints = cardRefs.current
+        .map((node) => {
+          if (!node) {
+            return null;
+          }
+
+          const rect = node.getBoundingClientRect();
+          return {
+            x: rect.left - containerRect.left + rect.width / 2,
+            y: rect.top - containerRect.top + rect.height / 2,
+            row: Math.round((rect.top - containerRect.top) / 8)
+          };
+        })
+        .filter((point): point is Point => point !== null);
+
+      setPoints(nextPoints);
+    };
+
+    measure();
+    window.addEventListener("resize", measure);
+
+    return () => window.removeEventListener("resize", measure);
+  }, [steps.length]);
+
+  const paths = useMemo(() => {
+    const lines: string[] = [];
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const midX = (current.x + next.x) / 2;
+
+      if (current.row === next.row) {
+        lines.push(`M ${current.x} ${current.y} H ${next.x}`);
+      } else {
+        const elbowY = current.y + 22;
+        const startX = current.x;
+        const endX = next.x;
+        lines.push(`M ${startX} ${current.y} V ${elbowY} H ${midX} V ${next.y - 22} H ${endX}`);
+      }
+    }
+
+    return lines;
+  }, [points]);
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97, y: 24 }}
@@ -67,8 +92,8 @@ export function RagFlowVisual({ ingestionSteps, querySteps }: RagFlowVisualProps
       className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.16),transparent_32%),radial-gradient(circle_at_right,rgba(217,70,239,0.16),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.98))] p-5 shadow-[0_30px_80px_rgba(2,6,23,0.45)]"
     >
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
-      <div className="relative">
-        <div className="mb-5 flex items-center justify-between gap-4">
+      <div className="relative space-y-5">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.4em] text-cyan-200/80">RAG Control Plane</p>
             <h3 className="mt-2 text-2xl font-black text-white">可视化入库链路与问答链路</h3>
@@ -77,30 +102,49 @@ export function RagFlowVisual({ ingestionSteps, querySteps }: RagFlowVisualProps
             Excalidraw-inspired
           </div>
         </div>
-        <div className="grid gap-6 lg:grid-cols-[1fr_auto_1fr] lg:items-start">
-          <FlowColumn title="Ingestion" steps={ingestionSteps} />
-          <div className="flex items-center justify-center lg:h-full">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.85 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true, amount: 0.25 }}
-              transition={{ duration: 0.55 }}
-              className="relative flex h-20 w-20 items-center justify-center rounded-full border border-cyan-300/30 bg-[radial-gradient(circle,rgba(125,211,252,0.26),rgba(14,165,233,0.08)_60%,transparent_72%)]"
-            >
-              <div className="absolute inset-2 rounded-full border border-white/10" />
-              <div className="absolute h-px w-32 bg-gradient-to-r from-transparent via-cyan-200/70 to-transparent" />
-              <div className="absolute h-32 w-px bg-gradient-to-b from-transparent via-fuchsia-200/70 to-transparent" />
-              <span className="text-xs font-semibold uppercase tracking-[0.35em] text-cyan-50">Flow</span>
-            </motion.div>
+        <div ref={containerRef} className="relative">
+          <svg aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+            <defs>
+              <linearGradient id="rag-line" x1="0%" x2="100%" y1="0%" y2="0%">
+                <stop offset="0%" stopColor="rgba(103,232,249,0.05)" />
+                <stop offset="50%" stopColor="rgba(103,232,249,0.75)" />
+                <stop offset="100%" stopColor="rgba(217,70,239,0.6)" />
+              </linearGradient>
+            </defs>
+            {paths.map((path, index) => (
+              <path key={`${index}-${path}`} d={path} fill="none" stroke="url(#rag-line)" strokeWidth="2" strokeLinecap="round" />
+            ))}
+          </svg>
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {steps.map((step, index) => (
+              <motion.div
+                key={step.id}
+                ref={(node) => {
+                  cardRefs.current[index] = node;
+                }}
+                initial={{ opacity: 0, y: 14 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.2 }}
+                transition={{ duration: 0.45, delay: index * 0.03 }}
+                className="relative z-10 rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur-sm"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className={`rounded-full border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${kindStyles[step.kind]}`}>
+                    {step.kind}
+                  </span>
+                  <span className="text-[11px] font-medium uppercase tracking-[0.28em] text-slate-400">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                </div>
+                <h4 className="mt-4 text-base font-semibold text-white">{step.title}</h4>
+                <p className="mt-2 text-sm leading-6 text-slate-300">{step.description}</p>
+              </motion.div>
+            ))}
           </div>
-          <FlowColumn title="Query" steps={querySteps} />
         </div>
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           {["Milvus", "Redis", "DeepSeek", "Guardrails", "Trace"].map((tag) => (
-            <span
-              key={tag}
-              className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200"
-            >
+            <span key={tag} className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200">
               {tag}
             </span>
           ))}

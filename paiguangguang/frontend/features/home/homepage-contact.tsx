@@ -4,7 +4,12 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { motion } from "framer-motion";
 
-import { contactLinks } from "./homepage-data";
+const contactLinks = [
+  { label: "入口", value: "Knowledge Agent", href: "/agents/knowledge" },
+  { label: "浏览", value: "Browser Agent", href: "/agents/browser" },
+  { label: "办公", value: "Office Agent", href: "/agents/office" },
+  { label: "Contact", value: "Contact", href: "#contact" }
+];
 
 const SunCanvas = dynamic(() => import("./sun-canvas").then((module) => module.SunCanvas), {
   ssr: false,

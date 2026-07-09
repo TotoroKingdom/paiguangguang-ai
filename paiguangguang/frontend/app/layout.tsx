@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth-provider";
+import { AppShell } from "@/components/app-shell";
 import { RouteGuard } from "@/components/route-guard";
-import { SiteNav } from "@/components/site-nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -22,8 +22,7 @@ export default function RootLayout({
         <AuthProvider>
           <Suspense fallback={null}>
             <RouteGuard>
-              <SiteNav />
-              <main className="w-full px-4 py-6 sm:px-6 md:py-8 lg:px-8">{children}</main>
+              <AppShell>{children}</AppShell>
             </RouteGuard>
           </Suspense>
         </AuthProvider>
