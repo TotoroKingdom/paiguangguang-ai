@@ -257,17 +257,17 @@ export const roadmapStages: RoadmapStage[] = [
     {
         stage: "01",
         title: "RAG System Builder",
-        description: "持续打磨检索质量、权限过滤、上下文工程和评估闭环。"
+        description: "让知识从沉睡中醒来，让系统拥有可信的记忆。"
     },
     {
         stage: "02",
-        title: "Agent Application Engineer",
-        description: "把计划、工具和状态做成可交付的业务能力。"
+        title: "Agentic Application Engineer",
+        description: "让 AI 拥有行动的意志"
     },
     {
         stage: "03",
-        title: "AI Application Engineer",
-        description: "从业务目标出发建设 AI 应用能力、治理边界和交付体系。"
+        title: "AI Application Architect",
+        description: "构建一座真正能够思考、协作并服务现实世界的智能建筑"
     }
 ];
 

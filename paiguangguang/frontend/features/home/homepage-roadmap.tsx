@@ -28,7 +28,7 @@ export function HomepageRoadmap() {
             <h3 className="mt-4 text-2xl font-semibold text-white">{stage.title}</h3>
             <p className="mt-3 text-sm leading-7 text-slate-300">{stage.description}</p>
             <div className="mt-6 h-px w-full bg-gradient-to-r from-cyan-300/60 via-fuchsia-300/50 to-transparent" />
-            <div className="mt-4 text-xs uppercase tracking-[0.28em] text-slate-400">Hover-ready milestone</div>
+            {/*<div className="mt-4 text-xs uppercase tracking-[0.28em] text-slate-400">Hover-ready milestone</div>*/}
           </motion.article>
         ))}
         </div>
