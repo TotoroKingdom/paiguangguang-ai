@@ -1,8 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FormEvent, useEffect, useRef, useState } from "react";
-import {motion} from "framer-motion";
+import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 
 const SunCanvas = dynamic(() => import("./sun-canvas").then((module) => module.SunCanvas), {
     ssr: false,
@@ -62,52 +62,15 @@ function LazySunCanvas() {
     );
 }
 
+function GitHubIcon() {
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="h-7 w-7 fill-current">
+            <path d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.46-1.2-1.13-1.52-1.13-1.52-.92-.65.07-.64.07-.64 1.02.07 1.55 1.07 1.55 1.07.9 1.58 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.06 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05.8-.23 1.66-.35 2.52-.35.86 0 1.72.12 2.52.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.63 1.03 2.75 0 3.93-2.35 4.8-4.58 5.05.36.32.69.96.69 1.94 0 1.4-.01 2.53-.01 2.87 0 .27.18.6.69.49A10.28 10.28 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z" />
+        </svg>
+    );
+}
+
 export function HomepageContact() {
-    const [submitState, setSubmitState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-    const [submitMessage, setSubmitMessage] = useState<string | null>(null);
-
-    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-        event.preventDefault();
-
-        if (submitState === "sending") {
-            return;
-        }
-
-        const form = event.currentTarget;
-        const formData = new FormData(form);
-
-        setSubmitState("sending");
-        setSubmitMessage(null);
-
-        try {
-            const response = await fetch("/api/contact", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    name: String(formData.get("name") ?? "").trim(),
-                    email: String(formData.get("email") ?? "").trim(),
-                    message: String(formData.get("message") ?? "").trim(),
-                    website: String(formData.get("website") ?? "").trim()
-                })
-            });
-
-            const payload = await response.json().catch(() => null);
-
-            if (!response.ok || !payload?.ok) {
-                throw new Error(payload?.error ?? "Failed to send message");
-            }
-
-            form.reset();
-            setSubmitState("sent");
-            setSubmitMessage("Message sent. I'll get back to you by email.");
-        } catch (error) {
-            setSubmitState("error");
-            setSubmitMessage(error instanceof Error ? error.message : "Failed to send message");
-        }
-    }
-
     return (
         <section id="contact" className="mx-auto w-full max-w-[1500px] space-y-6 px-4 pb-6 sm:px-6 lg:px-8">
             <div className="max-w-3xl">
@@ -128,74 +91,28 @@ export function HomepageContact() {
                     <div
                         className="pointer-events-none absolute -right-16 top-10 h-48 w-48 rounded-full bg-cyan-300/10 blur-3xl"/>
 
-                    <div className="relative">
-                        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-300/80">GET IN
-                            TOUCH</p>
+                    <div className="relative flex min-h-[420px] flex-col items-center justify-center px-6 py-10 text-center sm:px-10">
+                        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-300/80">GET IN TOUCH</p>
                         <h3 className="mt-4 text-5xl font-light leading-none tracking-tight text-white sm:text-6xl">Contact.</h3>
-                        <div
-                            className="mt-5 h-1 w-36 rounded-full bg-gradient-to-r from-fuchsia-400 via-violet-400 to-cyan-300"/>
+                        <div className="mt-5 h-1 w-36 rounded-full bg-gradient-to-r from-fuchsia-400 via-violet-400 to-cyan-300" />
+
+                        <a
+                            className="mt-10 text-2xl font-medium tracking-tight text-white transition hover:text-cyan-200 sm:text-3xl"
+                            href="mailto:totorokingdom@foxmail.com"
+                        >
+                            totorokingdom@foxmail.com
+                        </a>
+
+                        <a
+                            aria-label="GitHub profile"
+                            className="mt-8 inline-flex h-14 w-14 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white transition hover:-translate-y-0.5 hover:border-cyan-300/60 hover:bg-cyan-300/10 hover:text-cyan-100 focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+                            href="https://github.com/TotoroKingdom"
+                            rel="noreferrer"
+                            target="_blank"
+                        >
+                            <GitHubIcon />
+                        </a>
                     </div>
-
-                    <form className="relative mt-7 space-y-5" onSubmit={handleSubmit}>
-                        <input
-                            aria-hidden="true"
-                            autoComplete="off"
-                            className="sr-only"
-                            name="website"
-                            tabIndex={-1}
-                        />
-                        <label className="block space-y-2.5">
-                            <span className="text-base font-medium text-white/90">Your Name</span>
-                            <input
-                                name="name"
-                                placeholder="What's your name?"
-                                required
-                                className="w-full rounded-2xl border border-white/10 bg-[#17172d] px-6 py-5 text-lg text-white placeholder:text-white/35 shadow-inner shadow-black/20"
-                            />
-                        </label>
-
-                        <label className="block space-y-2.5">
-                            <span className="text-base font-medium text-white/90">Your Email</span>
-                            <input
-                                aria-label="Your email"
-                                name="email"
-                                required
-                                className="h-14 w-full rounded-[18px] border border-white/10 bg-[#16172d]/95 px-5 text-base text-white outline-none shadow-inner shadow-black/20 transition placeholder:text-slate-500 focus:border-violet-300/65 focus:bg-[#191a34]"
-                                placeholder="What's your email?"
-                                type="email"
-                            />
-                        </label>
-
-                        <label className="block space-y-2.5">
-                            <span className="text-base font-medium text-white/90">Your Message</span>
-                            <textarea
-                                name="message"
-                                required
-                                placeholder="What do you want to say?"
-                                className="min-h-[250px] w-full rounded-2xl border border-white/10 bg-[#17172d] px-6 py-5 text-lg text-white placeholder:text-white/35 shadow-inner shadow-black/20"
-                            />
-                        </label>
-
-                        <div className="pt-1">
-                            <button
-                                aria-label="Send message"
-                                disabled={submitState === "sending"}
-                                type="submit"
-                                className="rounded-[18px] border border-violet-300/50 bg-gradient-to-r from-violet-500 to-fuchsia-500 px-8 py-4 text-base font-semibold text-white shadow-[0_18px_45px_rgba(124,58,237,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_55px_rgba(124,58,237,0.42)] disabled:cursor-not-allowed disabled:opacity-70"
-                            >
-                                {submitState === "sending" ? "Sending..." : "Send Message"}
-                            </button>
-                        </div>
-
-                        {submitMessage ? (
-                            <p
-                                className={`text-sm ${submitState === "sent" ? "text-emerald-300" : "text-rose-300"}`}
-                                aria-live="polite"
-                            >
-                                {submitMessage}
-                            </p>
-                        ) : null}
-                    </form>
                 </motion.div>
 
                 <motion.div
