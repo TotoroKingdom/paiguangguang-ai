@@ -70,7 +70,7 @@ export function PortfolioChatPanel() {
       ]);
     } catch (err) {
       const messageText =
-        err instanceof ApiError ? err.message : "Unable to reach the portfolio chat backend.";
+        err instanceof ApiError ? err.message : "Unable to reach the chat bot backend.";
       setError(messageText);
       setInput(message);
     } finally {
@@ -92,7 +92,7 @@ export function PortfolioChatPanel() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase text-clay">V1 Live Module</p>
-            <h2 className="mt-2 text-2xl font-semibold text-ink">Portfolio Chat</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-ink">Chat bot</h2>
           </div>
           <div className="rounded-full border border-tide/20 bg-tide/10 px-3 py-1 text-xs font-semibold text-tide">
             Session {sessionId ? "active" : "new"}
