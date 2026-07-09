@@ -17,7 +17,7 @@ export function HomepageProjects() {
     <section id="projects" className="space-y-6">
       <div className="max-w-3xl">
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Projects</p>
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">四个模块卡片，直接连接到现有路由</h2>
+        {/*<h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">四个模块卡片，直接连接到现有路由</h2>*/}
       </div>
       <div className="mx-auto grid max-w-6xl justify-center justify-items-center gap-5 sm:grid-cols-2 xl:grid-cols-4">
         {projectCards.map((project, index) => (

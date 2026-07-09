@@ -186,15 +186,15 @@ export const overviewCards: OverviewCard[] = [
 ];
 
 export const techStack: TechStackItem[] = [
-    {name: "Next.js", category: "frontend"},
     {name: "Java", category: "backend"},
     {name: "FastAPI", category: "backend"},
-    {name: "DeepSeek", category: "ai"},
+    {name: "Next.js", category: "frontend"},
+    {name: "LangGraph", category: "ai"},
+    {name: "RAG", category: "ai"},
+    {name: "LangChain", category: "ai"},
     {name: "Milvus", category: "storage"},
     {name: "Redis", category: "storage"},
     {name: "MySQL", category: "storage"},
-    {name: "RAG", category: "ai"},
-    {name: "Agent", category: "workflow"},
     {name: "VibeCoding", category: "workflow"},
     {name: "Git", category: "delivery"},
     {name: "Docker", category: "delivery"},

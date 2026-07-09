@@ -9,7 +9,7 @@ export function HomepageRoadmap() {
     <section id="roadmap" className="space-y-6">
       <div className="max-w-3xl">
         <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Roadmap</p>
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">三阶段职业规划，保持可交付而不是空泛目标</h2>
+        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">职业规划</h2>
       </div>
       <div className="relative mx-auto max-w-5xl">
         <div className="pointer-events-none absolute left-[12%] right-[12%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-cyan-300/10 via-cyan-200/60 to-fuchsia-300/10 lg:block" />
