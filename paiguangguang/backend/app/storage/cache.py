@@ -262,16 +262,16 @@ def get_cache_adapter(settings: Settings | None = None) -> CacheAdapter:
                 _REDIS_CACHE_ADAPTER = RedisCacheAdapter(settings.redis_url)
             if _ACTIVE_CACHE_BACKEND != _REDIS_CACHE_ADAPTER.backend_name:
                 _ACTIVE_CACHE_BACKEND = _REDIS_CACHE_ADAPTER.backend_name
-                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url=settings.redis_url)
+                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND)
             return _REDIS_CACHE_ADAPTER
         except Exception:
             if _ACTIVE_CACHE_BACKEND != _IN_MEMORY_CACHE_ADAPTER.backend_name:
                 _ACTIVE_CACHE_BACKEND = _IN_MEMORY_CACHE_ADAPTER.backend_name
-                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url=settings.redis_url)
+                log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND)
             return _IN_MEMORY_CACHE_ADAPTER
     if _ACTIVE_CACHE_BACKEND != _IN_MEMORY_CACHE_ADAPTER.backend_name:
         _ACTIVE_CACHE_BACKEND = _IN_MEMORY_CACHE_ADAPTER.backend_name
-        log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND, redis_url="")
+        log_event("cache.backend_selected", backend=_ACTIVE_CACHE_BACKEND)
     return _IN_MEMORY_CACHE_ADAPTER
 
 
