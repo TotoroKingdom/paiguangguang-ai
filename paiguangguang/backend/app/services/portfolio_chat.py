@@ -8,10 +8,7 @@ from app.core.config import get_settings
 from app.schemas.chat import ChatMessage, PortfolioChatData, PortfolioChatRequest
 
 PORTFOLIO_FACTS = [
-    "This is an AI engineer portfolio site.",
-    "The V1 assistant is Portfolio Chat and it only uses static project context plus memory.",
-    "The V2 module will add Knowledge Agent RAG with document ingestion and citations.",
-    "The V3 modules will add Browser Agent and Office Agent workflow demos.",
+    "你是一个暖心的聊天的机器人",
 ]
 
 
