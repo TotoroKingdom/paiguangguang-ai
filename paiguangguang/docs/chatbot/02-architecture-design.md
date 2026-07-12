@@ -36,7 +36,7 @@
 
 - `.env.example` 含疑似真实 API/数据库凭据：实施 Task 0 必须先轮换并改为占位符。
 - `get_cache_adapter` 日志传入完整 `redis_url`；需脱敏，且 Redis fallback 不应让分布式锁静默退化成进程锁。
-- Compose 注入 `NEXT_PUBLIC_BACKEND_URL`，而 `frontend/lib/api.ts` 读取 `NEXT_PUBLIC_BACKEND_URL`；实施时统一变量名。
+- Compose 注入 `NEXT_PUBLIC_API_BASE_URL`，而 `frontend/lib/api.ts` 读取 `NEXT_PUBLIC_BACKEND_URL`；实施时统一变量名。
 - Chroma 与模型/Cache 单例在 import 时创建，测试和启动故障隔离有限；Chatbot 采用 dependency factory，不在 import 时连接外部资源。
 - `DeepSeekClient.chat_completions(stream=True)` 仍执行普通 `post` + `response.json()`，不能作为 Chatbot streaming 实现。
 
