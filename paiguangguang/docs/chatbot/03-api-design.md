@@ -10,6 +10,8 @@
 - Conversation 和 Message 使用稳定 cursor pagination；cursor 只表示位置，不承担授权。
 - 消息发送使用客户端 UUID 幂等键；Redis 可做快速命中，PostgreSQL 唯一约束是最终保障。
 - API V1 只允许同一 Conversation 一个生成中的 Assistant；并发发送返回 409。
+- 所有 endpoint 实现位于 `backend/app/chatbot/api`，由 `backend/app/chatbot/router.py` 汇总；全局 `backend/app/api/router.py` 只注册该 Router，不得包含 Chatbot Schema、依赖或业务逻辑。
+- API 错误映射、SSE 编码和请求依赖使用 `backend/app/chatbot/observability`、`schemas` 与 `api/dependencies.py`；除 JWT/Session/通用 request-id 外，不向全局 `api/v1`、`schemas` 或 `services` 增加 Chatbot 实现。
 
 ## 2. 协议与通用约定
 
@@ -587,4 +589,3 @@ JSON 错误可有受控 `details`；SSE error 只使用 `message.failed.error`�
 | Memory API | V1 对本人开放 |
 
 这些值应进入 Schema 或 `Settings`，不得散落硬编码在业务 Service。
-
