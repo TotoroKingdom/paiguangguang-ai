@@ -124,8 +124,11 @@ V1 不新增 Chatbot 专属 RBAC 权限；“已认证 + 资源所有权”即�
 
 ## 8. 后端需求
 
-- 所有具体路由置于 `backend/app/chatbot/api`，业务服务、repository、schema、model、memory、llm 均留在 `backend/app/chatbot`。
-- 全局 `backend/app/api/router.py` 只注册 Chatbot router；复用 `get_db_session`、`get_current_user_context`、`Settings`、cache/chroma 基础设施。
+- 所有 Chatbot 专属路由、配置结构、错误、日志包装、业务服务、repository、schema、model、memory、LLM 与基础设施适配器均留在 `backend/app/chatbot`；不得继续向全局 `api/v1`、`services`、`schemas`、`ai` 或 `storage` 堆叠 Chatbot 逻辑。
+- 全局 `backend/app/api/router.py` 只允许注册 `backend/app/chatbot/router.py` 暴露的 Router；公共模块不得反向依赖 Chatbot 的 Service、Repository 或 Model。
+- Chatbot 只单向复用 `get_db_session`、SQLAlchemy `Base`、`get_current_user_context` 和通用日志输出。Redis、Chroma、LLM Provider、后台任务与错误转换使用 `backend/app/chatbot/infrastructure`、`llm` 和 `observability` 中的专属适配器，不能直接复用带 Knowledge/RAG 业务语义的实现。
+- Chatbot 配置结构、默认值与范围校验位于 `backend/app/chatbot/config.py`；实际环境值分别位于 `backend/dev.env`、`backend/prod.env`，无秘密模板位于 `backend/.env.example`。`backend/app/core/config.py` 不承载大量 Chatbot 专属字段。
+- Chatbot 测试集中在 `backend/tests/chatbot`；Alembic revision 仍放在 `backend/alembic/versions`，这两个框架集成目录不得包含 Chatbot 业务逻辑。
 - Repository 必须把 `user_id` 作为所有资源查询参数；Service 管事务和状态机；Router 只做协议适配。
 - 主链路事务只覆盖本地数据库状态转换，不跨越外部 LLM/Redis/Chroma 调用保持长事务。
 - 统一错误 envelope 增加 `request_id`；通过中间件接受合法 `X-Request-ID` 或生成 UUID。
@@ -148,6 +151,7 @@ V1 不新增 Chatbot 专属 RBAC 权限；“已认证 + 资源所有权”即�
 - 可用性：LLM、Redis、Chroma 分别降级，Redis/Chroma 故障不应使历史不可读。
 - 隐私：默认不记录完整 Prompt/正文；保留与删除策略可配置，Memory 对用户可见可删。
 - 可测试性：LLM、Redis、Chroma 均通过协议/适配器注入；单元测试无外网依赖。
+- 模块隔离：删除 `backend/app/chatbot` 后，除 Router 注册、Alembic metadata 注册、Chatbot migration 和环境变量外，其他业务模块不需要修改；Knowledge、Browser、Office、Auth、Admin 与 RBAC 不得导入 Chatbot 内部实现。
 - 兼容性：新 API 位于 `/api/v1/chatbot`。旧 `/api/v1/chat/chat` 只保留一个发布周期的明确弃用适配层，内部必须调用新 service，不保留双份逻辑；随后返回 410 并删除。
 
 ## 11. 错误与边界场景
@@ -199,4 +203,3 @@ V1 不新增 Chatbot 专属 RBAC 权限；“已认证 + 资源所有权”即�
 2. **长期记忆产品开关**：默认启用“用户可见可删”，自动提取可用环境变量逐步放量。
 3. **旧接口兼容期**：默认一个发布周期；若没有外部调用方，可在新前端切换后直接返回 410。
 4. **LLM 生成断线策略**：默认后端继续到终态；若上游成本优先，可改为检测断线即取消。
-

@@ -75,9 +75,10 @@ flowchart LR
 ```text
 backend/app/chatbot/
 ├── __init__.py
+├── router.py
+├── config.py
 ├── constants.py
 ├── api/
-│   ├── router.py
 │   ├── conversations.py
 │   ├── messages.py
 │   ├── memories.py
@@ -112,13 +113,26 @@ backend/app/chatbot/
 │   ├── semantic_memory.py
 │   ├── memory_extractor.py
 │   └── memory_retriever.py
-└── llm/
-    ├── provider.py
-    ├── client.py
-    ├── deepseek_provider.py
-    ├── prompt_builder.py
-    ├── streaming.py
-    └── exceptions.py
+├── llm/
+│   ├── provider.py
+│   ├── client.py
+│   ├── providers/deepseek.py
+│   ├── prompt_builder.py
+│   ├── streaming.py
+│   └── exceptions.py
+├── infrastructure/
+│   ├── redis.py
+│   ├── chroma.py
+│   ├── postgres.py
+│   └── background_tasks.py
+├── observability/
+│   ├── errors.py
+│   ├── logging.py
+│   └── metrics.py
+└── commands/
+    ├── rebuild_memory_index.py
+    ├── cleanup_deleted_data.py
+    └── recover_stale_runs.py
 
 frontend/
 ├── app/chat-bot/page.tsx
@@ -137,13 +151,23 @@ frontend/
 ## 6. 模块职责与依赖方向
 
 - API：认证依赖、Schema 校验、HTTP/SSE 映射；不持有事务或模型逻辑。
+- Router：`backend/app/chatbot/router.py` 是模块唯一 HTTP 出口，只汇总 `chatbot/api` 内的 Router；全局 `backend/app/api/router.py` 只能导入该对象。
+- Config：`backend/app/chatbot/config.py` 定义 `ChatbotSettings`、默认值与范围校验；实际值来自后端环境文件。
 - Service：用例编排、事务边界、状态机、权限规则和失败恢复。
 - Repository：仅持久化查询；每个资源方法显式接收 `user_id`。
 - Memory：Redis/PostgreSQL/Chroma 的分层读写策略，不直接依赖 FastAPI。
 - LLM：provider-neutral 协议、DeepSeek adapter、Prompt/stream/error/usage 转换。
-- Core/DB/Auth 可被 Chatbot 依赖；它们不得反向导入 Chatbot。全局 Router 和 Alembic metadata 注册是允许的 composition root。
+- Infrastructure：实现 Chatbot 专属 Redis、Chroma、PostgreSQL gateway 和有界后台任务适配器；不得依赖 Knowledge/RAG 的存储类或 key/collection 约定。
+- Observability：定义 Chatbot 错误码、日志字段、脱敏包装和指标；底层输出可调用公共 `log_event`。
+- Core/DB/Auth 可被 Chatbot 单向依赖；它们不得反向导入 Chatbot。全局 Router 和 Alembic metadata 注册是允许的 composition root。
 
-依赖方向：`api -> services -> repositories/memory/llm -> shared infrastructure`；禁止 repository 调 service、共享模块调 Chatbot、Router 直调厂商客户端。
+依赖方向：`router/api -> services -> repositories/memory/llm -> chatbot infrastructure -> shared infrastructure`；禁止 repository 调 service、公共模块调 Chatbot 内部实现、Router 直调厂商客户端。模块对外默认只公开 `from app.chatbot.router import router`；未来其他模块需要 Chatbot 能力时必须增加明确 application protocol，不能导入 Repository 或 ORM Model。
+
+### 6.1 配置所有权
+
+`ChatbotSettings` 位于 `backend/app/chatbot/config.py`，通过 `from_env()` 读取 `CHATBOT_*` 环境变量并在模块启动时校验。开发值放在 `backend/dev.env`，生产值放在 `backend/prod.env`，无秘密模板放在 `backend/.env.example`。数据库 URL、JWT、Redis URL、Chroma 路径和 Provider 密钥仍由现有公共配置/环境提供，Chatbot 通过依赖注入接收连接或基础值；`backend/app/core/config.py` 最多保留通用环境读取能力，不加入完整 Chatbot 参数清单。
+
+允许位于模块外的文件严格限定为：全局 Router 注册、SQLAlchemy Base/Session、JWT 认证、通用日志输出、Alembic metadata 注册、`backend/alembic/versions` 中带 `chatbot_` 前缀的 revision、`backend/tests/chatbot` 测试以及三份后端环境文件。它们均不得承载 Chatbot 业务规则。
 
 ## 7. 核心数据模型
 
@@ -401,7 +425,7 @@ sequenceDiagram
 - Chroma `where` 同时过滤 user_id/status；候选返回后再由 PG 复验。
 - Redis key 含 env/schema/user/conversation；禁止通配符删除越过用户 prefix。
 - Prompt、消息与记忆视为敏感内容；默认日志只记 ID、长度、hash/计数、状态、耗时。
-- 在 `backend/app/core/logging.py` 增加 key-based + URL credential sanitizer；移除 `redis_url` 日志。轮换仓库已暴露凭据并审计 Git 历史。
+- 在 `backend/app/chatbot/observability/logging.py` 实现 Chatbot 字段白名单与正文脱敏包装，底层复用公共 `backend/app/core/logging.py:log_event`；通用日志模块只修复影响全项目的 URL credential sanitizer，并移除现有 `redis_url` 原文日志。轮换仓库已暴露凭据并审计 Git 历史。
 - Markdown 禁止原始 HTML，链接使用安全协议和 `rel=noopener noreferrer`；代码块纯文本渲染。
 - 限制消息长度、每用户/Conversation 速率、并发 run；错误不回显上游 body 或 Prompt。
 
@@ -415,10 +439,11 @@ sequenceDiagram
 
 ## 23. 测试架构
 
-- 单元：Repository owner filter、Conversation/Message state machine、Context token budget、short-term rebuild、extractor sensitive rules、semantic mandatory where、LLM Mock、idempotency/concurrency。
-- API 集成：FastAPI dependency override + SQLite 适合大多数行为；PostgreSQL 专属部分唯一索引、FOR UPDATE/并发用独立 PostgreSQL CI 组。
-- Redis/Chroma 集成：测试容器或临时本地实例，验证 miss 重建、user filter、delete/rebuild；单元层使用 fake adapters。
-- SSE：Mock provider 逐事件 yield，断言顺序、终态、断线后数据库状态。
+- 测试统一位于 `backend/tests/chatbot/{unit,api,integration,fixtures}`，Chatbot fixture 放在模块自己的 `conftest.py`，不写入全局 test fixture。
+- 单元：Repository owner filter、Conversation/Message state machine、Context token budget、short-term rebuild、extractor sensitive rules、semantic mandatory where、LLM Mock、idempotency/concurrency；只使用 fake adapters。
+- API 集成：FastAPI dependency override + SQLite 适合大多数行为；PostgreSQL 专属部分唯一索引、FOR UPDATE/并发用独立 PostgreSQL 测试组。
+- Redis/Chroma 集成：临时本地实例验证 miss 重建、user filter、delete/rebuild；不得复用或清理 Knowledge/RAG collection/key。
+- SSE：Chatbot Mock provider 逐事件 yield，断言顺序、终态、断线后数据库状态。
 - 前端：引入 Vitest + Testing Library + jsdom；纯 reducer/merge 逻辑单测，MSW/可控 ReadableStream 做 hook/component 集成；Playwright 端到端可在后续测试 Task 引入或复用（当前不存在，需评审依赖）。
 - 回归：运行现有全部 `backend/tests`，确保 Knowledge/RBAC/Admin/Browser/Office 不被破坏。
 
