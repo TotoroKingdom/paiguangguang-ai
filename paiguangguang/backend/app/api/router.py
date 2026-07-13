@@ -15,6 +15,7 @@ api_router.include_router(auth_router)
 api_router.include_router(admin_router)
 api_router.include_router(browser_router)
 api_router.include_router(chatbot_router)
+# Legacy /api/v1/chat remains mounted during the deprecation window and returns 410.
 api_router.include_router(chat_router)
 api_router.include_router(office_router)
 api_router.include_router(rag_router)

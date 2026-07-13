@@ -50,6 +50,7 @@ def build_error_response(
     code: str,
     message: str,
     details: Any | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     request_id = get_request_id()
     content = jsonable_encoder(
@@ -64,8 +65,7 @@ def build_error_response(
             "request_id": request_id,
         }
     )
-    return JSONResponse(
-        status_code=status_code,
-        headers={"X-Request-ID": request_id},
-        content=content,
-    )
+    response_headers = {"X-Request-ID": request_id}
+    if headers:
+        response_headers.update(headers)
+    return JSONResponse(status_code=status_code, headers=response_headers, content=content)
