@@ -7,9 +7,16 @@ import { ChatComposer } from "./chat-composer";
 import { MessageList } from "./message-list";
 import { useMessages } from "../hooks/use-messages";
 
+type ActiveGeneration = {
+  assistant_message_id: string;
+  status: string;
+  started_at: string | null;
+} | null;
+
 type ChatConversationPanelProps = {
   token: string | null;
   conversation: ConversationData | null;
+  activeGeneration?: ActiveGeneration;
 };
 
 function statusLabel(status: ConversationStatus | null) {
@@ -19,7 +26,11 @@ function statusLabel(status: ConversationStatus | null) {
   return status;
 }
 
-export function ChatConversationPanel({ token, conversation }: ChatConversationPanelProps) {
+export function ChatConversationPanel({
+  token,
+  conversation,
+  activeGeneration = null,
+}: ChatConversationPanelProps) {
   const conversationId = conversation?.id ?? null;
   const conversationStatus = conversation?.status ?? "deleted";
   const messages = useMessages({
@@ -29,10 +40,7 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
     pageSize: 50,
   });
 
-  const headerTitle = useMemo(
-    () => conversation?.title ?? "No conversation selected",
-    [conversation?.title]
-  );
+  const headerTitle = useMemo(() => conversation?.title ?? "No conversation selected", [conversation?.title]);
 
   if (!conversation) {
     return (
@@ -49,6 +57,7 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
   }
 
   const canSend = conversation.status === "active";
+  const showStreamingStop = messages.streamPhase === "streaming";
 
   return (
     <section className="flex h-full min-h-[32rem] flex-col gap-4">
@@ -60,6 +69,12 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
             <p className="mt-2 text-sm leading-6 text-ink/60">
               Model {conversation.model} · Status {statusLabel(conversation.status)}
             </p>
+            {activeGeneration ? (
+              <p className="mt-2 text-sm leading-6 text-tide">
+                Active generation {activeGeneration.status}
+                {activeGeneration.started_at ? ` · started ${activeGeneration.started_at}` : ""}
+              </p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-ink/50">
             <span className="border border-ink/10 bg-paper px-3 py-1.5">
@@ -75,6 +90,11 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
             {messages.streamError}
           </p>
         ) : null}
+        {messages.controlError ? (
+          <p className="mt-3 rounded-xl border border-clay/30 bg-clay/10 px-4 py-3 text-sm leading-6 text-ink">
+            {messages.controlError}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid min-h-0 flex-1 gap-4 xl:grid-rows-[minmax(0,1fr)_auto]">
@@ -86,6 +106,11 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
           onLoadMore={() => void messages.loadMore()}
           streamPhase={messages.streamPhase}
           streamingMessageId={messages.streamingMessageId}
+          onStopGeneration={(messageId) => void messages.stopGeneration(messageId)}
+          onRetryMessage={(messageId) => void messages.retryMessage(messageId)}
+          onRegenerateMessage={(messageId) => void messages.regenerateMessage(messageId)}
+          stoppingMessageId={messages.stoppingMessageId}
+          actionsDisabled={messages.sending}
         />
 
         <ChatComposer
@@ -95,6 +120,10 @@ export function ChatConversationPanel({ token, conversation }: ChatConversationP
           error={conversation.status !== "active" ? "Only active conversations can send new messages." : messages.streamError}
           onChange={messages.setDraft}
           onSubmit={(content) => void messages.sendMessage(content)}
+          onStop={
+            showStreamingStop ? () => void messages.stopGeneration(messages.streamingMessageId) : undefined
+          }
+          stopping={messages.stoppingMessageId === messages.streamingMessageId && showStreamingStop}
         />
       </div>
     </section>

@@ -24,7 +24,8 @@ from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionUsage
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
-from app.chatbot.schemas.chat import ChatCompletionData
+from app.chatbot.schemas.chat import ChatCompletionData, ChatLLMRunData
+from app.chatbot.schemas.message import MessageData
 from app.chatbot.schemas.stream import (
     ChatStreamEvent,
     ChatStreamFinalStatus,
@@ -40,6 +41,7 @@ from app.chatbot.schemas.stream import (
     StreamUsageUpdatedData,
     encode_chatbot_sse_keepalive,
 )
+from app.chatbot.services.cancellation_service import CancellationService, get_cancellation_service
 from app.chatbot.services.chat_service import ChatService, _AcceptedTurn
 from app.core.config import Settings, get_settings
 
@@ -64,11 +66,13 @@ class ChatStreamService:
         self,
         chat_service: ChatService | None = None,
         *,
+        cancellation_service: CancellationService | None = None,
         settings: Settings | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.chat_service = chat_service or ChatService(settings=self.settings)
         self._owns_chat_service = chat_service is None
+        self.cancellation_service = cancellation_service or get_cancellation_service()
 
     def close(self) -> None:
         if self._owns_chat_service:
@@ -178,6 +182,273 @@ class ChatStreamService:
 
         return event_stream()
 
+    def stream_retry(
+        self,
+        user_id: str,
+        conversation_id: str,
+        assistant_message_id: str,
+        client_request_id: str,
+    ) -> Iterator[ChatStreamEvent | str]:
+        return self._stream_variant_turn(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            assistant_message_id=assistant_message_id,
+            client_request_id=client_request_id,
+            require_latest_turn=False,
+        )
+
+    def stream_regenerate(
+        self,
+        user_id: str,
+        conversation_id: str,
+        assistant_message_id: str,
+        client_request_id: str,
+    ) -> Iterator[ChatStreamEvent | str]:
+        return self._stream_variant_turn(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            assistant_message_id=assistant_message_id,
+            client_request_id=client_request_id,
+            require_latest_turn=True,
+        )
+
+    def _stream_variant_turn(
+        self,
+        *,
+        user_id: str,
+        conversation_id: str,
+        assistant_message_id: str,
+        client_request_id: str,
+        require_latest_turn: bool,
+    ) -> Iterator[ChatStreamEvent | str]:
+        user_id = self.chat_service._normalize_uuid(user_id, field_name="user_id")
+        conversation_id = self.chat_service._normalize_uuid(conversation_id, field_name="conversation_id")
+        assistant_message_id = self.chat_service._normalize_uuid(assistant_message_id, field_name="assistant_message_id")
+        client_request_id = self.chat_service._normalize_uuid(client_request_id, field_name="client_request_id")
+
+        with self.chat_service._session() as session:
+            assistant_message, parent_user_message, llm_run = self._load_variant_replay(
+                session,
+                user_id=user_id,
+                conversation_id=conversation_id,
+                assistant_message_id=assistant_message_id,
+                client_request_id=client_request_id,
+            )
+            if assistant_message is not None and parent_user_message is not None and llm_run is not None:
+                if llm_run.status in {"pending", "streaming"}:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_REQUEST_IN_PROGRESS",
+                        message="Request is already running",
+                        details={
+                            "assistant_message_id": str(assistant_message.id),
+                            "llm_run_id": str(llm_run.id),
+                        },
+                    )
+                replay = ChatCompletionData(
+                    conversation_id=UUID(str(parent_user_message.conversation_id)),
+                    client_request_id=UUID(str(client_request_id)),
+                    replayed=True,
+                    user_message=MessageData.model_validate(parent_user_message),
+                    assistant_message=MessageData.model_validate(assistant_message),
+                    llm_run=ChatLLMRunData.model_validate(llm_run),
+                )
+                if assistant_message.status in {"completed", "failed", "cancelled"}:
+                    return iter(self._build_replay_events(replay))
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                    message="Message is not retryable",
+                )
+
+            conversation = session.scalar(
+                select(ChatbotConversation)
+                .where(
+                    ChatbotConversation.id == conversation_id,
+                    ChatbotConversation.user_id == user_id,
+                    ChatbotConversation.deleted_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if conversation is None:
+                raise ChatbotApiError(
+                    status_code=404,
+                    code="CHATBOT_CONVERSATION_NOT_FOUND",
+                    message="Conversation not found",
+                )
+            if conversation.status != "active":
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_CONVERSATION_NOT_ACTIVE",
+                    message="Conversation is not active",
+                )
+
+            active_run = session.scalar(
+                select(ChatbotLLMRun)
+                .where(
+                    ChatbotLLMRun.conversation_id == conversation_id,
+                    ChatbotLLMRun.user_id == user_id,
+                    ChatbotLLMRun.status.in_(("pending", "streaming")),
+                )
+                .order_by(ChatbotLLMRun.updated_at.desc(), ChatbotLLMRun.id.desc())
+                .limit(1)
+            )
+            if active_run is not None:
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_CONVERSATION_BUSY",
+                    message="Conversation is busy",
+                )
+
+            parent_user_message = session.get(ChatbotMessage, assistant_message_id)
+            if (
+                parent_user_message is None
+                or parent_user_message.user_id != user_id
+                or parent_user_message.conversation_id != conversation_id
+            ):
+                raise ChatbotApiError(
+                    status_code=404,
+                    code="CHATBOT_MESSAGE_NOT_FOUND",
+                    message="Message not found",
+                )
+            if parent_user_message.role != "assistant" and parent_user_message.role != "user":
+                raise ChatbotApiError(
+                    status_code=404,
+                    code="CHATBOT_MESSAGE_NOT_FOUND",
+                    message="Message not found",
+                )
+            if parent_user_message.role != "assistant":
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                    message="Message is not retryable",
+                )
+            if parent_user_message.parent_message_id is None:
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                    message="Message is not retryable",
+                )
+            if require_latest_turn and parent_user_message.status not in {"completed", "failed", "cancelled"}:
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                    message="Message is not retryable",
+                )
+            if not require_latest_turn and parent_user_message.status not in {"failed", "cancelled"}:
+                raise ChatbotApiError(
+                    status_code=409,
+                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                    message="Message is not retryable",
+                )
+
+            base_user_message = session.get(ChatbotMessage, parent_user_message.parent_message_id)
+            if base_user_message is None or base_user_message.user_id != user_id:
+                raise ChatbotApiError(
+                    status_code=500,
+                    code="CHATBOT_CHAT_STATE_CORRUPTED",
+                    message="Chat state is inconsistent",
+                )
+
+            if require_latest_turn:
+                later_user_message = session.scalar(
+                    select(ChatbotMessage)
+                    .where(
+                        ChatbotMessage.conversation_id == conversation_id,
+                        ChatbotMessage.user_id == user_id,
+                        ChatbotMessage.role == "user",
+                        ChatbotMessage.sequence_number > base_user_message.sequence_number,
+                    )
+                    .limit(1)
+                )
+                if later_user_message is not None:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_REGENERATE_NOT_LATEST_TURN",
+                        message="Regenerate requires the latest user turn",
+                    )
+
+            accepted = self.chat_service._accept_variant_turn(
+                session,
+                user_id=user_id,
+                conversation=conversation,
+                parent_user_message=base_user_message,
+                client_request_id=client_request_id,
+            )
+
+        request = self.chat_service._build_request(accepted, base_user_message.content)
+        queue: Queue[ChatStreamEvent | None] = Queue()
+        producer = Thread(
+            target=self._produce_stream_events,
+            args=(queue, accepted, user_id, request),
+            daemon=True,
+        )
+        producer.start()
+
+        def event_stream() -> Iterator[ChatStreamEvent | str]:
+            yield ChatStreamEvent(
+                event="message.created",
+                data=self._build_created_data(accepted, content=base_user_message.content, replayed=False),
+                sequence=1,
+            )
+            while True:
+                try:
+                    event = queue.get(timeout=self.KEEPALIVE_SECONDS)
+                except Empty:
+                    if not producer.is_alive():
+                        break
+                    yield encode_chatbot_sse_keepalive()
+                    continue
+                if event is None:
+                    break
+                yield event
+
+        return event_stream()
+
+    def _load_variant_replay(
+        self,
+        session: Session,
+        *,
+        user_id: str,
+        conversation_id: str,
+        assistant_message_id: str,
+        client_request_id: str,
+    ) -> tuple[ChatbotMessage | None, ChatbotMessage | None, ChatbotLLMRun | None]:
+        llm_run = session.scalar(
+            select(ChatbotLLMRun)
+            .where(
+                ChatbotLLMRun.user_id == user_id,
+                ChatbotLLMRun.conversation_id == conversation_id,
+                ChatbotLLMRun.request_id == client_request_id,
+            )
+            .limit(1)
+        )
+        if llm_run is None:
+            return None, None, None
+
+        assistant_message = session.get(ChatbotMessage, llm_run.message_id)
+        if assistant_message is None or assistant_message.parent_message_id is None:
+            raise ChatbotApiError(
+                status_code=500,
+                code="CHATBOT_CHAT_STATE_CORRUPTED",
+                message="Chat state is inconsistent",
+            )
+
+        user_message = session.get(ChatbotMessage, assistant_message.parent_message_id)
+        if user_message is None:
+            raise ChatbotApiError(
+                status_code=500,
+                code="CHATBOT_CHAT_STATE_CORRUPTED",
+                message="Chat state is inconsistent",
+            )
+        if user_message.user_id != user_id or user_message.conversation_id != conversation_id:
+            raise ChatbotApiError(
+                status_code=404,
+                code="CHATBOT_MESSAGE_NOT_FOUND",
+                message="Message not found",
+            )
+        return assistant_message, user_message, llm_run
+
     def _produce_stream_events(
         self,
         queue: Queue[ChatStreamEvent | None],
@@ -192,6 +463,53 @@ class ChatStreamService:
         first_delta_at: float | None = None
         try:
             for llm_event in self.chat_service.llm_client.stream(request):
+                if self.cancellation_service.is_requested(accepted.conversation_id, accepted.assistant_message_id):
+                    if not self._finalize_cancelled(
+                        accepted,
+                        user_id,
+                        content=partial_content,
+                        usage=usage,
+                        started_at=started_at,
+                        first_delta_at=first_delta_at,
+                    ):
+                        continue
+                    self._refresh_short_term_memory(user_id, accepted.conversation_id)
+                    queue.put(
+                        ChatStreamEvent(
+                            event="message.cancelled",
+                            data=self._build_cancelled_data(
+                                accepted,
+                                sequence=next_sequence,
+                                content=partial_content,
+                            ),
+                            sequence=next_sequence,
+                        )
+                    )
+                    next_sequence += 1
+                    queue.put(
+                        ChatStreamEvent(
+                            event="usage.updated",
+                            data=self._build_usage_data(
+                                accepted,
+                                sequence=next_sequence,
+                                usage=usage,
+                            ),
+                            sequence=next_sequence,
+                        )
+                    )
+                    next_sequence += 1
+                    queue.put(
+                        ChatStreamEvent(
+                            event="stream.end",
+                            data=self._build_end_data(
+                                accepted,
+                                sequence=next_sequence,
+                                final_status="cancelled",
+                            ),
+                            sequence=next_sequence,
+                        )
+                    )
+                    return
                 if llm_event.kind == "delta":
                     delta = llm_event.content or ""
                     if not delta:
@@ -469,9 +787,15 @@ class ChatStreamService:
         usage: ChatCompletionUsage | None,
         started_at: float,
         first_delta_at: float | None,
-    ) -> None:
+    ) -> bool:
         with self.chat_service._session() as session:
             user_message, assistant_message, llm_run, conversation = self._load_owned_turn(session, accepted, user_id)
+            if assistant_message.status in {"completed", "failed", "cancelled"} and llm_run.status in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                return False
             now = _utcnow()
             prompt_tokens, completion_tokens, total_tokens = self._usage_counts(usage)
             assistant_message.content = content
@@ -499,6 +823,7 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+        return True
 
     def _finalize_failed(
         self,
@@ -511,6 +836,12 @@ class ChatStreamService:
     ) -> None:
         with self.chat_service._session() as session:
             user_message, assistant_message, llm_run, conversation = self._load_owned_turn(session, accepted, user_id)
+            if assistant_message.status in {"completed", "failed", "cancelled"} and llm_run.status in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                return
             now = _utcnow()
             prompt_tokens, completion_tokens, total_tokens = self._usage_counts(terminal_state.usage)
             assistant_message.content = terminal_state.content

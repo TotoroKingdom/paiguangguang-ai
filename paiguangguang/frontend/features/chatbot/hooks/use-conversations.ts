@@ -343,7 +343,10 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
 
   const refreshCurrentStatus = useCallback(async () => {
     await loadPage(state.selectedStatus, { force: true });
-  }, [loadPage, state.selectedStatus]);
+    if (state.selectedConversationId) {
+      await openConversation(state.selectedConversationId, { syncUrl: false });
+    }
+  }, [loadPage, openConversation, state.selectedConversationId, state.selectedStatus]);
 
   const loadMore = useCallback(async () => {
     const page = state.pages[state.selectedStatus];
@@ -411,6 +414,7 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
     error: errors[state.selectedStatus],
     detailLoading,
     detailError,
+    selectedConversationDetail,
     loadPage,
     loadMore,
     selectStatus,

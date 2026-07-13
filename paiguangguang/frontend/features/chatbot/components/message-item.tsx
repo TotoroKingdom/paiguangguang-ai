@@ -10,6 +10,11 @@ import type { MessageData } from "../types/message";
 type MessageItemProps = {
   message: MessageData;
   isStreaming?: boolean;
+  stopping?: boolean;
+  onStop?: () => void | Promise<void>;
+  onRetry?: () => void | Promise<void>;
+  onRegenerate?: () => void | Promise<void>;
+  actionsDisabled?: boolean;
 };
 
 function SafeAnchor({
@@ -39,8 +44,19 @@ function SafeAnchor({
   }
 }
 
-export function MessageItem({ message, isStreaming = false }: MessageItemProps) {
+export function MessageItem({
+  message,
+  isStreaming = false,
+  stopping = false,
+  onStop,
+  onRetry,
+  onRegenerate,
+  actionsDisabled = false,
+}: MessageItemProps) {
   const isUser = message.role === "user";
+  const showStop = !isUser && (message.status === "pending" || message.status === "streaming") && onStop;
+  const showRetry = !isUser && (message.status === "failed" || message.status === "cancelled") && onRetry;
+  const showRegenerate = !isUser && message.status === "completed" && onRegenerate;
 
   return (
     <article
@@ -87,6 +103,41 @@ export function MessageItem({ message, isStreaming = false }: MessageItemProps) 
           <p className="mt-2 text-xs leading-6 text-clay">
             {message.error_code ? `${message.error_code}` : "Message failed"}
           </p>
+        ) : null}
+
+        {showStop || showRetry || showRegenerate ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {showStop ? (
+              <button
+                type="button"
+                onClick={() => void onStop?.()}
+                disabled={actionsDisabled || stopping}
+                className="rounded-full border border-clay/30 bg-white px-3 py-1.5 text-xs font-semibold text-clay transition hover:border-clay/50 hover:bg-clay/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {stopping ? "Stopping..." : "Stop generation"}
+              </button>
+            ) : null}
+            {showRetry ? (
+              <button
+                type="button"
+                onClick={() => void onRetry?.()}
+                disabled={actionsDisabled}
+                className="rounded-full border border-tide/30 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/50 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Retry
+              </button>
+            ) : null}
+            {showRegenerate ? (
+              <button
+                type="button"
+                onClick={() => void onRegenerate?.()}
+                disabled={actionsDisabled}
+                className="rounded-full border border-tide/30 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/50 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Regenerate
+              </button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </article>

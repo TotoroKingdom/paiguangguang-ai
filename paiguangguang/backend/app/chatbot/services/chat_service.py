@@ -297,6 +297,138 @@ class ChatService:
             history_messages=history_messages,
         )
 
+    def _accept_variant_turn(
+        self,
+        session: Session,
+        *,
+        user_id: str,
+        conversation: ChatbotConversation,
+        parent_user_message: ChatbotMessage,
+        client_request_id: str,
+    ) -> _AcceptedTurn:
+        now = _utcnow()
+        assistant_sequence = conversation.next_sequence
+        conversation.next_sequence = assistant_sequence + 1
+        conversation.last_message_at = now
+        conversation.updated_at = now
+
+        assistant_message_id = str(uuid4())
+        llm_run_id = str(uuid4())
+        assistant_message = ChatbotMessage(
+            id=assistant_message_id,
+            conversation_id=conversation.id,
+            user_id=user_id,
+            role="assistant",
+            content="",
+            content_json=None,
+            sequence_number=assistant_sequence,
+            status="pending",
+            model=conversation.model,
+            parent_message_id=parent_user_message.id,
+            client_request_id=None,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            error_code=None,
+            created_at=now,
+            updated_at=now,
+        )
+        llm_run = ChatbotLLMRun(
+            id=llm_run_id,
+            request_id=client_request_id,
+            user_id=user_id,
+            conversation_id=conversation.id,
+            message_id=assistant_message_id,
+            provider="deepseek",
+            model=conversation.model,
+            prompt_version=conversation.system_prompt_version,
+            status="pending",
+            attempt_count=1,
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0,
+            latency_ms=None,
+            first_token_latency_ms=None,
+            finish_reason=None,
+            error_code=None,
+            error_message=None,
+            started_at=None,
+            completed_at=None,
+            created_at=now,
+            updated_at=now,
+        )
+        session.add_all([assistant_message, llm_run])
+        session.flush()
+
+        history_messages = self._load_recent_messages(
+            session,
+            user_id=user_id,
+            conversation_id=str(conversation.id),
+            before_sequence_number=parent_user_message.sequence_number,
+        )
+        return _AcceptedTurn(
+            user_id=user_id,
+            conversation_id=str(conversation.id),
+            client_request_id=client_request_id,
+            user_message_id=parent_user_message.id,
+            assistant_message_id=assistant_message_id,
+            llm_run_id=llm_run_id,
+            user_sequence=parent_user_message.sequence_number,
+            assistant_sequence=assistant_sequence,
+            created_at=now,
+            model=conversation.model,
+            prompt_version=conversation.system_prompt_version,
+            history_messages=history_messages,
+        )
+
+    def _load_turn_by_assistant_message_id(
+        self,
+        session: Session,
+        user_id: str,
+        conversation_id: str,
+        assistant_message_id: str,
+    ) -> tuple[ChatbotMessage, ChatbotMessage, ChatbotLLMRun]:
+        assistant_message = session.scalar(
+            select(ChatbotMessage)
+            .where(
+                ChatbotMessage.id == assistant_message_id,
+                ChatbotMessage.conversation_id == conversation_id,
+                ChatbotMessage.user_id == user_id,
+                ChatbotMessage.role == "assistant",
+            )
+            .limit(1)
+        )
+        if assistant_message is None or assistant_message.parent_message_id is None:
+            raise ChatbotApiError(
+                status_code=404,
+                code="CHATBOT_MESSAGE_NOT_FOUND",
+                message="Message not found",
+            )
+
+        user_message = session.get(ChatbotMessage, assistant_message.parent_message_id)
+        llm_run = session.scalar(
+            select(ChatbotLLMRun)
+            .where(
+                ChatbotLLMRun.message_id == assistant_message.id,
+                ChatbotLLMRun.user_id == user_id,
+                ChatbotLLMRun.conversation_id == conversation_id,
+            )
+            .limit(1)
+        )
+        if user_message is None or llm_run is None:
+            raise ChatbotApiError(
+                status_code=500,
+                code="CHATBOT_CHAT_STATE_CORRUPTED",
+                message="Chat state is inconsistent",
+            )
+        if user_message.user_id != user_id or user_message.conversation_id != conversation_id:
+            raise ChatbotApiError(
+                status_code=404,
+                code="CHATBOT_MESSAGE_NOT_FOUND",
+                message="Message not found",
+            )
+        return user_message, assistant_message, llm_run
+
     def _load_replay(
         self,
         session: Session,

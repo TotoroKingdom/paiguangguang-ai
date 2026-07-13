@@ -39,6 +39,7 @@ function ChatbotShellContent() {
       <ChatConversationPanel
         token={token}
         conversation={conversations.selectedConversation}
+        activeGeneration={conversations.selectedConversationDetail?.active_generation ?? null}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api";
 
 import { listMessages } from "../api/stream";
 import { useChatStream } from "./use-chat-stream";
+import { stopGeneration as stopGenerationRequest } from "../api/client";
 import type { MessageData } from "../types/message";
 import type { ConversationStatus } from "../types/conversation";
 import {
@@ -44,6 +45,8 @@ export function useMessages({
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [stoppingMessageId, setStoppingMessageId] = useState<string | null>(null);
+  const [controlError, setControlError] = useState<string | null>(null);
 
   const activeConversationRef = useRef<string | null>(null);
 
@@ -54,6 +57,8 @@ export function useMessages({
     setHasMore(false);
     setNextCursor(null);
     setDraft("");
+    setStoppingMessageId(null);
+    setControlError(null);
   }, []);
 
   const loadHistory = useCallback(
@@ -107,7 +112,7 @@ export function useMessages({
   }, []);
 
   const onStreamCreated = useCallback(() => {
-    setDraft("");
+    return;
   }, []);
 
   const onStreamFailure = useCallback((message: string) => {
@@ -122,7 +127,7 @@ export function useMessages({
     }));
   }, []);
 
-  const { sending, error: streamError, sendMessage } = useChatStream({
+  const { sending, error: streamError, sendMessage, retryMessage, regenerateMessage } = useChatStream({
     token,
     conversationId,
     onEvent: onStreamEvent,
@@ -137,9 +142,10 @@ export function useMessages({
         return false;
       }
 
+      setControlError(null);
       const clientRequestId = crypto.randomUUID();
       const draftSnapshot = message;
-      setDraft(message);
+      setDraft("");
       const ok = await sendMessage(message, clientRequestId);
       if (!ok) {
         setDraft(draftSnapshot);
@@ -148,6 +154,54 @@ export function useMessages({
       return true;
     },
     [conversationId, conversationStatus, sendMessage, token]
+  );
+
+  const retryGeneration = useCallback(
+    async (messageId: string) => {
+      if (!token || !conversationId || conversationStatus !== "active") {
+        return false;
+      }
+      setControlError(null);
+      const clientRequestId = crypto.randomUUID();
+      return retryMessage(messageId, clientRequestId);
+    },
+    [conversationId, conversationStatus, retryMessage, token]
+  );
+
+  const regenerateGeneration = useCallback(
+    async (messageId: string) => {
+      if (!token || !conversationId || conversationStatus !== "active") {
+        return false;
+      }
+      setControlError(null);
+      const clientRequestId = crypto.randomUUID();
+      return regenerateMessage(messageId, clientRequestId);
+    },
+    [conversationId, conversationStatus, regenerateMessage, token]
+  );
+
+  const stopCurrentGeneration = useCallback(
+    async (assistantMessageId?: string | null) => {
+      if (!token || !conversationId) {
+        return false;
+      }
+      setControlError(null);
+      try {
+        const response = await stopGenerationRequest({
+          token,
+          conversationId,
+          request: {
+            assistant_message_id: assistantMessageId ?? null,
+          },
+        });
+        setStoppingMessageId(response.status === "cancellation_requested" ? response.assistant_message_id : null);
+        return true;
+      } catch (error) {
+        setControlError(normalizeError(error));
+        return false;
+      }
+    },
+    [conversationId, token]
   );
 
   const loadMore = useCallback(async () => {
@@ -159,6 +213,12 @@ export function useMessages({
 
   const messages = useMemo<MessageData[]>(() => streamState.messages, [streamState.messages]);
 
+  useEffect(() => {
+    if (streamState.phase !== "streaming") {
+      setStoppingMessageId(null);
+    }
+  }, [streamState.phase]);
+
   return {
     messages,
     loadingHistory,
@@ -167,13 +227,19 @@ export function useMessages({
     nextCursor,
     streamingMessageId: streamState.activeAssistantMessageId,
     sendMessage: submitMessage,
+    retryMessage: retryGeneration,
+    regenerateMessage: regenerateGeneration,
+    stopGeneration: stopCurrentGeneration,
     loadMore,
     sending,
     streamError: streamError ?? streamState.error?.message ?? null,
+    controlError,
     streamPhase: streamState.phase,
     streamRetryable: streamState.error?.retryable ?? false,
     draft,
     setDraft,
     clearDraft: () => setDraft(""),
+    stoppingMessageId,
+    clearControlError: () => setControlError(null),
   };
 }

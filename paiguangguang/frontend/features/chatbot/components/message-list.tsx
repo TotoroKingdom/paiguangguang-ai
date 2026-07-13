@@ -14,6 +14,11 @@ type MessageListProps = {
   onLoadMore: () => void | Promise<void>;
   streamPhase: ChatStreamPhase;
   streamingMessageId: string | null;
+  onStopGeneration?: (messageId?: string | null) => void | Promise<void>;
+  onRetryMessage?: (messageId: string) => void | Promise<void>;
+  onRegenerateMessage?: (messageId: string) => void | Promise<void>;
+  stoppingMessageId?: string | null;
+  actionsDisabled?: boolean;
 };
 
 const TOP_THRESHOLD_PX = 64;
@@ -31,6 +36,11 @@ export function MessageList({
   onLoadMore,
   streamPhase,
   streamingMessageId,
+  onStopGeneration,
+  onRetryMessage,
+  onRegenerateMessage,
+  stoppingMessageId = null,
+  actionsDisabled = false,
 }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const previousScrollHeightRef = useRef(0);
@@ -142,6 +152,11 @@ export function MessageList({
               key={message.id}
               message={message}
               isStreaming={streamingMessageId === message.id && streamPhase === "streaming"}
+              stopping={stoppingMessageId === message.id}
+              onStop={onStopGeneration ? () => onStopGeneration(message.id) : undefined}
+              onRetry={onRetryMessage ? () => onRetryMessage(message.id) : undefined}
+              onRegenerate={onRegenerateMessage ? () => onRegenerateMessage(message.id) : undefined}
+              actionsDisabled={actionsDisabled}
             />
           ))}
         </div>
@@ -161,4 +176,3 @@ export function MessageList({
     </div>
   );
 }
-

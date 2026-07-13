@@ -32,3 +32,16 @@ export type ChatRequest = {
   client_request_id: string;
 };
 
+export type GenerationRequest = {
+  client_request_id: string;
+};
+
+export type StopGenerationRequest = {
+  assistant_message_id?: string | null;
+};
+
+export type StopGenerationData = {
+  conversation_id: string;
+  assistant_message_id: string;
+  status: "cancellation_requested" | "cancelled" | "already_terminal";
+};
