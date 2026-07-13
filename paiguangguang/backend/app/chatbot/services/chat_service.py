@@ -23,6 +23,7 @@ from app.chatbot.llm.exceptions import (
 )
 from app.chatbot.llm.prompt_builder import PromptBuilder
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage
+from app.chatbot.memory.conversation_summary import ConversationSummaryService
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
@@ -70,6 +71,11 @@ class ChatService:
         )
         self._prompt_builder_factory = prompt_builder_factory
         self.short_term_memory = ShortTermMemoryService(self.session_factory, settings=self.settings)
+        self.conversation_summary = ConversationSummaryService(
+            self.session_factory,
+            llm_client=self.llm_client,
+            settings=self.settings,
+        )
 
     def close(self) -> None:
         if self._owns_llm_client:
@@ -526,6 +532,7 @@ class ChatService:
     def refresh_short_term_memory(self, user_id: str, conversation_id: str) -> None:
         try:
             self.short_term_memory.refresh_context(user_id, conversation_id)
+            self.conversation_summary.maybe_generate_summary(user_id, conversation_id)
         except Exception:
             return None
 

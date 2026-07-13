@@ -9,6 +9,7 @@ from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.models.conversation import ChatbotConversation
+from app.chatbot.models.conversation import ChatbotConversationSummary
 from app.chatbot.repositories.cursor import ConversationCursor, ConversationCursorError, encode_conversation_cursor
 
 
@@ -39,6 +40,22 @@ class ConversationPage:
     items: list[ConversationRecord]
     next_cursor: str | None
     has_more: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationSummaryRecord:
+    id: str
+    conversation_id: str
+    summary: str
+    start_sequence: int
+    end_sequence: int
+    summary_version: int
+    prompt_version: str
+    model: str
+    token_count: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class ConversationRepository:
@@ -72,6 +89,23 @@ class ConversationRepository:
             archived_at=model.archived_at,
             deleted_at=model.deleted_at,
             cleanup_status=model.cleanup_status,
+            created_at=model.created_at,
+            updated_at=model.updated_at,
+        )
+
+    @staticmethod
+    def _summary_record_from_model(model: ChatbotConversationSummary) -> ConversationSummaryRecord:
+        return ConversationSummaryRecord(
+            id=model.id,
+            conversation_id=model.conversation_id,
+            summary=model.summary,
+            start_sequence=model.start_sequence,
+            end_sequence=model.end_sequence,
+            summary_version=model.summary_version,
+            prompt_version=model.prompt_version,
+            model=model.model,
+            token_count=model.token_count,
+            status=model.status,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -247,3 +281,40 @@ class ConversationRepository:
             model.updated_at = _utcnow()
             session.flush()
             return list(range(start, start + count))
+
+    def get_latest_completed_summary(self, conversation_id: str, user_id: str) -> ConversationSummaryRecord | None:
+        with self._session() as session:
+            model = session.scalar(
+                select(ChatbotConversationSummary)
+                .join(ChatbotConversation, ChatbotConversation.id == ChatbotConversationSummary.conversation_id)
+                .where(
+                    ChatbotConversationSummary.conversation_id == conversation_id,
+                    ChatbotConversation.user_id == user_id,
+                    ChatbotConversationSummary.status == "completed",
+                )
+                .order_by(
+                    desc(ChatbotConversationSummary.summary_version),
+                    desc(ChatbotConversationSummary.updated_at),
+                    desc(ChatbotConversationSummary.id),
+                )
+                .limit(1)
+            )
+            return self._summary_record_from_model(model) if model is not None else None
+
+    def get_latest_summary(self, conversation_id: str, user_id: str) -> ConversationSummaryRecord | None:
+        with self._session() as session:
+            model = session.scalar(
+                select(ChatbotConversationSummary)
+                .join(ChatbotConversation, ChatbotConversation.id == ChatbotConversationSummary.conversation_id)
+                .where(
+                    ChatbotConversationSummary.conversation_id == conversation_id,
+                    ChatbotConversation.user_id == user_id,
+                )
+                .order_by(
+                    desc(ChatbotConversationSummary.summary_version),
+                    desc(ChatbotConversationSummary.updated_at),
+                    desc(ChatbotConversationSummary.id),
+                )
+                .limit(1)
+            )
+            return self._summary_record_from_model(model) if model is not None else None

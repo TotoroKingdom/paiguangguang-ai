@@ -23,6 +23,12 @@ class Settings:
     chatbot_env: str = "development"
     chatbot_redis_schema_version: int = 1
     chatbot_short_memory_ttl_seconds: int = 7 * 24 * 60 * 60
+    chatbot_context_token_budget: int = 8000
+    chatbot_summary_message_threshold: int = 20
+    chatbot_summary_token_ratio: float = 0.60
+    chatbot_summary_prompt_version: str = "summary-v1"
+    chatbot_summary_model: str = "deepseek-chat"
+    chatbot_summary_pending_stale_seconds: int = 300
     database_url: str = ""
     test_database_url: str = ""
     jwt_secret_key: str = "change-me-in-development-secret-key"
@@ -68,6 +74,12 @@ def get_settings() -> Settings:
         chatbot_env=os.getenv("CHATBOT_ENV", "development"),
         chatbot_redis_schema_version=int(os.getenv("CHATBOT_REDIS_SCHEMA_VERSION", "1")),
         chatbot_short_memory_ttl_seconds=int(os.getenv("CHATBOT_SHORT_MEMORY_TTL_SECONDS", str(7 * 24 * 60 * 60))),
+        chatbot_context_token_budget=int(os.getenv("CHATBOT_CONTEXT_TOKEN_BUDGET", "8000")),
+        chatbot_summary_message_threshold=int(os.getenv("CHATBOT_SUMMARY_MESSAGE_THRESHOLD", "20")),
+        chatbot_summary_token_ratio=float(os.getenv("CHATBOT_SUMMARY_TOKEN_RATIO", "0.60")),
+        chatbot_summary_prompt_version=os.getenv("CHATBOT_SUMMARY_PROMPT_VERSION", "summary-v1"),
+        chatbot_summary_model=os.getenv("CHATBOT_SUMMARY_MODEL", "deepseek-chat"),
+        chatbot_summary_pending_stale_seconds=int(os.getenv("CHATBOT_SUMMARY_PENDING_STALE_SECONDS", "300")),
         database_url=os.getenv("DATABASE_URL", ""),
         test_database_url=os.getenv("TEST_DATABASE_URL", ""),
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),
