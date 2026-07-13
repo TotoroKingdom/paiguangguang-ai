@@ -6,6 +6,7 @@ from app.chatbot.schemas.common import (
     ConversationTitleSource,
     DeleteResultData,
 )
+from app.chatbot.schemas.chat import ChatCompleteRequest, ChatCompletionData, ChatLLMRunData
 from app.chatbot.schemas.conversation import (
     ConversationCreateRequest,
     ConversationData,
@@ -21,6 +22,9 @@ __all__ = [
     "ConversationData",
     "ConversationDetailData",
     "ConversationPageData",
+    "ChatCompleteRequest",
+    "ChatCompletionData",
+    "ChatLLMRunData",
     "ConversationStatus",
     "ConversationTitleSource",
     "ConversationUpdateRequest",

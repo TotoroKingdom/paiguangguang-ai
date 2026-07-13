@@ -36,7 +36,9 @@ class Settings:
     chatbot_allowed_models: list[str] = field(default_factory=lambda: ["deepseek-chat"])
     chatbot_llm_timeout_seconds: float = 60.0
     chatbot_llm_max_attempts: int = 2
+    chatbot_message_max_chars: int = 4000
     chatbot_conversation_page_size: int = 20
+    chatbot_recent_message_limit: int = 20
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
     rerank_provider: str = ""
@@ -80,7 +82,9 @@ def get_settings() -> Settings:
         ],
         chatbot_llm_timeout_seconds=float(os.getenv("CHATBOT_LLM_TIMEOUT_SECONDS", "60")),
         chatbot_llm_max_attempts=int(os.getenv("CHATBOT_LLM_MAX_ATTEMPTS", "2")),
+        chatbot_message_max_chars=int(os.getenv("CHATBOT_MESSAGE_MAX_CHARS", "4000")),
         chatbot_conversation_page_size=int(os.getenv("CHATBOT_CONVERSATION_PAGE_SIZE", "20")),
+        chatbot_recent_message_limit=int(os.getenv("CHATBOT_RECENT_MESSAGE_LIMIT", "20")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         rerank_provider=os.getenv("RERANK_PROVIDER", ""),
