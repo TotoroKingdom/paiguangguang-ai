@@ -25,6 +25,7 @@ from app.chatbot.llm.prompt_builder import PromptBuilder
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage
 from app.chatbot.memory.conversation_summary import ConversationSummaryService
 from app.chatbot.services.memory_service import MemoryService
+from app.chatbot.services.context_service import ContextService
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
@@ -41,6 +42,7 @@ def _utcnow() -> datetime:
 
 @dataclass(frozen=True, slots=True)
 class _AcceptedTurn:
+    user_id: str
     conversation_id: str
     client_request_id: str
     user_message_id: str
@@ -72,6 +74,11 @@ class ChatService:
         )
         self._prompt_builder_factory = prompt_builder_factory
         self.short_term_memory = ShortTermMemoryService(self.session_factory, settings=self.settings)
+        self.context_service = ContextService(
+            self.session_factory,
+            short_term_memory=self.short_term_memory,
+            settings=self.settings,
+        )
         self.conversation_summary = ConversationSummaryService(
             self.session_factory,
             llm_client=self.llm_client,
@@ -276,6 +283,7 @@ class ChatService:
             before_sequence_number=user_sequence,
         )
         return _AcceptedTurn(
+            user_id=user_id,
             conversation_id=str(conversation.id),
             client_request_id=client_request_id,
             user_message_id=user_message_id,
@@ -371,11 +379,18 @@ class ChatService:
             system_prompt=self._build_system_prompt(accepted.prompt_version),
             default_model=accepted.model,
         )
+        self.context_service.short_term_memory = self.short_term_memory
+        context_bundle = self.context_service.build(
+            accepted.user_id,
+            accepted.conversation_id,
+            content,
+            before_sequence_number=accepted.user_sequence,
+        )
         return builder.build_request(
             request_id=accepted.client_request_id,
             model=accepted.model,
-            user_message=content,
-            history=accepted.history_messages,
+            user_message=context_bundle.current_message,
+            history=context_bundle.history_messages(),
         )
 
     @staticmethod

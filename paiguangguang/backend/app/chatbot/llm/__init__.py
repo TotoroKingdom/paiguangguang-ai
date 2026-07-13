@@ -10,7 +10,8 @@ from app.chatbot.llm.exceptions import (
     LLMRateLimitError,
     LLMTimeoutError,
 )
-from app.chatbot.llm.prompt_builder import PromptBuilder
+from app.chatbot.llm.prompt_builder import PromptBuilder, format_untrusted_context
+from app.chatbot.llm.token_estimator import ApproxTokenEstimator
 from app.chatbot.llm.provider import (
     ChatCompletionRequest,
     ChatCompletionResult,
@@ -35,5 +36,7 @@ __all__ = [
     "LLMRateLimitError",
     "LLMStreamEvent",
     "LLMTimeoutError",
+    "ApproxTokenEstimator",
     "PromptBuilder",
+    "format_untrusted_context",
 ]

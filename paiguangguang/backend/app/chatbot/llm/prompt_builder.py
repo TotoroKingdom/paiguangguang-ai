@@ -6,6 +6,22 @@ from typing import Any, Mapping, Sequence
 from app.chatbot.llm.provider import ChatCompletionRequest, LLMMessage, coerce_message
 
 
+_UNTRUSTED_CONTEXT_START = "<<< untrusted {kind} context >>>"
+_UNTRUSTED_CONTEXT_END = "<<< end untrusted context >>>"
+
+
+def format_untrusted_context(*, kind: str, source_ids: Sequence[str], content: str) -> str:
+    source_text = ",".join(str(source_id) for source_id in source_ids if str(source_id).strip()) or "unknown"
+    return "\n".join(
+        [
+            _UNTRUSTED_CONTEXT_START.format(kind=kind),
+            f"source_ids={source_text}",
+            content,
+            _UNTRUSTED_CONTEXT_END,
+        ]
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class PromptBuilder:
     prompt_version: str
