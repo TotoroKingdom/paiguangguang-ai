@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApiError } from "@/lib/api";
 
-import { openChatStream, readChatStreamEvents } from "../api/stream";
+import { openChatStream, openRegenerateStream, openRetryStream, readChatStreamEvents } from "../api/stream";
 import type { ParsedChatStreamEvent, StreamMessageCreatedData } from "../types/stream";
 
 type UseChatStreamOptions = {
@@ -15,6 +15,11 @@ type UseChatStreamOptions = {
   onTerminal?: (event: ParsedChatStreamEvent) => void;
   onFailure?: (message: string) => void;
 };
+
+type StreamGenerationAction =
+  | { kind: "send"; content: string }
+  | { kind: "retry"; messageId: string }
+  | { kind: "regenerate"; messageId: string };
 
 export function useChatStream({
   token,
@@ -35,8 +40,8 @@ export function useChatStream({
     };
   }, []);
 
-  const sendMessage = useCallback(
-    async (content: string, clientRequestId: string) => {
+  const runGeneration = useCallback(
+    async (action: StreamGenerationAction, clientRequestId: string) => {
       if (!token || !conversationId) {
         return false;
       }
@@ -49,13 +54,30 @@ export function useChatStream({
       setError(null);
 
       try {
-        const response = await openChatStream({
-          token,
-          conversationId,
-          content,
-          clientRequestId,
-          signal: controller.signal,
-        });
+        const response =
+          action.kind === "send"
+            ? await openChatStream({
+                token,
+                conversationId,
+                content: action.content,
+                clientRequestId,
+                signal: controller.signal,
+              })
+            : action.kind === "retry"
+              ? await openRetryStream({
+                  token,
+                  conversationId,
+                  messageId: action.messageId,
+                  clientRequestId,
+                  signal: controller.signal,
+                })
+              : await openRegenerateStream({
+                  token,
+                  conversationId,
+                  messageId: action.messageId,
+                  clientRequestId,
+                  signal: controller.signal,
+                });
         for await (const event of readChatStreamEvents(response)) {
           if (controller.signal.aborted) {
             break;
@@ -89,11 +111,29 @@ export function useChatStream({
     [conversationId, onCreated, onEvent, onTerminal, token]
   );
 
+  const sendMessage = useCallback(
+    (content: string, clientRequestId: string) => runGeneration({ kind: "send", content }, clientRequestId),
+    [runGeneration]
+  );
+
+  const retryMessage = useCallback(
+    (messageId: string, clientRequestId: string) => runGeneration({ kind: "retry", messageId }, clientRequestId),
+    [runGeneration]
+  );
+
+  const regenerateMessage = useCallback(
+    (messageId: string, clientRequestId: string) =>
+      runGeneration({ kind: "regenerate", messageId }, clientRequestId),
+    [runGeneration]
+  );
+
   return {
     sending,
     error,
     activeRequestId: activeRequestId.current,
     sendMessage,
+    retryMessage,
+    regenerateMessage,
     cancel: () => abortController.current?.abort(),
     clearError: () => setError(null),
   };

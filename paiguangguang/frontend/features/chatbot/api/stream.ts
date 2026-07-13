@@ -1,6 +1,6 @@
 import { ApiError, getBackendBaseUrl, getJson } from "@/lib/api";
 
-import type { ChatRequest, MessagePageData } from "../types/message";
+import type { ChatRequest, GenerationRequest, MessagePageData } from "../types/message";
 import type {
   ParsedChatStreamEvent,
   StreamEventName,
@@ -45,30 +45,27 @@ export async function listMessages(options: {
   );
 }
 
-export async function openChatStream(options: {
+async function openChatSseRequest(options: {
   token: string | null;
-  conversationId: string;
-  content: string;
-  clientRequestId: string;
+  path: string;
+  body: ChatRequest | GenerationRequest;
   signal?: AbortSignal | null;
 }): Promise<Response> {
-  const { token, conversationId, content, clientRequestId, signal } = options;
+  const { token, path, body, signal } = options;
   const headers = new Headers({
     "Content-Type": "application/json",
     Accept: "text/event-stream",
-    "Idempotency-Key": clientRequestId,
   });
+  const clientRequestId = body.client_request_id;
+  headers.set("Idempotency-Key", clientRequestId);
   const normalizedToken = token?.trim();
   if (normalizedToken) {
     headers.set("Authorization", `Bearer ${normalizedToken}`);
   }
 
-  const response = await fetch(`${getBackendBaseUrl()}/api/v1/chatbot/conversations/${conversationId}/messages`, {
+  const response = await fetch(`${getBackendBaseUrl()}/api/v1/chatbot${path}`, {
     method: "POST",
-    body: JSON.stringify({
-      content,
-      client_request_id: clientRequestId,
-    } satisfies ChatRequest),
+    body: JSON.stringify(body),
     headers,
     signal: signal ?? undefined,
   });
@@ -79,6 +76,61 @@ export async function openChatStream(options: {
   }
 
   return response;
+}
+
+export async function openChatStream(options: {
+  token: string | null;
+  conversationId: string;
+  content: string;
+  clientRequestId: string;
+  signal?: AbortSignal | null;
+}): Promise<Response> {
+  const { token, conversationId, content, clientRequestId, signal } = options;
+  return openChatSseRequest({
+    token,
+    path: `/conversations/${conversationId}/messages`,
+    body: {
+      content,
+      client_request_id: clientRequestId,
+    },
+    signal,
+  });
+}
+
+export async function openRetryStream(options: {
+  token: string | null;
+  conversationId: string;
+  messageId: string;
+  clientRequestId: string;
+  signal?: AbortSignal | null;
+}): Promise<Response> {
+  const { token, conversationId, messageId, clientRequestId, signal } = options;
+  return openChatSseRequest({
+    token,
+    path: `/conversations/${conversationId}/messages/${messageId}/retry`,
+    body: {
+      client_request_id: clientRequestId,
+    },
+    signal,
+  });
+}
+
+export async function openRegenerateStream(options: {
+  token: string | null;
+  conversationId: string;
+  messageId: string;
+  clientRequestId: string;
+  signal?: AbortSignal | null;
+}): Promise<Response> {
+  const { token, conversationId, messageId, clientRequestId, signal } = options;
+  return openChatSseRequest({
+    token,
+    path: `/conversations/${conversationId}/messages/${messageId}/regenerate`,
+    body: {
+      client_request_id: clientRequestId,
+    },
+    signal,
+  });
 }
 
 function parseEventBlock(block: string): ParsedChatStreamEvent | null {
@@ -184,4 +236,3 @@ export async function* streamChatEvents(options: {
 }
 
 export type { ParsedChatStreamEvent, StreamEventName };
-

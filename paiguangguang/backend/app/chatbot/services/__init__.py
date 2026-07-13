@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.chatbot.services.cancellation_service import CancellationService, get_cancellation_service
 from app.chatbot.services.chat_service import ChatService, get_chat_service
 from app.chatbot.services.context_service import ContextBundle, ContextSection, ContextService
 from app.chatbot.services.conversation_service import ConversationService, get_conversation_service
@@ -10,6 +11,7 @@ from app.chatbot.services.message_service import MessageService, get_message_ser
 from app.chatbot.services.stream_service import ChatStreamService, get_chat_stream_service
 
 __all__ = [
+    "CancellationService",
     "ChatService",
     "ConversationService",
     "ChatStreamService",
@@ -20,6 +22,7 @@ __all__ = [
     "MemoryService",
     "ShortTermMemoryService",
     "get_chat_service",
+    "get_cancellation_service",
     "get_conversation_service",
     "get_memory_service",
     "MessageService",

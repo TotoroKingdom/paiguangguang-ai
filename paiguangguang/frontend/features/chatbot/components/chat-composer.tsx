@@ -10,6 +10,8 @@ type ChatComposerProps = {
   error?: string | null;
   onChange: (value: string) => void;
   onSubmit: (value: string) => void | Promise<void>;
+  onStop?: () => void | Promise<void>;
+  stopping?: boolean;
 };
 
 export function ChatComposer({
@@ -20,6 +22,8 @@ export function ChatComposer({
   error = null,
   onChange,
   onSubmit,
+  onStop,
+  stopping = false,
 }: ChatComposerProps) {
   const isOverflow = value.length > maxLength;
   const canSubmit = !disabled && !sending && value.trim().length > 0 && !isOverflow;
@@ -62,7 +66,7 @@ export function ChatComposer({
         <span>
           {value.length}/{maxLength}
         </span>
-        <span>{sending ? "Sending…" : "Enter to send, Shift+Enter for a new line"}</span>
+        <span>{sending ? "Sending..." : "Enter to send, Shift+Enter for a new line"}</span>
       </div>
 
       {error ? (
@@ -77,8 +81,18 @@ export function ChatComposer({
           disabled={!canSubmit}
           className="border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-tide/90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {sending ? "Sending…" : "Send message"}
+          {sending ? "Sending..." : "Send message"}
         </button>
+        {onStop ? (
+          <button
+            type="button"
+            onClick={() => void onStop()}
+            disabled={stopping || !sending}
+            className="border border-clay/30 bg-white px-4 py-2.5 text-sm font-semibold text-clay transition hover:border-clay/50 hover:bg-clay/5 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {stopping ? "Stopping..." : "Stop generation"}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onChange("")}
@@ -91,4 +105,3 @@ export function ChatComposer({
     </form>
   );
 }
-

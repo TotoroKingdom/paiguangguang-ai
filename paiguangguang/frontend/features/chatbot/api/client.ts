@@ -9,6 +9,7 @@ import type {
   ConversationUpdateRequest,
   DeleteResultData,
 } from "../types/conversation";
+import type { StopGenerationData, StopGenerationRequest } from "../types/message";
 
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -101,6 +102,18 @@ export async function deleteConversation(options: {
   });
 }
 
+export async function stopGeneration(options: {
+  token: string | null;
+  conversationId: string;
+  request: StopGenerationRequest;
+}): Promise<StopGenerationData> {
+  return postJson<StopGenerationData, StopGenerationRequest>(
+    `/api/v1/chatbot/conversations/${options.conversationId}/stop`,
+    options.request,
+    { token: options.token }
+  );
+}
+
 export const chatbotApiClient = {
   listConversations,
   getConversation,
@@ -109,7 +122,7 @@ export const chatbotApiClient = {
   archiveConversation,
   restoreConversation,
   deleteConversation,
+  stopGeneration,
 };
 
 export type ChatbotApiClient = typeof chatbotApiClient;
-
