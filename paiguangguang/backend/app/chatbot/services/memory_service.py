@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.chatbot.errors import ChatbotApiError
 from app.chatbot.llm.client import LLMClient
 from app.chatbot.memory.memory_extractor import MemoryDraft, MemoryExtractor, build_memory_hash, normalize_memory_content
+from app.chatbot.memory.semantic_memory import SemanticMemoryIndex
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.memory import ChatbotMemory
 from app.chatbot.models.message import ChatbotMessage
@@ -47,11 +48,15 @@ class MemoryService:
         llm_client: LLMClient | None = None,
         settings: Settings | None = None,
         repository: MemoryRepository | None = None,
+        semantic_index: SemanticMemoryIndex | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.session_factory = session_factory or build_session_factory(self.settings)
         self.repository = repository or MemoryRepository(self.session_factory)
         self.extractor = extractor or MemoryExtractor(llm_client=llm_client, settings=self.settings)
+        self.semantic_index = semantic_index
+        if self.semantic_index is None and self.settings.chatbot_semantic_memory_enabled:
+            self.semantic_index = SemanticMemoryIndex(settings=self.settings)
         self._queue: Queue[_WorkItem | None] = Queue(maxsize=100)
         self._worker_started = False
         self._worker_lock = Lock()
@@ -114,6 +119,24 @@ class MemoryService:
                 )
             except Exception:
                 continue
+
+    def _sync_semantic_upsert(self, record: MemoryRecord) -> None:
+        if self.semantic_index is None or not self.semantic_index.enabled:
+            return
+        try:
+            self.semantic_index.upsert_memory(record)
+        except Exception:
+            self.repository.update(record.id, record.user_id, embedding_status="failed")
+            return
+        self.repository.update(record.id, record.user_id, embedding_status="indexed")
+
+    def _sync_semantic_delete(self, memory_id: str, user_id: str) -> None:
+        if self.semantic_index is None or not self.semantic_index.enabled:
+            return
+        try:
+            self.semantic_index.delete_memory(memory_id)
+        except Exception:
+            return
 
     def submit_completed_turn(
         self,
@@ -185,7 +208,14 @@ class MemoryService:
             )
         return user_message, assistant_message
 
-    def _supersede_active_memories(self, user_id: str, memory_type: str, *, exclude_memory_id: str | None = None) -> None:
+    def _supersede_active_memories(
+        self,
+        user_id: str,
+        memory_type: str,
+        *,
+        exclude_memory_id: str | None = None,
+    ) -> list[MemoryRecord]:
+        superseded: list[MemoryRecord] = []
         with self._session() as session:
             stmt = (
                 session.query(ChatbotMemory)
@@ -200,7 +230,10 @@ class MemoryService:
                 stmt = stmt.filter(ChatbotMemory.id != exclude_memory_id)
             for row in stmt.all():
                 row.status = "superseded"
+                row.embedding_status = "deleted"
                 row.updated_at = _utcnow()
+                superseded.append(MemoryRepository._record_from_model(row))
+        return superseded
 
     def _upsert_draft(self, user_id: str, draft: MemoryDraft, conversation_id: str) -> MemoryRecord | None:
         existing = self.repository.get_by_normalized_hash(user_id, draft.normalized_hash)
@@ -212,6 +245,8 @@ class MemoryService:
             if target is None:
                 return None
             deleted = self.repository.soft_delete(target.id, user_id)
+            if deleted is not None:
+                self._sync_semantic_delete(deleted.id, deleted.user_id)
             return deleted
 
         if existing is not None and existing.status in {"candidate", "active"}:
@@ -229,12 +264,36 @@ class MemoryService:
                     embedding_status="pending",
                 )
                 if updated is not None and updated.status == "active":
-                    self._supersede_active_memories(user_id, draft.memory_type, exclude_memory_id=updated.id)
+                    superseded = self._supersede_active_memories(user_id, draft.memory_type, exclude_memory_id=updated.id)
+                    for superseded_record in superseded:
+                        self._sync_semantic_delete(superseded_record.id, superseded_record.user_id)
+                    self._sync_semantic_upsert(updated)
                 return updated
+            if existing.status == "active" and target_status != "active":
+                updated = self.repository.update(
+                    existing.id,
+                    user_id,
+                    content=draft.content,
+                    normalized_hash=draft.normalized_hash,
+                    status=target_status,
+                    importance=draft.importance,
+                    confidence=draft.confidence,
+                    source_message_ids=list(draft.source_message_ids),
+                    conversation_id=conversation_id,
+                    embedding_status="deleted",
+                )
+                if updated is not None:
+                    self._sync_semantic_delete(updated.id, updated.user_id)
+                return updated or existing
+            if existing.status == "active" and target_status == "active":
+                self._sync_semantic_upsert(existing)
+                return existing
             return existing
 
         if target_status == "active":
-            self._supersede_active_memories(user_id, draft.memory_type)
+            superseded = self._supersede_active_memories(user_id, draft.memory_type)
+            for superseded_record in superseded:
+                self._sync_semantic_delete(superseded_record.id, superseded_record.user_id)
 
         record = self.repository.create(
             user_id,
@@ -248,6 +307,8 @@ class MemoryService:
             status=target_status,
             embedding_status="pending",
         )
+        if record.status == "active":
+            self._sync_semantic_upsert(record)
         return record
 
     def process_completed_turn(
@@ -403,6 +464,10 @@ class MemoryService:
                 code="CHATBOT_MEMORY_NOT_FOUND",
                 message="Memory not found",
             )
+        if updated.status == "active":
+            self._sync_semantic_upsert(updated)
+        elif record.status == "active" and updated.status != "active":
+            self._sync_semantic_delete(updated.id, updated.user_id)
         return self._memory_data(updated)
 
     def delete_memory(self, session: Session, user_id: str, memory_id: str) -> DeleteResultData:
@@ -413,6 +478,7 @@ class MemoryService:
                 code="CHATBOT_MEMORY_NOT_FOUND",
                 message="Memory not found",
             )
+        self._sync_semantic_delete(record.id, record.user_id)
         return DeleteResultData(id=record.id, status="deleted", cleanup_status="completed")
 
 
