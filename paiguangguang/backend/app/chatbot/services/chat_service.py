@@ -43,6 +43,9 @@ class _AcceptedTurn:
     user_message_id: str
     assistant_message_id: str
     llm_run_id: str
+    user_sequence: int
+    assistant_sequence: int
+    created_at: datetime
     model: str
     prompt_version: str
     history_messages: tuple[LLMMessage, ...]
@@ -253,6 +256,9 @@ class ChatService:
             user_message_id=user_message_id,
             assistant_message_id=assistant_message_id,
             llm_run_id=llm_run_id,
+            user_sequence=user_sequence,
+            assistant_sequence=assistant_sequence,
+            created_at=now,
             model=conversation.model,
             prompt_version=conversation.system_prompt_version,
             history_messages=history_messages,
