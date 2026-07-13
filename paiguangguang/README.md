@@ -422,6 +422,17 @@ v1 阶段完成后，需要满足以下验收标准：
 
 ---
 
-## 8. License
+## 8. Chatbot acceptance notes
+
+- Frontend chatbot entry: `/chat-bot`
+- Supported backend API: `/api/v1/chatbot`
+- Legacy compatibility route: `/api/v1/chat/chat` is deprecation-only during the migration window
+- Verified locally with:
+  - `pytest backend/tests -q`
+  - `npm test -- --run`
+  - `npm run lint`
+  - `npm run build`
+
+## 9. License
 
 This project is for personal portfolio and learning purposes.

@@ -966,3 +966,12 @@ CHATBOT_SEMANTIC_MEMORY_ENABLED=false
 ## 6. 推荐起点
 
 从 **CB-000 安全配置与秘密轮换基线** 开始。当前 `.env.example` 中存在疑似真实秘密，且日志可能记录完整 Redis URL；在该风险消除前，不应继续建设会持久化用户聊天内容的生产模块。
+
+## 7. CB-022 验收记录
+
+- 本地后端全量测试：`pytest backend/tests -q`，结果 217 passed。
+- 本地前端全量测试：`npm test -- --run`，结果 8 files / 20 tests passed。
+- 本地前端静态检查：`npm run lint`，结果无 ESLint warnings/errors。
+- 本地前端生产构建：`npm run build`，结果成功生成 `/chat-bot` 静态页。
+- 回滚演练结论：本轮未执行生产回滚；按 Gate E 约束，当前可通过切回已验证的前端 shell 与保留兼容层来做应用层回退，生产删除旧接口应在观测周期结束后再执行。
+- 风险备注：仍需在正式发布前确认外部调用方已迁移完毕，并将旧 `/api/v1/chat/chat` 的删除动作放在观测周期结束后。
