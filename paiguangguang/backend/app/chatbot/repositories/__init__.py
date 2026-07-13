@@ -11,6 +11,17 @@ from app.chatbot.repositories.cursor import (
     decode_conversation_cursor,
     encode_conversation_cursor,
 )
+from app.chatbot.repositories.llm_run_repository import LLMRunRecord, LLMRunRepository
+from app.chatbot.repositories.memory_repository import MemoryRecord, MemoryRepository
+from app.chatbot.repositories.message_repository import (
+    MessageCursor,
+    MessageCursorError,
+    MessagePage,
+    MessageRecord,
+    MessageRepository,
+    decode_message_cursor,
+    encode_message_cursor,
+)
 
 __all__ = [
     "ConversationCursor",
@@ -20,5 +31,15 @@ __all__ = [
     "ConversationRepository",
     "decode_conversation_cursor",
     "encode_conversation_cursor",
+    "LLMRunRecord",
+    "LLMRunRepository",
+    "MemoryRecord",
+    "MemoryRepository",
+    "MessageCursor",
+    "MessageCursorError",
+    "MessagePage",
+    "MessageRecord",
+    "MessageRepository",
+    "decode_message_cursor",
+    "encode_message_cursor",
 ]
-
