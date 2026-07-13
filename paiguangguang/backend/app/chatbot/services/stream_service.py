@@ -11,7 +11,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.chatbot.errors import ChatbotApiError
+from app.chatbot.errors import ChatbotApiError, get_chatbot_error_spec
+from app.chatbot.observability import log_chatbot_event
 from app.chatbot.llm.exceptions import (
     LLMConfigurationError,
     LLMError,
@@ -44,6 +45,7 @@ from app.chatbot.schemas.stream import (
 from app.chatbot.services.cancellation_service import CancellationService, get_cancellation_service
 from app.chatbot.services.chat_service import ChatService, _AcceptedTurn
 from app.core.config import Settings, get_settings
+from app.core.request_id import get_request_id
 
 
 def _utcnow() -> datetime:
@@ -166,31 +168,67 @@ class ChatStreamService:
             self.chat_service.concurrency_service.release(lease)
 
         request = self.chat_service._build_request(accepted, content)
+        request_id = get_request_id()
+        log_chatbot_event(
+            "chatbot.stream.request.started",
+            request_id=request_id,
+            user_id=user_id,
+            conversation_id=accepted.conversation_id,
+            message_id=accepted.assistant_message_id,
+            llm_run_id=accepted.llm_run_id,
+            provider="deepseek",
+            model=accepted.model,
+            status="pending",
+            content=content,
+        )
         queue: Queue[ChatStreamEvent | None] = Queue()
         producer = Thread(
             target=self._produce_stream_events,
-            args=(queue, accepted, user_id, request),
+            args=(queue, accepted, user_id, request, request_id),
             daemon=True,
         )
         producer.start()
 
         def event_stream() -> Iterator[ChatStreamEvent | str]:
+            stream_end_sent = False
+            disconnected = False
             yield ChatStreamEvent(
                 event="message.created",
                 data=self._build_created_data(accepted, content=content, replayed=False),
                 sequence=1,
             )
-            while True:
-                try:
-                    event = queue.get(timeout=self.KEEPALIVE_SECONDS)
-                except Empty:
-                    if not producer.is_alive():
+            try:
+                while True:
+                    try:
+                        event = queue.get(timeout=self.KEEPALIVE_SECONDS)
+                    except Empty:
+                        if not producer.is_alive():
+                            break
+                        yield encode_chatbot_sse_keepalive()
+                        continue
+                    if event is None:
                         break
-                    yield encode_chatbot_sse_keepalive()
-                    continue
-                if event is None:
-                    break
-                yield event
+                    if isinstance(event, ChatStreamEvent) and event.event == "stream.end":
+                        stream_end_sent = True
+                    yield event
+            except GeneratorExit:
+                disconnected = True
+                raise
+            finally:
+                if not stream_end_sent and not disconnected:
+                    disconnected = True
+                if disconnected and not stream_end_sent:
+                    log_chatbot_event(
+                        "chatbot.stream.client_disconnected",
+                        request_id=request_id,
+                        user_id=user_id,
+                        conversation_id=accepted.conversation_id,
+                        message_id=accepted.assistant_message_id,
+                        llm_run_id=accepted.llm_run_id,
+                        provider="deepseek",
+                        model=accepted.model,
+                        status="disconnected",
+                    )
 
         return event_stream()
 
@@ -400,31 +438,67 @@ class ChatStreamService:
             self.chat_service.concurrency_service.release(lease)
 
         request = self.chat_service._build_request(accepted, base_user_message.content)
+        request_id = get_request_id()
+        log_chatbot_event(
+            "chatbot.stream.request.started",
+            request_id=request_id,
+            user_id=user_id,
+            conversation_id=accepted.conversation_id,
+            message_id=accepted.assistant_message_id,
+            llm_run_id=accepted.llm_run_id,
+            provider="deepseek",
+            model=accepted.model,
+            status="pending",
+            content=base_user_message.content,
+        )
         queue: Queue[ChatStreamEvent | None] = Queue()
         producer = Thread(
             target=self._produce_stream_events,
-            args=(queue, accepted, user_id, request),
+            args=(queue, accepted, user_id, request, request_id),
             daemon=True,
         )
         producer.start()
 
         def event_stream() -> Iterator[ChatStreamEvent | str]:
+            stream_end_sent = False
+            disconnected = False
             yield ChatStreamEvent(
                 event="message.created",
                 data=self._build_created_data(accepted, content=base_user_message.content, replayed=False),
                 sequence=1,
             )
-            while True:
-                try:
-                    event = queue.get(timeout=self.KEEPALIVE_SECONDS)
-                except Empty:
-                    if not producer.is_alive():
+            try:
+                while True:
+                    try:
+                        event = queue.get(timeout=self.KEEPALIVE_SECONDS)
+                    except Empty:
+                        if not producer.is_alive():
+                            break
+                        yield encode_chatbot_sse_keepalive()
+                        continue
+                    if event is None:
                         break
-                    yield encode_chatbot_sse_keepalive()
-                    continue
-                if event is None:
-                    break
-                yield event
+                    if isinstance(event, ChatStreamEvent) and event.event == "stream.end":
+                        stream_end_sent = True
+                    yield event
+            except GeneratorExit:
+                disconnected = True
+                raise
+            finally:
+                if not stream_end_sent and not disconnected:
+                    disconnected = True
+                if disconnected and not stream_end_sent:
+                    log_chatbot_event(
+                        "chatbot.stream.client_disconnected",
+                        request_id=request_id,
+                        user_id=user_id,
+                        conversation_id=accepted.conversation_id,
+                        message_id=accepted.assistant_message_id,
+                        llm_run_id=accepted.llm_run_id,
+                        provider="deepseek",
+                        model=accepted.model,
+                        status="disconnected",
+                    )
 
         return event_stream()
 
@@ -478,7 +552,9 @@ class ChatStreamService:
         accepted: _AcceptedTurn,
         user_id: str,
         request: ChatCompletionRequest,
+        request_id: str | None = None,
     ) -> None:
+        request_id = request_id or get_request_id()
         started_at = perf_counter()
         next_sequence = 2
         partial_content = ""
@@ -494,6 +570,7 @@ class ChatStreamService:
                         usage=usage,
                         started_at=started_at,
                         first_delta_at=first_delta_at,
+                        request_id=request_id,
                     ):
                         continue
                     self._refresh_short_term_memory(user_id, accepted.conversation_id)
@@ -540,6 +617,19 @@ class ChatStreamService:
                     partial_content += delta
                     if first_delta_at is None:
                         first_delta_at = perf_counter()
+                        log_chatbot_event(
+                            "chatbot.stream.first_token",
+                            request_id=request_id,
+                            user_id=user_id,
+                            conversation_id=accepted.conversation_id,
+                            message_id=accepted.assistant_message_id,
+                            llm_run_id=accepted.llm_run_id,
+                            provider="deepseek",
+                            model=accepted.model,
+                            status="streaming",
+                            latency_ms=int((first_delta_at - started_at) * 1000),
+                            content_length=len(partial_content),
+                        )
                     self._checkpoint_partial(
                         accepted,
                         user_id,
@@ -586,6 +676,7 @@ class ChatStreamService:
                         finish_reason=llm_event.finish_reason,
                         started_at=started_at,
                         first_delta_at=first_delta_at,
+                        request_id=request_id,
                     )
                     self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
@@ -634,6 +725,7 @@ class ChatStreamService:
                         usage=usage,
                         started_at=started_at,
                         first_delta_at=first_delta_at,
+                        request_id=request_id,
                     )
                     self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
@@ -682,6 +774,7 @@ class ChatStreamService:
                 terminal_state=terminal_state,
                 started_at=started_at,
                 first_delta_at=first_delta_at,
+                request_id=request_id,
             )
             self._refresh_short_term_memory(user_id, accepted.conversation_id)
             queue.put(
@@ -770,6 +863,7 @@ class ChatStreamService:
         finish_reason: str | None,
         started_at: float,
         first_delta_at: float | None,
+        request_id: str,
     ) -> None:
         with self.chat_service._session() as session:
             user_message, assistant_message, llm_run, conversation = self._load_owned_turn(session, accepted, user_id)
@@ -800,6 +894,23 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            log_chatbot_event(
+                "chatbot.stream.completed",
+                request_id=request_id,
+                user_id=user_id,
+                conversation_id=str(conversation.id),
+                message_id=assistant_message.id,
+                llm_run_id=llm_run.id,
+                provider=llm_run.provider,
+                model=assistant_message.model or llm_run.model,
+                status="completed",
+                latency_ms=llm_run.latency_ms,
+                first_token_latency_ms=llm_run.first_token_latency_ms,
+                prompt_tokens=llm_run.prompt_tokens,
+                completion_tokens=llm_run.completion_tokens,
+                total_tokens=llm_run.total_tokens,
+                content=assistant_message.content,
+            )
 
     def _finalize_cancelled(
         self,
@@ -810,6 +921,7 @@ class ChatStreamService:
         usage: ChatCompletionUsage | None,
         started_at: float,
         first_delta_at: float | None,
+        request_id: str,
     ) -> bool:
         with self.chat_service._session() as session:
             user_message, assistant_message, llm_run, conversation = self._load_owned_turn(session, accepted, user_id)
@@ -846,6 +958,23 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            log_chatbot_event(
+                "chatbot.stream.cancelled",
+                request_id=request_id,
+                user_id=user_id,
+                conversation_id=str(conversation.id),
+                message_id=assistant_message.id,
+                llm_run_id=llm_run.id,
+                provider=llm_run.provider,
+                model=assistant_message.model or llm_run.model,
+                status="cancelled",
+                latency_ms=llm_run.latency_ms,
+                first_token_latency_ms=llm_run.first_token_latency_ms,
+                prompt_tokens=llm_run.prompt_tokens,
+                completion_tokens=llm_run.completion_tokens,
+                total_tokens=llm_run.total_tokens,
+                content=assistant_message.content,
+            )
         return True
 
     def _finalize_failed(
@@ -856,6 +985,7 @@ class ChatStreamService:
         terminal_state: _TerminalState,
         started_at: float,
         first_delta_at: float | None,
+        request_id: str,
     ) -> None:
         with self.chat_service._session() as session:
             user_message, assistant_message, llm_run, conversation = self._load_owned_turn(session, accepted, user_id)
@@ -892,6 +1022,25 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            log_chatbot_event(
+                "chatbot.stream.failed",
+                request_id=request_id,
+                user_id=user_id,
+                conversation_id=str(conversation.id),
+                message_id=assistant_message.id,
+                llm_run_id=llm_run.id,
+                provider=llm_run.provider,
+                model=assistant_message.model or llm_run.model,
+                status="failed",
+                error_code=terminal_state.error.code,
+                latency_ms=llm_run.latency_ms,
+                first_token_latency_ms=llm_run.first_token_latency_ms,
+                prompt_tokens=llm_run.prompt_tokens,
+                completion_tokens=llm_run.completion_tokens,
+                total_tokens=llm_run.total_tokens,
+                content=assistant_message.content,
+                reason=type(terminal_state.error).__name__,
+            )
 
     def _load_owned_turn(
         self,
@@ -1169,7 +1318,9 @@ class ChatStreamService:
             error=StreamErrorData(
                 code=llm_run.error_code or assistant_message.error_code or "CHATBOT_STREAM_ERROR",
                 message=llm_run.error_message or "Generation failed",
-                retryable=False,
+                retryable=get_chatbot_error_spec(
+                    llm_run.error_code or assistant_message.error_code or "CHATBOT_STREAM_ERROR"
+                ).retryable,
             ),
             partial=bool(assistant_message.content),
             content=assistant_message.content,

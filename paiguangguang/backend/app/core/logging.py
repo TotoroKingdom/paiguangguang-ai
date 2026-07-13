@@ -1,19 +1,31 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
-import re
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 
 _LOGGER = logging.getLogger("paiguangguang.backend")
 _REDACTED = "[redacted]"
-_SENSITIVE_KEY_RE = re.compile(r"(authorization|api[_-]?key|token|password|secret|.*_url$)", re.IGNORECASE)
+_SENSITIVE_KEYS = {
+    "authorization",
+    "api_key",
+    "api-key",
+    "token",
+    "password",
+    "secret",
+    "jwt",
+    "access_token",
+    "refresh_token",
+    "redis_url",
+}
 
 
 def _is_sensitive_key(key: Any) -> bool:
-    return bool(_SENSITIVE_KEY_RE.search(str(key).strip()))
+    normalized = str(key).strip().lower()
+    return normalized in _SENSITIVE_KEYS or normalized.endswith("_url")
 
 
 def _redact_url(value: str) -> str:
@@ -58,3 +70,10 @@ def _json_safe(value: Any, *, key: str | None = None) -> Any:
 def log_event(event: str, **fields: Any) -> None:
     payload = {"event": event, **{key: _json_safe(value, key=str(key)) for key, value in fields.items()}}
     _LOGGER.info(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+
+
+def stable_hash(value: str, *, length: int = 16) -> str:
+    if length < 1:
+        raise ValueError("length must be positive")
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
+    return digest[:length]

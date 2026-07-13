@@ -17,7 +17,9 @@ from app.core.errors import (
     build_error_response,
 )
 from app.chatbot.errors import ChatbotApiError
+from app.chatbot.observability import log_chatbot_event
 from app.core.request_id import RequestIdMiddleware
+from app.core.request_id import get_request_id
 from app.db.bootstrap import initialize_database
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -74,6 +76,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(ChatbotApiError)
 async def chatbot_api_error_handler(request: Request, exc: ChatbotApiError):
+    log_chatbot_event(
+        "chatbot.error",
+        request_id=get_request_id(),
+        status=exc.status_code,
+        error_code=exc.code,
+        reason=exc.__class__.__name__,
+        extra={
+            "path": request.url.path,
+            "method": request.method,
+        },
+    )
     return build_error_response(
         status_code=exc.status_code,
         code=exc.code,

@@ -24,6 +24,7 @@ from app.chatbot.llm.exceptions import (
 from app.chatbot.llm.prompt_builder import PromptBuilder
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage
 from app.chatbot.memory.conversation_summary import ConversationSummaryService
+from app.chatbot.observability import log_chatbot_event
 from app.chatbot.services.concurrency_service import ConcurrencyService, get_concurrency_service
 from app.chatbot.services.memory_service import MemoryService
 from app.chatbot.services.context_service import ContextService
@@ -35,6 +36,7 @@ from app.chatbot.schemas.message import MessageData
 from app.chatbot.memory.short_term_memory import ShortTermMemoryService
 from app.core.config import Settings, get_settings
 from app.core.rate_limit import RateLimitConfig, get_rate_limiter
+from app.core.request_id import get_request_id
 from app.db.session import build_session_factory
 
 
@@ -202,6 +204,18 @@ class ChatService:
             self.concurrency_service.release(lease)
 
         request = self._build_request(accepted, content)
+        log_chatbot_event(
+            "chatbot.request.started",
+            request_id=get_request_id(),
+            user_id=user_id,
+            conversation_id=accepted.conversation_id,
+            message_id=accepted.assistant_message_id,
+            llm_run_id=accepted.llm_run_id,
+            provider="deepseek",
+            model=accepted.model,
+            status="pending",
+            content=content,
+        )
         started_at = perf_counter()
         try:
             result = self.llm_client.complete(request)
@@ -612,6 +626,23 @@ class ChatService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            log_chatbot_event(
+                "chatbot.request.completed",
+                request_id=get_request_id(),
+                user_id=user_id,
+                conversation_id=str(user_message.conversation_id),
+                message_id=assistant_message.id,
+                llm_run_id=llm_run.id,
+                provider=llm_run.provider,
+                model=assistant_message.model or llm_run.model,
+                status="completed",
+                latency_ms=llm_run.latency_ms,
+                first_token_latency_ms=llm_run.first_token_latency_ms,
+                prompt_tokens=llm_run.prompt_tokens,
+                completion_tokens=llm_run.completion_tokens,
+                total_tokens=llm_run.total_tokens,
+                content=assistant_message.content,
+            )
             return self._build_response(user_message, assistant_message, llm_run, replayed=False)
 
     def _finalize_failed(
@@ -655,6 +686,19 @@ class ChatService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            log_chatbot_event(
+                "chatbot.request.failed",
+                request_id=get_request_id(),
+                user_id=user_id,
+                conversation_id=str(user_message.conversation_id),
+                message_id=assistant_message.id,
+                llm_run_id=llm_run.id,
+                provider=llm_run.provider,
+                model=assistant_message.model or llm_run.model,
+                status="failed",
+                error_code=error_code,
+                latency_ms=llm_run.latency_ms,
+            )
             return self._build_response(user_message, assistant_message, llm_run, replayed=False)
 
     @staticmethod

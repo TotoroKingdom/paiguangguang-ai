@@ -8,6 +8,7 @@ from typing import Iterator
 from sqlalchemy import and_, desc, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.chatbot.observability import log_chatbot_event
 from app.chatbot.models.memory import ChatbotMemory
 from app.chatbot.repositories.cursor import MemoryCursor, MemoryCursorError, encode_memory_cursor
 
@@ -343,6 +344,14 @@ class MemoryRepository:
                 .with_for_update(skip_locked=True)
             )
             rows = list(session.scalars(stmt))
+        if rows:
+            log_chatbot_event(
+                "chatbot.memory.backlog",
+                user_id=user_id,
+                hits=len(rows),
+                status="claimed",
+                source="postgres",
+            )
         return [self._record_from_model(row) for row in rows]
 
     def soft_delete(self, memory_id: str, user_id: str) -> MemoryRecord | None:

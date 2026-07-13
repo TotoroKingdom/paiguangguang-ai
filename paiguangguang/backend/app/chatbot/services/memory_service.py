@@ -20,6 +20,7 @@ from app.chatbot.models.memory import ChatbotMemory
 from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.repositories.cursor import MemoryCursor, decode_memory_cursor
 from app.chatbot.repositories.memory_repository import MemoryPage, MemoryRecord, MemoryRepository
+from app.chatbot.observability import log_chatbot_event
 from app.chatbot.schemas.common import DeleteResultData
 from app.chatbot.schemas.memory import MemoryData, MemoryPageData, MemoryUpdateRequest
 from app.core.config import Settings, get_settings
@@ -126,6 +127,15 @@ class MemoryService:
         try:
             self.semantic_index.upsert_memory(record)
         except Exception:
+            log_chatbot_event(
+                "chatbot.semantic.degraded",
+                user_id=record.user_id,
+                conversation_id=record.conversation_id,
+                message_id=record.id,
+                status="upsert_failed",
+                source="semantic_index",
+                reason="upsert",
+            )
             self.repository.update(record.id, record.user_id, embedding_status="failed")
             return
         self.repository.update(record.id, record.user_id, embedding_status="indexed")
@@ -136,6 +146,14 @@ class MemoryService:
         try:
             self.semantic_index.delete_memory(memory_id)
         except Exception:
+            log_chatbot_event(
+                "chatbot.semantic.degraded",
+                user_id=user_id,
+                message_id=memory_id,
+                status="delete_failed",
+                source="semantic_index",
+                reason="delete",
+            )
             return
 
     def submit_completed_turn(

@@ -8,6 +8,7 @@ from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session
 
 from app.chatbot.errors import ChatbotApiError
+from app.chatbot.observability import log_chatbot_event
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.repositories.cursor import (
@@ -422,6 +423,13 @@ class ConversationService:
         except Exception:
             session.rollback()
             raise
+        log_chatbot_event(
+            "chatbot.cleanup.backlog",
+            user_id=user_id,
+            conversation_id=model.id,
+            status="pending",
+            source="postgres",
+        )
         return DeleteResultData(id=model.id, status="deleted", cleanup_status=model.cleanup_status)
 
 

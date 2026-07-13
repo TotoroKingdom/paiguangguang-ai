@@ -12,7 +12,7 @@ from app.chatbot.memory.redis_adapter import RedisShortTermMemoryAdapter
 from app.chatbot.models.conversation import ChatbotConversation, ChatbotConversationSummary
 from app.chatbot.models.message import ChatbotMessage
 from app.core.config import Settings, get_settings
-from app.core.logging import log_event
+from app.chatbot.observability import log_chatbot_event
 
 
 def _utcnow() -> datetime:
@@ -50,7 +50,7 @@ class ShortTermMemoryService:
                 )
             except Exception as exc:  # pragma: no cover - defensive degrade
                 self._adapter = None
-                log_event("chatbot.short_memory.redis_degraded", reason=type(exc).__name__)
+                log_chatbot_event("chatbot.redis.degraded", reason=type(exc).__name__, source="short_memory")
 
     def load_history(
         self,
@@ -91,7 +91,13 @@ class ShortTermMemoryService:
                 if cached is not None:
                     return cached
             except Exception as exc:
-                log_event("chatbot.short_memory.redis_degraded", reason=type(exc).__name__)
+                log_chatbot_event(
+                    "chatbot.redis.degraded",
+                    reason=type(exc).__name__,
+                    source="short_memory",
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                )
                 self._adapter = None
 
         context = self._rebuild_context_from_postgres(
@@ -261,7 +267,13 @@ class ShortTermMemoryService:
                 ttl_seconds=self._ttl_seconds,
             )
         except Exception as exc:  # pragma: no cover - defensive degrade
-            log_event("chatbot.short_memory.redis_degraded", reason=type(exc).__name__)
+            log_chatbot_event(
+                "chatbot.redis.degraded",
+                reason=type(exc).__name__,
+                source="short_memory",
+                user_id=user_id,
+                conversation_id=conversation_id,
+            )
             self._adapter = None
 
     def _summary_payload(self, context: ShortTermMemoryContext, before_sequence_number: int) -> dict[str, Any]:
