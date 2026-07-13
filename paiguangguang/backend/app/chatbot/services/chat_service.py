@@ -28,6 +28,7 @@ from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.schemas.chat import ChatCompletionData, ChatLLMRunData
 from app.chatbot.schemas.message import MessageData
+from app.chatbot.memory.short_term_memory import ShortTermMemoryService
 from app.core.config import Settings, get_settings
 from app.db.session import build_session_factory
 
@@ -68,6 +69,7 @@ class ChatService:
             settings=self.settings,
         )
         self._prompt_builder_factory = prompt_builder_factory
+        self.short_term_memory = ShortTermMemoryService(self.session_factory, settings=self.settings)
 
     def close(self) -> None:
         if self._owns_llm_client:
@@ -156,9 +158,13 @@ class ChatService:
         except (LLMTimeoutError, LLMRateLimitError, LLMProviderError, LLMProtocolError, LLMConfigurationError) as exc:
             return self._finalize_failed(accepted, user_id, exc, started_at)
         except LLMError as exc:
-            return self._finalize_failed(accepted, user_id, exc, started_at)
+            response = self._finalize_failed(accepted, user_id, exc, started_at)
+            self.refresh_short_term_memory(user_id, conversation_id)
+            return response
 
-        return self._finalize_completed(accepted, user_id, result, started_at)
+        response = self._finalize_completed(accepted, user_id, result, started_at)
+        self.refresh_short_term_memory(user_id, conversation_id)
+        return response
 
     def _accept_turn(
         self,
@@ -333,20 +339,12 @@ class ChatService:
         conversation_id: str,
         before_sequence_number: int,
     ) -> tuple[LLMMessage, ...]:
-        stmt = (
-            select(ChatbotMessage)
-            .where(
-                ChatbotMessage.conversation_id == conversation_id,
-                ChatbotMessage.user_id == user_id,
-                ChatbotMessage.sequence_number < before_sequence_number,
-                ChatbotMessage.status == "completed",
-                ChatbotMessage.role.in_(("user", "assistant")),
-            )
-            .order_by(desc(ChatbotMessage.sequence_number), desc(ChatbotMessage.id))
-            .limit(self.settings.chatbot_recent_message_limit)
+        return self.short_term_memory.load_history(
+            session,
+            user_id,
+            conversation_id,
+            before_sequence_number=before_sequence_number,
         )
-        rows = list(session.scalars(stmt))
-        return tuple(LLMMessage(role=row.role, content=row.content) for row in reversed(rows))
 
     def _build_request(self, accepted: _AcceptedTurn, content: str) -> ChatCompletionRequest:
         builder = self._prompt_builder_factory(
@@ -524,6 +522,12 @@ class ChatService:
                 message="Content is too long",
             )
         return content
+
+    def refresh_short_term_memory(self, user_id: str, conversation_id: str) -> None:
+        try:
+            self.short_term_memory.refresh_context(user_id, conversation_id)
+        except Exception:
+            return None
 
 
 _CHAT_SERVICE: ChatService | None = None

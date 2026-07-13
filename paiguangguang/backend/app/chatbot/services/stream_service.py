@@ -246,6 +246,7 @@ class ChatStreamService:
                         started_at=started_at,
                         first_delta_at=first_delta_at,
                     )
+                    self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
                         ChatStreamEvent(
                             event="message.completed",
@@ -293,6 +294,7 @@ class ChatStreamService:
                         started_at=started_at,
                         first_delta_at=first_delta_at,
                     )
+                    self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
                         ChatStreamEvent(
                             event="message.cancelled",
@@ -340,6 +342,7 @@ class ChatStreamService:
                 started_at=started_at,
                 first_delta_at=first_delta_at,
             )
+            self._refresh_short_term_memory(user_id, accepted.conversation_id)
             queue.put(
                 ChatStreamEvent(
                     event="message.failed",
@@ -967,6 +970,12 @@ class ChatStreamService:
                 retryable=True,
             ),
         )
+
+    def _refresh_short_term_memory(self, user_id: str, conversation_id: str) -> None:
+        try:
+            self.chat_service.refresh_short_term_memory(user_id, conversation_id)
+        except Exception:
+            return None
 
 
 _CHAT_STREAM_SERVICE: ChatStreamService | None = None
