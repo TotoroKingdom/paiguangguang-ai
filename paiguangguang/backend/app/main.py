@@ -6,11 +6,17 @@ import logging
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import get_settings
-from app.core.errors import ExternalModelError, RetrievalFailureError, ServiceRateLimitError, ServiceTimeoutError
+from app.core.errors import (
+    ExternalModelError,
+    RetrievalFailureError,
+    ServiceRateLimitError,
+    ServiceTimeoutError,
+    build_error_response,
+)
+from app.core.request_id import RequestIdMiddleware
 from app.db.bootstrap import initialize_database
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -26,6 +32,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_allow_origins,
@@ -43,7 +50,7 @@ def root() -> dict[str, str]:
 
 
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: HTTPException):
     detail = exc.detail if isinstance(exc.detail, str) else "Request failed"
     code = "HTTP_ERROR"
     if exc.status_code == 401:
@@ -56,93 +63,67 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         code = "TIMEOUT_ERROR"
     elif exc.status_code == 502:
         code = "EXTERNAL_MODEL_ERROR"
-    return JSONResponse(
+    return build_error_response(
         status_code=exc.status_code,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": code,
-                "message": detail,
-            },
-        },
+        code=code,
+        message=detail,
+        details=exc.detail if not isinstance(exc.detail, str) else None,
     )
 
 
 @app.exception_handler(ServiceTimeoutError)
-async def service_timeout_handler(request: Request, exc: ServiceTimeoutError) -> JSONResponse:
-    return JSONResponse(
+async def service_timeout_handler(request: Request, exc: ServiceTimeoutError):
+    return build_error_response(
         status_code=504,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "TIMEOUT_ERROR",
-                "message": exc.message,
-            },
-        },
+        code="TIMEOUT_ERROR",
+        message=exc.message,
     )
 
 
 @app.exception_handler(ServiceRateLimitError)
-async def service_rate_limit_handler(request: Request, exc: ServiceRateLimitError) -> JSONResponse:
-    return JSONResponse(
+async def service_rate_limit_handler(request: Request, exc: ServiceRateLimitError):
+    return build_error_response(
         status_code=429,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "RATE_LIMITED",
-                "message": exc.message,
-            },
-        },
+        code="RATE_LIMITED",
+        message=exc.message,
     )
 
 
 @app.exception_handler(RetrievalFailureError)
-async def retrieval_failure_handler(request: Request, exc: RetrievalFailureError) -> JSONResponse:
-    return JSONResponse(
+async def retrieval_failure_handler(request: Request, exc: RetrievalFailureError):
+    return build_error_response(
         status_code=502,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "RETRIEVAL_ERROR",
-                "message": exc.message,
-            },
-        },
+        code="RETRIEVAL_ERROR",
+        message=exc.message,
     )
 
 
 @app.exception_handler(ExternalModelError)
-async def external_model_error_handler(request: Request, exc: ExternalModelError) -> JSONResponse:
-    return JSONResponse(
+async def external_model_error_handler(request: Request, exc: ExternalModelError):
+    return build_error_response(
         status_code=502,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "EXTERNAL_MODEL_ERROR",
-                "message": exc.message,
-            },
-        },
+        code="EXTERNAL_MODEL_ERROR",
+        message=exc.message,
     )
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
     first_error = exc.errors()[0] if exc.errors() else None
     message = first_error["msg"] if first_error else "Invalid request"
-    return JSONResponse(
+    return build_error_response(
         status_code=422,
-        content={
-            "success": False,
-            "data": None,
-            "error": {
-                "code": "VALIDATION_ERROR",
-                "message": message,
-            },
-        },
+        code="VALIDATION_ERROR",
+        message=message,
+        details=exc.errors(),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logging.exception("Unhandled application error", exc_info=exc)
+    return build_error_response(
+        status_code=500,
+        code="INTERNAL_ERROR",
+        message="Internal server error",
     )

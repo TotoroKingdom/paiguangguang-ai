@@ -282,12 +282,14 @@ def test_rag_collections_endpoint_returns_collection_names(tmp_path) -> None:
         session.close()
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    assert body == {
         "success": True,
         "data": {
             "collections": ["portfolio_knowledge", "another_collection"],
         },
         "error": None,
+        "request_id": body["request_id"],
     }
 
 

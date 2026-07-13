@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
+
+from app.core.request_id import get_request_id
+
 
 class ServiceError(RuntimeError):
     def __init__(self, message: str) -> None:
@@ -35,3 +42,30 @@ class ExternalModelError(ServiceError):
         super().__init__(f"{operation} failed: {detail}")
         self.operation = operation
         self.detail = detail
+
+
+def build_error_response(
+    *,
+    status_code: int,
+    code: str,
+    message: str,
+    details: Any | None = None,
+) -> JSONResponse:
+    request_id = get_request_id()
+    content = jsonable_encoder(
+        {
+            "success": False,
+            "data": None,
+            "error": {
+                "code": code,
+                "message": message,
+                "details": details,
+            },
+            "request_id": request_id,
+        }
+    )
+    return JSONResponse(
+        status_code=status_code,
+        headers={"X-Request-ID": request_id},
+        content=content,
+    )
