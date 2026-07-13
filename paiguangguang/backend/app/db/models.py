@@ -236,3 +236,6 @@ class RagIngestionJob(Base):
         default=_utcnow,
         onupdate=_utcnow,
     )
+
+
+from app.chatbot import models as _chatbot_models  # noqa: E402,F401
