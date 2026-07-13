@@ -29,6 +29,8 @@ class Settings:
     chatbot_summary_prompt_version: str = "summary-v1"
     chatbot_summary_model: str = "deepseek-chat"
     chatbot_summary_pending_stale_seconds: int = 300
+    chatbot_memory_min_confidence: float = 0.75
+    chatbot_long_term_memory_enabled: bool = False
     database_url: str = ""
     test_database_url: str = ""
     jwt_secret_key: str = "change-me-in-development-secret-key"
@@ -80,6 +82,8 @@ def get_settings() -> Settings:
         chatbot_summary_prompt_version=os.getenv("CHATBOT_SUMMARY_PROMPT_VERSION", "summary-v1"),
         chatbot_summary_model=os.getenv("CHATBOT_SUMMARY_MODEL", "deepseek-chat"),
         chatbot_summary_pending_stale_seconds=int(os.getenv("CHATBOT_SUMMARY_PENDING_STALE_SECONDS", "300")),
+        chatbot_memory_min_confidence=float(os.getenv("CHATBOT_MEMORY_MIN_CONFIDENCE", "0.75")),
+        chatbot_long_term_memory_enabled=_parse_bool(os.getenv("CHATBOT_LONG_TERM_MEMORY_ENABLED"), default=False),
         database_url=os.getenv("DATABASE_URL", ""),
         test_database_url=os.getenv("TEST_DATABASE_URL", ""),
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),

@@ -5,10 +5,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Iterator
 
-from sqlalchemy import desc, select, update
+from sqlalchemy import and_, desc, or_, select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.models.memory import ChatbotMemory
+from app.chatbot.repositories.cursor import MemoryCursor, MemoryCursorError, encode_memory_cursor
 
 
 def _utcnow() -> datetime:
@@ -33,6 +34,13 @@ class MemoryRecord:
     deleted_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryPage:
+    items: list[MemoryRecord]
+    next_cursor: str | None
+    has_more: bool
 
 
 class MemoryRepository:
@@ -100,6 +108,21 @@ class MemoryRepository:
             model = session.scalar(stmt)
             return self._record_from_model(model) if model is not None else None
 
+    def get_latest_active_by_type(self, user_id: str, memory_type: str) -> MemoryRecord | None:
+        with self._session() as session:
+            model = session.scalar(
+                select(ChatbotMemory)
+                .where(
+                    ChatbotMemory.user_id == user_id,
+                    ChatbotMemory.memory_type == memory_type,
+                    ChatbotMemory.status == "active",
+                    ChatbotMemory.deleted_at.is_(None),
+                )
+                .order_by(desc(ChatbotMemory.updated_at), desc(ChatbotMemory.id))
+                .limit(1)
+            )
+            return self._record_from_model(model) if model is not None else None
+
     def create(
         self,
         user_id: str,
@@ -116,7 +139,7 @@ class MemoryRepository:
         expires_at: datetime | None = None,
     ) -> MemoryRecord:
         existing = self.get_by_normalized_hash(user_id, normalized_hash)
-        if existing is not None:
+        if existing is not None and existing.status in {"candidate", "active"}:
             return existing
 
         now = _utcnow()
@@ -143,18 +166,116 @@ class MemoryRepository:
             session.refresh(row)
             return self._record_from_model(row)
 
+    def update(
+        self,
+        memory_id: str,
+        user_id: str,
+        *,
+        content: str | None = None,
+        normalized_hash: str | None = None,
+        status: str | None = None,
+        importance: float | None = None,
+        confidence: float | None = None,
+        source_message_ids: list[str] | None = None,
+        expires_at: datetime | None = None,
+        embedding_status: str | None = None,
+        conversation_id: str | None = None,
+    ) -> MemoryRecord | None:
+        updates: dict[str, object] = {"updated_at": _utcnow()}
+        if content is not None:
+            updates["content"] = content
+        if normalized_hash is not None:
+            updates["normalized_hash"] = normalized_hash
+        if status is not None:
+            updates["status"] = status
+        if importance is not None:
+            updates["importance"] = importance
+        if confidence is not None:
+            updates["confidence"] = confidence
+        if source_message_ids is not None:
+            updates["source_message_ids"] = list(source_message_ids)
+        if expires_at is not None:
+            updates["expires_at"] = expires_at
+        if embedding_status is not None:
+            updates["embedding_status"] = embedding_status
+        if conversation_id is not None:
+            updates["conversation_id"] = conversation_id
+
+        with self._session() as session:
+            result = session.execute(
+                update(ChatbotMemory)
+                .where(
+                    ChatbotMemory.id == memory_id,
+                    ChatbotMemory.user_id == user_id,
+                    ChatbotMemory.deleted_at.is_(None),
+                )
+                .values(**updates)
+            )
+            if result.rowcount == 0:
+                return None
+            model = session.scalar(select(ChatbotMemory).where(ChatbotMemory.id == memory_id, ChatbotMemory.user_id == user_id))
+            return self._record_from_model(model) if model is not None else None
+
     def list_owned(
         self,
         user_id: str,
         status: str | None = "active",
         *,
+        memory_type: str | None = None,
+        conversation_id: str | None = None,
+        cursor: str | MemoryCursor | None = None,
         include_expired: bool = False,
         limit: int = 100,
     ) -> list[MemoryRecord]:
-        if limit < 1:
-            raise ValueError("limit must be positive")
+        return self.list_owned_page(
+            user_id,
+            status=status,
+            memory_type=memory_type,
+            conversation_id=conversation_id,
+            cursor=cursor,
+            include_expired=include_expired,
+            limit=limit,
+        ).items
+
+    def list_owned_page(
+        self,
+        user_id: str,
+        status: str | None = "active",
+        *,
+        memory_type: str | None = None,
+        conversation_id: str | None = None,
+        cursor: str | MemoryCursor | None = None,
+        include_expired: bool = False,
+        limit: int = 100,
+    ) -> MemoryPage:
+        if limit < 1 or limit > 100:
+            raise ValueError("limit must be positive and no greater than 100")
         if status == "deleted":
             raise ValueError("deleted memories are not listable")
+        if status is not None and status not in {"candidate", "active", "superseded", "failed"}:
+            raise ValueError("Invalid memory status")
+
+        position: MemoryCursor | None = None
+        if isinstance(cursor, str):
+            from app.chatbot.repositories.cursor import decode_memory_cursor
+
+            try:
+                position = decode_memory_cursor(
+                    cursor,
+                    expected_status_filter=status,
+                    expected_memory_type_filter=memory_type,
+                    expected_conversation_id_filter=conversation_id,
+                )
+            except MemoryCursorError as exc:
+                raise ValueError("Invalid memory cursor") from exc
+        elif isinstance(cursor, MemoryCursor):
+            if (
+                cursor.status_filter != status
+                or cursor.memory_type_filter != memory_type
+                or cursor.conversation_id_filter != conversation_id
+            ):
+                raise ValueError("Invalid memory cursor")
+            position = cursor
 
         now = _utcnow()
         with self._session() as session:
@@ -165,14 +286,42 @@ class MemoryRepository:
             if status is None:
                 stmt = stmt.where(ChatbotMemory.status.in_(("candidate", "active", "superseded")))
             else:
-                if status not in {"candidate", "active", "superseded", "failed"}:
-                    raise ValueError("Invalid memory status")
                 stmt = stmt.where(ChatbotMemory.status == status)
+            if memory_type is not None:
+                stmt = stmt.where(ChatbotMemory.memory_type == memory_type)
+            if conversation_id is not None:
+                stmt = stmt.where(ChatbotMemory.conversation_id == conversation_id)
             if not include_expired:
                 stmt = stmt.where((ChatbotMemory.expires_at.is_(None)) | (ChatbotMemory.expires_at > now))
-            stmt = stmt.order_by(desc(ChatbotMemory.updated_at), desc(ChatbotMemory.id)).limit(limit)
+            if position is not None:
+                stmt = stmt.where(
+                    or_(
+                        ChatbotMemory.updated_at < position.updated_at,
+                        and_(
+                            ChatbotMemory.updated_at == position.updated_at,
+                            ChatbotMemory.id < position.memory_id,
+                        ),
+                    )
+                )
+            stmt = stmt.order_by(desc(ChatbotMemory.updated_at), desc(ChatbotMemory.id)).limit(limit + 1)
             rows = list(session.scalars(stmt))
-        return [self._record_from_model(row) for row in rows]
+
+        has_more = len(rows) > limit
+        visible_rows = rows[:limit]
+        items = [self._record_from_model(row) for row in visible_rows]
+        next_cursor = None
+        if has_more and visible_rows:
+            tail = visible_rows[-1]
+            next_cursor = encode_memory_cursor(
+                MemoryCursor(
+                    updated_at=tail.updated_at,
+                    memory_id=tail.id,
+                    status_filter=status,
+                    memory_type_filter=memory_type,
+                    conversation_id_filter=conversation_id,
+                )
+            )
+        return MemoryPage(items=items, next_cursor=next_cursor, has_more=has_more)
 
     def claim_embedding_backlog(self, user_id: str, *, limit: int = 20) -> list[MemoryRecord]:
         if limit < 1:
@@ -214,4 +363,3 @@ class MemoryRepository:
                 return None
             model = session.scalar(select(ChatbotMemory).where(ChatbotMemory.id == memory_id, ChatbotMemory.user_id == user_id))
             return self._record_from_model(model) if model is not None else None
-

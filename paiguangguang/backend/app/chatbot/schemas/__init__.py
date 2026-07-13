@@ -15,6 +15,7 @@ from app.chatbot.schemas.conversation import (
     ConversationUpdateRequest,
 )
 from app.chatbot.schemas.message import MessageData, MessagePageData
+from app.chatbot.schemas.memory import MemoryData, MemoryPageData, MemoryStatus, MemoryUpdateRequest
 from app.chatbot.schemas.stream import (
     ChatStreamEvent,
     ChatStreamEventName,
@@ -51,6 +52,10 @@ __all__ = [
     "ConversationTitleSource",
     "ConversationUpdateRequest",
     "DeleteResultData",
+    "MemoryData",
+    "MemoryPageData",
+    "MemoryStatus",
+    "MemoryUpdateRequest",
     "StreamCompletedMessageData",
     "StreamEndData",
     "StreamErrorData",
