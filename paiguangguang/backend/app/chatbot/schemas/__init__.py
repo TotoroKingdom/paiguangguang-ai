@@ -13,6 +13,7 @@ from app.chatbot.schemas.conversation import (
     ConversationPageData,
     ConversationUpdateRequest,
 )
+from app.chatbot.schemas.message import MessageData, MessagePageData
 
 __all__ = [
     "ConversationActiveGenerationData",
@@ -24,5 +25,6 @@ __all__ = [
     "ConversationTitleSource",
     "ConversationUpdateRequest",
     "DeleteResultData",
+    "MessageData",
+    "MessagePageData",
 ]
-
