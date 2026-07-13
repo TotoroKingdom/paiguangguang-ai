@@ -36,6 +36,22 @@ class FakeLLMClient:
         return None
 
 
+@dataclass
+class FakeSemanticIndex:
+    enabled: bool = True
+    fail_on_upsert: bool = False
+    upsert_calls: list[str] = field(default_factory=list)
+    delete_calls: list[str] = field(default_factory=list)
+
+    def upsert_memory(self, record) -> None:
+        self.upsert_calls.append(record.id)
+        if self.fail_on_upsert:
+            raise RuntimeError("semantic index write failed")
+
+    def delete_memory(self, memory_id: str) -> None:
+        self.delete_calls.append(memory_id)
+
+
 def _build_session_factory(tmp_path: Path) -> sessionmaker[Session]:
     engine = create_engine(f"sqlite+pysqlite:///{(tmp_path / f'{uuid4()}.sqlite3').as_posix()}", future=True)
     Base.metadata.create_all(bind=engine)
@@ -54,6 +70,8 @@ def _build_service(
     llm_client: FakeLLMClient | None = None,
     *,
     long_term_enabled: bool = True,
+    semantic_enabled: bool = False,
+    semantic_index: FakeSemanticIndex | None = None,
 ) -> MemoryService:
     return MemoryService(
         session_factory=session_factory,
@@ -63,13 +81,16 @@ def _build_service(
                 chatbot_default_model="deepseek-chat",
                 chatbot_memory_min_confidence=0.75,
                 chatbot_long_term_memory_enabled=long_term_enabled,
+                chatbot_semantic_memory_enabled=semantic_enabled,
             ),
         ),
         settings=Settings(
             chatbot_default_model="deepseek-chat",
             chatbot_memory_min_confidence=0.75,
             chatbot_long_term_memory_enabled=long_term_enabled,
+            chatbot_semantic_memory_enabled=semantic_enabled,
         ),
+        semantic_index=semantic_index,
     )
 
 
@@ -249,3 +270,82 @@ def test_memory_service_rejects_foreign_source_messages(tmp_path) -> None:
 
     with session_factory() as session:
         assert session.query(ChatbotMemory).count() == 0
+
+
+def test_memory_service_syncs_semantic_index_and_marks_embedding_status(tmp_path) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    conversation_repo = ConversationRepository(session_factory)
+    memory_repo = MemoryRepository(session_factory)
+    fake_semantic_index = FakeSemanticIndex()
+    service = _build_service(
+        session_factory,
+        semantic_index=fake_semantic_index,
+        semantic_enabled=True,
+    )
+
+    with session_factory() as session:
+        owner = _create_user(session, email="owner@example.com")
+        session.commit()
+
+    conversation = conversation_repo.create(owner.id, "Thread", "deepseek-chat", system_prompt_version="v1")
+    user_message_id, assistant_message_id = _seed_turn(
+        session_factory,
+        owner.id,
+        conversation.id,
+        user_content="请记住我的项目名是星轨",
+    )
+
+    created = service.process_completed_turn(
+        owner.id,
+        conversation.id,
+        user_message_id,
+        assistant_message_id,
+    )
+
+    assert len(created) == 1
+    assert created[0].status == "active"
+    assert fake_semantic_index.upsert_calls == [created[0].id]
+    assert memory_repo.get_owned(created[0].id, owner.id).embedding_status == "indexed"
+
+    with session_factory() as session:
+        deleted = service.delete_memory(session, owner.id, created[0].id)
+
+    assert deleted.status == "deleted"
+    assert fake_semantic_index.delete_calls[-1] == created[0].id
+    assert memory_repo.get_owned(created[0].id, owner.id, include_deleted=True).embedding_status == "deleted"
+
+
+def test_memory_service_keeps_db_write_when_semantic_index_fails(tmp_path) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    conversation_repo = ConversationRepository(session_factory)
+    memory_repo = MemoryRepository(session_factory)
+    fake_semantic_index = FakeSemanticIndex(fail_on_upsert=True)
+    service = _build_service(
+        session_factory,
+        semantic_index=fake_semantic_index,
+        semantic_enabled=True,
+    )
+
+    with session_factory() as session:
+        owner = _create_user(session, email="owner@example.com")
+        session.commit()
+
+    conversation = conversation_repo.create(owner.id, "Thread", "deepseek-chat", system_prompt_version="v1")
+    user_message_id, assistant_message_id = _seed_turn(
+        session_factory,
+        owner.id,
+        conversation.id,
+        user_content="请记住我的项目名是天枢",
+    )
+
+    created = service.process_completed_turn(
+        owner.id,
+        conversation.id,
+        user_message_id,
+        assistant_message_id,
+    )
+
+    assert len(created) == 1
+    assert created[0].status == "active"
+    assert fake_semantic_index.upsert_calls == [created[0].id]
+    assert memory_repo.get_owned(created[0].id, owner.id).embedding_status == "failed"

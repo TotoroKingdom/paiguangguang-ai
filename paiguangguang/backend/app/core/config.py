@@ -31,6 +31,11 @@ class Settings:
     chatbot_summary_pending_stale_seconds: int = 300
     chatbot_memory_min_confidence: float = 0.75
     chatbot_long_term_memory_enabled: bool = False
+    chatbot_semantic_top_k: int = 5
+    chatbot_semantic_candidate_multiplier: int = 3
+    chatbot_semantic_similarity_threshold: float = 0.72
+    chatbot_embedding_version: str = "v1"
+    chatbot_semantic_memory_enabled: bool = False
     database_url: str = ""
     test_database_url: str = ""
     jwt_secret_key: str = "change-me-in-development-secret-key"
@@ -84,6 +89,11 @@ def get_settings() -> Settings:
         chatbot_summary_pending_stale_seconds=int(os.getenv("CHATBOT_SUMMARY_PENDING_STALE_SECONDS", "300")),
         chatbot_memory_min_confidence=float(os.getenv("CHATBOT_MEMORY_MIN_CONFIDENCE", "0.75")),
         chatbot_long_term_memory_enabled=_parse_bool(os.getenv("CHATBOT_LONG_TERM_MEMORY_ENABLED"), default=False),
+        chatbot_semantic_top_k=int(os.getenv("CHATBOT_SEMANTIC_TOP_K", "5")),
+        chatbot_semantic_candidate_multiplier=int(os.getenv("CHATBOT_SEMANTIC_CANDIDATE_MULTIPLIER", "3")),
+        chatbot_semantic_similarity_threshold=float(os.getenv("CHATBOT_SEMANTIC_SIMILARITY_THRESHOLD", "0.72")),
+        chatbot_embedding_version=os.getenv("CHATBOT_EMBEDDING_VERSION", "v1"),
+        chatbot_semantic_memory_enabled=_parse_bool(os.getenv("CHATBOT_SEMANTIC_MEMORY_ENABLED"), default=False),
         database_url=os.getenv("DATABASE_URL", ""),
         test_database_url=os.getenv("TEST_DATABASE_URL", ""),
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),
