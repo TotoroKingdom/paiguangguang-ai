@@ -24,6 +24,7 @@ from app.chatbot.llm.exceptions import (
 from app.chatbot.llm.prompt_builder import PromptBuilder
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage
 from app.chatbot.memory.conversation_summary import ConversationSummaryService
+from app.chatbot.services.memory_service import MemoryService
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
@@ -72,6 +73,11 @@ class ChatService:
         self._prompt_builder_factory = prompt_builder_factory
         self.short_term_memory = ShortTermMemoryService(self.session_factory, settings=self.settings)
         self.conversation_summary = ConversationSummaryService(
+            self.session_factory,
+            llm_client=self.llm_client,
+            settings=self.settings,
+        )
+        self.memory_service = MemoryService(
             self.session_factory,
             llm_client=self.llm_client,
             settings=self.settings,
@@ -170,6 +176,13 @@ class ChatService:
 
         response = self._finalize_completed(accepted, user_id, result, started_at)
         self.refresh_short_term_memory(user_id, conversation_id)
+        self.memory_service.submit_completed_turn(
+            user_id,
+            conversation_id,
+            accepted.user_message_id,
+            accepted.assistant_message_id,
+            source_message_ids=[accepted.user_message_id, accepted.assistant_message_id],
+        )
         return response
 
     def _accept_turn(
