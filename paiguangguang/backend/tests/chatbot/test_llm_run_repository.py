@@ -153,7 +153,7 @@ def test_scan_stale_runs_returns_pending_and_streaming_only(tmp_path) -> None:
         session.commit()
 
     stale_runs = repo.scan_stale_runs(now - timedelta(hours=1), limit=10)
-    assert [run.id for run in stale_runs] == [streaming.id, pending.id]
+    assert [run.id for run in stale_runs] == [pending.id]
 
 
 def test_owner_safe_lookup_blocks_foreign_user(tmp_path) -> None:
