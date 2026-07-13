@@ -20,6 +20,9 @@ def _parse_bool(raw: str | None, *, default: bool = False) -> bool:
 class Settings:
     app_name: str = "Paiguangguang Backend"
     api_v1_prefix: str = "/api/v1"
+    chatbot_env: str = "development"
+    chatbot_redis_schema_version: int = 1
+    chatbot_short_memory_ttl_seconds: int = 7 * 24 * 60 * 60
     database_url: str = ""
     test_database_url: str = ""
     jwt_secret_key: str = "change-me-in-development-secret-key"
@@ -62,6 +65,9 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
+        chatbot_env=os.getenv("CHATBOT_ENV", "development"),
+        chatbot_redis_schema_version=int(os.getenv("CHATBOT_REDIS_SCHEMA_VERSION", "1")),
+        chatbot_short_memory_ttl_seconds=int(os.getenv("CHATBOT_SHORT_MEMORY_TTL_SECONDS", str(7 * 24 * 60 * 60))),
         database_url=os.getenv("DATABASE_URL", ""),
         test_database_url=os.getenv("TEST_DATABASE_URL", ""),
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),

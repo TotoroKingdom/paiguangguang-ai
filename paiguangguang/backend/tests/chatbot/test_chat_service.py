@@ -146,6 +146,57 @@ def test_chat_service_completes_turn_persists_response_and_context(tmp_path) -> 
         assert stored_run.status == "completed"
 
 
+def test_chat_service_uses_short_term_memory_for_history(tmp_path, monkeypatch) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    conversation_repo = ConversationRepository(session_factory)
+    fake_llm = FakeLLMClient(
+        outcomes=[
+            ChatCompletionResult(
+                request_id="00000000-0000-0000-0000-000000001111",
+                prompt_version="v1",
+                model="deepseek-chat",
+                message=LLMMessage(role="assistant", content="final answer"),
+                finish_reason="stop",
+                usage=ChatCompletionUsage(prompt_tokens=11, completion_tokens=13, total_tokens=24),
+            )
+        ]
+    )
+    service = _build_service(session_factory, fake_llm)
+
+    class FakeShortTermMemory:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str, str]] = []
+
+        def load_history(self, session, user_id: str, conversation_id: str, *, before_sequence_number: int):
+            self.calls.append((user_id, conversation_id, str(before_sequence_number)))
+            return (LLMMessage(role="assistant", content="cached assistant"),)
+
+        def refresh_context(self, *args, **kwargs):
+            return None
+
+    fake_memory = FakeShortTermMemory()
+    service.short_term_memory = fake_memory  # type: ignore[attr-defined]
+
+    with session_factory() as session:
+        owner = _create_user(session, email="owner@example.com")
+        session.commit()
+
+    conversation = conversation_repo.create(owner.id, "Thread", "deepseek-chat", system_prompt_version="v1")
+    _seed_completed_turn(session_factory, owner.id, conversation.id)
+
+    result = service.complete(
+        owner.id,
+        conversation.id,
+        "How is the current project structured?",
+        "00000000-0000-0000-0000-000000001222",
+    )
+
+    assert result.replayed is False
+    assert fake_memory.calls
+    assert len(fake_llm.complete_calls) == 1
+    assert [message.role for message in fake_llm.complete_calls[0].messages] == ["system", "assistant", "user"]
+
+
 def test_chat_service_replays_completed_request_and_conflict_detects_payload_mismatch(tmp_path) -> None:
     session_factory = _build_session_factory(tmp_path)
     conversation_repo = ConversationRepository(session_factory)
