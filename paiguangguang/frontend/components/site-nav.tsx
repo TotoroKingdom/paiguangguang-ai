@@ -7,7 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 
 const navItems = [
   { href: "/", label: "Home" },
-  { href: "/chat-bot", label: "Chat bot" },
+  { href: "/chat-bot", label: "Chatbot" },
   { href: "/agents/knowledge", label: "Knowledge" },
   { href: "/agents/browser", label: "Browser" },
   { href: "/agents/office", label: "Office" },
@@ -31,10 +31,10 @@ export function SiteNav() {
               <Link
                 key={item.href}
                 href={item.href}
-                aria-current={pathname === item.href ? "page" : undefined}
+                aria-current={pathname === item.href || pathname?.startsWith(`${item.href}/`) ? "page" : undefined}
                 className={[
                   "border px-3 py-2 text-sm font-medium transition",
-                  pathname === item.href
+                  pathname === item.href || pathname?.startsWith(`${item.href}/`)
                     ? "border-tide/55 bg-tide text-paper shadow-sm"
                     : "border-ink/10 bg-white/55 text-ink hover:border-tide/40 hover:bg-white"
                 ].join(" ")}

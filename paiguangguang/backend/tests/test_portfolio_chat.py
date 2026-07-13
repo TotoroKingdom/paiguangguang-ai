@@ -1,116 +1,118 @@
 from __future__ import annotations
 
-import json
+from collections.abc import Generator
 
-import httpx
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-from app.ai.deepseek import DeepSeekClient
-from app.main import app
-from app.services.portfolio_chat import PortfolioChatMemory, PortfolioChatService, get_portfolio_chat_service
-
-
-def _build_chat_service(handler):
-    transport = httpx.MockTransport(handler)
-    client = DeepSeekClient(api_key="test-key", transport=transport)
-    memory = PortfolioChatMemory()
-    return PortfolioChatService(client=client, memory=memory)
+from app.main import app as fastapi_app
+from app.db.base import Base
+from app.db.models import User
+from app.db.session import get_db_session
+from app.services.auth import AuthService, get_auth_service
 
 
-def test_portfolio_chat_returns_reply_and_session_id() -> None:
-    captured_bodies: list[dict[str, object]] = []
+def _build_test_app(session: Session, auth_service: AuthService) -> FastAPI:
+    app = fastapi_app
+    app.dependency_overrides.clear()
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured_bodies.append(json.loads(request.content.decode()))
-        return httpx.Response(
-            200,
-            json={
-                "choices": [
-                    {
-                        "message": {
-                            "role": "assistant",
-                            "content": "I can help with the portfolio and project walkthrough.",
-                        }
-                    }
-                ]
-            },
-        )
+    def override_db_session() -> Generator[Session, None, None]:
+        yield session
 
-    service = _build_chat_service(handler)
-    app.dependency_overrides[get_portfolio_chat_service] = lambda: service
-    client = TestClient(app)
+    app.dependency_overrides[get_db_session] = override_db_session
+    app.dependency_overrides[get_auth_service] = lambda: auth_service
+    return app
 
-    try:
-        response = client.post("/api/v1/chat/chat", json={"message": "What is this project?"})
-    finally:
-        app.dependency_overrides.clear()
 
+def _create_user(session: Session, auth_service: AuthService) -> User:
+    return auth_service.create_user(
+        session,
+        email="admin@example.com",
+        display_name="Admin User",
+        password="Secret123!",
+        is_active=True,
+    )
+
+
+def _login(client: TestClient, email: str, password: str) -> str:
+    response = client.post("/api/v1/auth/login", json={"email": email, "password": password})
     assert response.status_code == 200
-    body = response.json()
-    assert body["success"] is True
-    assert body["data"]["reply"] == "I can help with the portfolio and project walkthrough."
-    assert isinstance(body["data"]["session_id"], str)
-    assert len(captured_bodies) == 1
-    assert captured_bodies[0]["messages"][0]["role"] == "system"
-    assert captured_bodies[0]["messages"][-1] == {"role": "user", "content": "What is this project?"}
+    return response.json()["data"]["access_token"]
 
 
-def test_portfolio_chat_uses_session_memory() -> None:
-    captured_bodies: list[dict[str, object]] = []
+def test_legacy_portfolio_chat_requires_jwt_and_is_deprecated(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-task18-login-tests")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
 
-    def handler(request: httpx.Request) -> httpx.Response:
-        captured_bodies.append(json.loads(request.content.decode()))
-        reply = "First answer" if len(captured_bodies) == 1 else "Second answer"
-        return httpx.Response(
-            200,
-            json={
-                "choices": [
-                    {
-                        "message": {
-                            "role": "assistant",
-                            "content": reply,
-                        }
-                    }
-                ]
-            },
-        )
+    legacy_db_path = tmp_path / "legacy-chat.sqlite3"
+    engine = create_engine(f"sqlite+pysqlite:///{legacy_db_path.as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = session_factory()
+    auth_service = AuthService()
+    _create_user(session, auth_service)
 
-    service = _build_chat_service(handler)
-    app.dependency_overrides[get_portfolio_chat_service] = lambda: service
+    app = _build_test_app(session, auth_service)
     client = TestClient(app)
 
     try:
-        first_response = client.post("/api/v1/chat/chat", json={"message": "Hi"})
-        session_id = first_response.json()["data"]["session_id"]
-        second_response = client.post(
+        unauthenticated = client.post("/api/v1/chat/chat", json={"message": "What is this project?"})
+        assert unauthenticated.status_code == 401
+        assert unauthenticated.json()["error"]["code"] == "AUTHENTICATION_ERROR"
+
+        access_token = _login(client, "admin@example.com", "Secret123!")
+        response = client.post(
             "/api/v1/chat/chat",
-            json={"message": "What did I ask before?", "session_id": session_id},
+            json={"message": "What is this project?"},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
     finally:
         app.dependency_overrides.clear()
 
-    assert first_response.status_code == 200
-    assert second_response.status_code == 200
-    assert captured_bodies[1]["messages"][-3:] == [
-        {"role": "user", "content": "Hi"},
-        {"role": "assistant", "content": "First answer"},
-        {"role": "user", "content": "What did I ask before?"},
-    ]
+    assert response.status_code == 410
+    body = response.json()
+    assert body["success"] is False
+    assert body["error"]["code"] == "CHATBOT_LEGACY_CHAT_DEPRECATED"
+    assert body["request_id"]
+    assert response.headers["Deprecation"] == "true"
+    assert "Sunset" in response.headers
+    assert "/api/v1/chatbot" in response.headers["Link"]
 
 
-def test_portfolio_chat_validation_error_is_enveloped() -> None:
+def test_legacy_portfolio_chat_route_is_not_routed_to_the_old_service(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-task18-login-tests")
+    monkeypatch.setenv("JWT_ALGORITHM", "HS256")
+    monkeypatch.setenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30")
+
+    legacy_db_path = tmp_path / "legacy-chat-service.sqlite3"
+    engine = create_engine(f"sqlite+pysqlite:///{legacy_db_path.as_posix()}")
+    Base.metadata.create_all(bind=engine)
+    session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    session = session_factory()
+    auth_service = AuthService()
+    _create_user(session, auth_service)
+
+    app = _build_test_app(session, auth_service)
     client = TestClient(app)
 
-    response = client.post("/api/v1/chat/chat", json={"message": ""})
+    def _fail_if_called() -> object:
+        raise AssertionError("legacy portfolio chat service should not be called")
 
-    assert response.status_code == 422
-    assert response.json()["success"] is False
-    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
+    from app.services.portfolio_chat import get_portfolio_chat_service
 
+    app.dependency_overrides[get_portfolio_chat_service] = _fail_if_called
 
-def test_portfolio_chat_legacy_endpoint_is_not_available() -> None:
-    client = TestClient(app)
+    try:
+        access_token = _login(client, "admin@example.com", "Secret123!")
+        response = client.post(
+            "/api/v1/chat/chat",
+            json={"message": "What is this project?"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+    finally:
+        app.dependency_overrides.clear()
 
-    response = client.post("/api/v1/chat/portfolio", json={"message": "What is this project?"})
-
-    assert response.status_code == 404
+    assert response.status_code == 410
