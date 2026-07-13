@@ -32,6 +32,9 @@ class Settings:
     deepseek_api_key: str = ""
     deepseek_chat_model: str = "deepseek-chat"
     deepseek_timeout_seconds: float = 30.0
+    chatbot_default_model: str = "deepseek-chat"
+    chatbot_allowed_models: list[str] = field(default_factory=lambda: ["deepseek-chat"])
+    chatbot_conversation_page_size: int = 20
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
     rerank_provider: str = ""
@@ -67,6 +70,13 @@ def get_settings() -> Settings:
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
         deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
+        chatbot_default_model=os.getenv("CHATBOT_DEFAULT_MODEL", "deepseek-chat"),
+        chatbot_allowed_models=[
+            model.strip()
+            for model in os.getenv("CHATBOT_ALLOWED_MODELS", "deepseek-chat").split(",")
+            if model.strip()
+        ],
+        chatbot_conversation_page_size=int(os.getenv("CHATBOT_CONVERSATION_PAGE_SIZE", "20")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         rerank_provider=os.getenv("RERANK_PROVIDER", ""),

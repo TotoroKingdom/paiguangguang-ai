@@ -16,6 +16,7 @@ from app.core.errors import (
     ServiceTimeoutError,
     build_error_response,
 )
+from app.chatbot.errors import ChatbotApiError
 from app.core.request_id import RequestIdMiddleware
 from app.db.bootstrap import initialize_database
 
@@ -68,6 +69,16 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         code=code,
         message=detail,
         details=exc.detail if not isinstance(exc.detail, str) else None,
+    )
+
+
+@app.exception_handler(ChatbotApiError)
+async def chatbot_api_error_handler(request: Request, exc: ChatbotApiError):
+    return build_error_response(
+        status_code=exc.status_code,
+        code=exc.code,
+        message=exc.message,
+        details=exc.details,
     )
 
 
