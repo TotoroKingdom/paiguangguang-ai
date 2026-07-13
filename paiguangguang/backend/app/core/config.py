@@ -34,6 +34,8 @@ class Settings:
     deepseek_timeout_seconds: float = 30.0
     chatbot_default_model: str = "deepseek-chat"
     chatbot_allowed_models: list[str] = field(default_factory=lambda: ["deepseek-chat"])
+    chatbot_llm_timeout_seconds: float = 60.0
+    chatbot_llm_max_attempts: int = 2
     chatbot_conversation_page_size: int = 20
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
@@ -76,6 +78,8 @@ def get_settings() -> Settings:
             for model in os.getenv("CHATBOT_ALLOWED_MODELS", "deepseek-chat").split(",")
             if model.strip()
         ],
+        chatbot_llm_timeout_seconds=float(os.getenv("CHATBOT_LLM_TIMEOUT_SECONDS", "60")),
+        chatbot_llm_max_attempts=int(os.getenv("CHATBOT_LLM_MAX_ATTEMPTS", "2")),
         chatbot_conversation_page_size=int(os.getenv("CHATBOT_CONVERSATION_PAGE_SIZE", "20")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
