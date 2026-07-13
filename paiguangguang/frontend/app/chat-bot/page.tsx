@@ -1,9 +1,9 @@
-import { ChatBotPanel } from "@/features/chat-bot/chat-bot-panel";
+import { ChatbotShell } from "@/features/chatbot/components/chatbot-shell";
 
 export default function ChatBotPage() {
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <ChatBotPanel />
+    <div className="mx-auto w-full max-w-7xl">
+      <ChatbotShell />
     </div>
   );
 }
