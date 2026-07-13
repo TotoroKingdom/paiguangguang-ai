@@ -180,6 +180,7 @@ class MemoryRepository:
         expires_at: datetime | None = None,
         embedding_status: str | None = None,
         conversation_id: str | None = None,
+        last_accessed_at: datetime | None = None,
     ) -> MemoryRecord | None:
         updates: dict[str, object] = {"updated_at": _utcnow()}
         if content is not None:
@@ -200,6 +201,8 @@ class MemoryRepository:
             updates["embedding_status"] = embedding_status
         if conversation_id is not None:
             updates["conversation_id"] = conversation_id
+        if last_accessed_at is not None:
+            updates["last_accessed_at"] = last_accessed_at
 
         with self._session() as session:
             result = session.execute(
