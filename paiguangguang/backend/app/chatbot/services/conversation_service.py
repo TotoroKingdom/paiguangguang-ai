@@ -25,6 +25,7 @@ from app.chatbot.schemas.conversation import (
     ConversationUpdateRequest,
 )
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import RateLimitConfig, get_rate_limiter
 
 
 ConversationListStatus = Literal["active", "archived"]
@@ -60,6 +61,20 @@ class ConversationService:
                 details={"model": candidate},
             )
         return candidate
+
+    def _apply_rate_limit(self, user_id: str, *, conversation_id: str | None = None, operation: str) -> None:
+        config = RateLimitConfig(
+            max_requests=self.settings.chatbot_rate_limit_max_requests,
+            window_seconds=self.settings.chatbot_rate_limit_window_seconds,
+        )
+        limiter = get_rate_limiter()
+        limiter.check(f"chatbot:rate:user={user_id}", config, operation=operation)
+        if conversation_id is not None:
+            limiter.check(
+                f"chatbot:rate:user={user_id}:conversation={conversation_id}",
+                config,
+                operation=operation,
+            )
 
     @staticmethod
     def _normalize_title(title: str | None, *, default_title: str = "新对话") -> tuple[str, str]:
@@ -182,6 +197,7 @@ class ConversationService:
         user_id: str,
         request: ConversationCreateRequest,
     ) -> ConversationData:
+        self._apply_rate_limit(user_id, operation="Chatbot conversation creation")
         title, title_source = self._normalize_title(request.title)
         model = self._validate_model(request.model)
         now = _utcnow()
@@ -290,6 +306,11 @@ class ConversationService:
         conversation_id: str,
         request: ConversationUpdateRequest,
     ) -> ConversationData:
+        self._apply_rate_limit(
+            user_id,
+            conversation_id=conversation_id,
+            operation="Chatbot conversation update",
+        )
         model = self._get_owned_conversation(session, conversation_id, user_id, for_update=True)
         if model is None:
             raise ChatbotApiError(
@@ -314,6 +335,11 @@ class ConversationService:
         return self._conversation_data(model)
 
     def archive_conversation(self, session: Session, user_id: str, conversation_id: str) -> ConversationData:
+        self._apply_rate_limit(
+            user_id,
+            conversation_id=conversation_id,
+            operation="Chatbot conversation archive",
+        )
         model = self._get_owned_conversation(session, conversation_id, user_id, for_update=True)
         if model is None:
             raise ChatbotApiError(
@@ -348,6 +374,11 @@ class ConversationService:
         return self._conversation_data(model)
 
     def restore_conversation(self, session: Session, user_id: str, conversation_id: str) -> ConversationData:
+        self._apply_rate_limit(
+            user_id,
+            conversation_id=conversation_id,
+            operation="Chatbot conversation restore",
+        )
         model = self._get_owned_conversation(session, conversation_id, user_id, for_update=True)
         if model is None or model.status == "deleted":
             raise ChatbotApiError(
@@ -369,6 +400,11 @@ class ConversationService:
         return self._conversation_data(model)
 
     def delete_conversation(self, session: Session, user_id: str, conversation_id: str) -> DeleteResultData:
+        self._apply_rate_limit(
+            user_id,
+            conversation_id=conversation_id,
+            operation="Chatbot conversation delete",
+        )
         model = self._get_owned_conversation(session, conversation_id, user_id, for_update=True)
         if model is None or model.status == "deleted":
             raise ChatbotApiError(
@@ -397,4 +433,3 @@ def get_conversation_service() -> ConversationService:
     if _CONVERSATION_SERVICE is None:
         _CONVERSATION_SERVICE = ConversationService()
     return _CONVERSATION_SERVICE
-
