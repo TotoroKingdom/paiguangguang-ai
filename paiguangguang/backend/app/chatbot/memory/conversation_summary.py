@@ -18,7 +18,7 @@ from app.chatbot.models.conversation import ChatbotConversation, ChatbotConversa
 from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.repositories.conversation_repository import ConversationRepository, ConversationSummaryRecord
 from app.core.config import Settings, get_settings
-from app.core.logging import log_event
+from app.chatbot.observability import log_chatbot_event
 
 
 def _utcnow() -> datetime:
@@ -118,6 +118,13 @@ class ConversationSummaryService:
                 row.status = "failed"
                 row.updated_at = _utcnow()
                 count += 1
+        if count:
+            log_chatbot_event(
+                "chatbot.summary.backlog",
+                hits=count,
+                status="reaped",
+                source="postgres",
+            )
         return count
 
     def _build_summary_window(
@@ -258,7 +265,14 @@ class ConversationSummaryService:
             row.updated_at = now
             row.token_count = 0
             session.flush()
-            log_event("chatbot.summary_failed", reason=type(exc).__name__)
+            log_chatbot_event(
+                "chatbot.summary.failed",
+                message_id=row.id,
+                conversation_id=row.conversation_id,
+                status="failed",
+                reason=type(exc).__name__,
+                source="llm",
+            )
             return self._conversation_repo._summary_record_from_model(row)
 
     def _load_latest_summary(

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.message import ChatbotMessage
+from app.chatbot.observability import log_chatbot_event
 from app.core.config import Settings, get_settings
 from app.db.session import build_session_factory
 
@@ -70,6 +71,13 @@ class RecoveryService:
                 run.completed_at = now
                 run.updated_at = now
                 recovered += 1
+        if recovered:
+            log_chatbot_event(
+                "chatbot.recovery.stale_runs",
+                hits=recovered,
+                status="failed",
+                source="postgres",
+            )
         return recovered
 
 
