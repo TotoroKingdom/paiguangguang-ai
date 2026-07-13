@@ -106,52 +106,64 @@ class ChatStreamService:
                     },
                 )
 
-            conversation = session.scalar(
-                select(ChatbotConversation)
-                .where(
-                    ChatbotConversation.id == conversation_id,
-                    ChatbotConversation.user_id == user_id,
-                    ChatbotConversation.deleted_at.is_(None),
-                )
-                .with_for_update()
+        self.chat_service._apply_rate_limit(user_id, conversation_id, operation="Chatbot message generation")
+        lease = self.chat_service.concurrency_service.acquire(conversation_id, user_id)
+        if lease is None:
+            raise ChatbotApiError(
+                status_code=409,
+                code="CHATBOT_CONVERSATION_BUSY",
+                message="Conversation is busy",
             )
-            if conversation is None:
-                raise ChatbotApiError(
-                    status_code=404,
-                    code="CHATBOT_CONVERSATION_NOT_FOUND",
-                    message="Conversation not found",
+        try:
+            with self.chat_service._session() as session:
+                conversation = session.scalar(
+                    select(ChatbotConversation)
+                    .where(
+                        ChatbotConversation.id == conversation_id,
+                        ChatbotConversation.user_id == user_id,
+                        ChatbotConversation.deleted_at.is_(None),
+                    )
+                    .with_for_update()
                 )
-            if conversation.status != "active":
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_NOT_ACTIVE",
-                    message="Conversation is not active",
-                )
+                if conversation is None:
+                    raise ChatbotApiError(
+                        status_code=404,
+                        code="CHATBOT_CONVERSATION_NOT_FOUND",
+                        message="Conversation not found",
+                    )
+                if conversation.status != "active":
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_CONVERSATION_NOT_ACTIVE",
+                        message="Conversation is not active",
+                    )
 
-            active_run = session.scalar(
-                select(ChatbotLLMRun)
-                .where(
-                    ChatbotLLMRun.conversation_id == conversation_id,
-                    ChatbotLLMRun.user_id == user_id,
-                    ChatbotLLMRun.status.in_(("pending", "streaming")),
+                active_run = session.scalar(
+                    select(ChatbotLLMRun)
+                    .where(
+                        ChatbotLLMRun.conversation_id == conversation_id,
+                        ChatbotLLMRun.user_id == user_id,
+                        ChatbotLLMRun.status.in_(("pending", "streaming")),
+                    )
+                    .order_by(ChatbotLLMRun.updated_at.desc(), ChatbotLLMRun.id.desc())
+                    .limit(1)
                 )
-                .order_by(ChatbotLLMRun.updated_at.desc(), ChatbotLLMRun.id.desc())
-                .limit(1)
-            )
-            if active_run is not None:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_BUSY",
-                    message="Conversation is busy",
-                )
+                if active_run is not None:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_CONVERSATION_BUSY",
+                        message="Conversation is busy",
+                    )
 
-            accepted = self.chat_service._accept_turn(
-                session,
-                user_id=user_id,
-                conversation=conversation,
-                content=content,
-                client_request_id=client_request_id,
-            )
+                accepted = self.chat_service._accept_turn(
+                    session,
+                    user_id=user_id,
+                    conversation=conversation,
+                    content=content,
+                    client_request_id=client_request_id,
+                )
+        finally:
+            self.chat_service.concurrency_service.release(lease)
 
         request = self.chat_service._build_request(accepted, content)
         queue: Queue[ChatStreamEvent | None] = Queue()
@@ -226,155 +238,166 @@ class ChatStreamService:
         assistant_message_id = self.chat_service._normalize_uuid(assistant_message_id, field_name="assistant_message_id")
         client_request_id = self.chat_service._normalize_uuid(client_request_id, field_name="client_request_id")
 
-        with self.chat_service._session() as session:
-            assistant_message, parent_user_message, llm_run = self._load_variant_replay(
-                session,
-                user_id=user_id,
-                conversation_id=conversation_id,
-                assistant_message_id=assistant_message_id,
-                client_request_id=client_request_id,
+        self.chat_service._apply_rate_limit(user_id, conversation_id, operation="Chatbot message regeneration")
+        lease = self.chat_service.concurrency_service.acquire(conversation_id, user_id)
+        if lease is None:
+            raise ChatbotApiError(
+                status_code=409,
+                code="CHATBOT_CONVERSATION_BUSY",
+                message="Conversation is busy",
             )
-            if assistant_message is not None and parent_user_message is not None and llm_run is not None:
-                if llm_run.status in {"pending", "streaming"}:
+        try:
+            with self.chat_service._session() as session:
+                assistant_message, parent_user_message, llm_run = self._load_variant_replay(
+                    session,
+                    user_id=user_id,
+                    conversation_id=conversation_id,
+                    assistant_message_id=assistant_message_id,
+                    client_request_id=client_request_id,
+                )
+                if assistant_message is not None and parent_user_message is not None and llm_run is not None:
+                    if llm_run.status in {"pending", "streaming"}:
+                        raise ChatbotApiError(
+                            status_code=409,
+                            code="CHATBOT_REQUEST_IN_PROGRESS",
+                            message="Request is already running",
+                            details={
+                                "assistant_message_id": str(assistant_message.id),
+                                "llm_run_id": str(llm_run.id),
+                            },
+                        )
+                    replay = ChatCompletionData(
+                        conversation_id=UUID(str(parent_user_message.conversation_id)),
+                        client_request_id=UUID(str(client_request_id)),
+                        replayed=True,
+                        user_message=MessageData.model_validate(parent_user_message),
+                        assistant_message=MessageData.model_validate(assistant_message),
+                        llm_run=ChatLLMRunData.model_validate(llm_run),
+                    )
+                    if assistant_message.status in {"completed", "failed", "cancelled"}:
+                        return iter(self._build_replay_events(replay))
                     raise ChatbotApiError(
                         status_code=409,
-                        code="CHATBOT_REQUEST_IN_PROGRESS",
-                        message="Request is already running",
-                        details={
-                            "assistant_message_id": str(assistant_message.id),
-                            "llm_run_id": str(llm_run.id),
-                        },
+                        code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                        message="Message is not retryable",
                     )
-                replay = ChatCompletionData(
-                    conversation_id=UUID(str(parent_user_message.conversation_id)),
-                    client_request_id=UUID(str(client_request_id)),
-                    replayed=True,
-                    user_message=MessageData.model_validate(parent_user_message),
-                    assistant_message=MessageData.model_validate(assistant_message),
-                    llm_run=ChatLLMRunData.model_validate(llm_run),
-                )
-                if assistant_message.status in {"completed", "failed", "cancelled"}:
-                    return iter(self._build_replay_events(replay))
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
-                    message="Message is not retryable",
-                )
 
-            conversation = session.scalar(
-                select(ChatbotConversation)
-                .where(
-                    ChatbotConversation.id == conversation_id,
-                    ChatbotConversation.user_id == user_id,
-                    ChatbotConversation.deleted_at.is_(None),
-                )
-                .with_for_update()
-            )
-            if conversation is None:
-                raise ChatbotApiError(
-                    status_code=404,
-                    code="CHATBOT_CONVERSATION_NOT_FOUND",
-                    message="Conversation not found",
-                )
-            if conversation.status != "active":
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_NOT_ACTIVE",
-                    message="Conversation is not active",
-                )
-
-            active_run = session.scalar(
-                select(ChatbotLLMRun)
-                .where(
-                    ChatbotLLMRun.conversation_id == conversation_id,
-                    ChatbotLLMRun.user_id == user_id,
-                    ChatbotLLMRun.status.in_(("pending", "streaming")),
-                )
-                .order_by(ChatbotLLMRun.updated_at.desc(), ChatbotLLMRun.id.desc())
-                .limit(1)
-            )
-            if active_run is not None:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_BUSY",
-                    message="Conversation is busy",
-                )
-
-            parent_user_message = session.get(ChatbotMessage, assistant_message_id)
-            if (
-                parent_user_message is None
-                or parent_user_message.user_id != user_id
-                or parent_user_message.conversation_id != conversation_id
-            ):
-                raise ChatbotApiError(
-                    status_code=404,
-                    code="CHATBOT_MESSAGE_NOT_FOUND",
-                    message="Message not found",
-                )
-            if parent_user_message.role != "assistant" and parent_user_message.role != "user":
-                raise ChatbotApiError(
-                    status_code=404,
-                    code="CHATBOT_MESSAGE_NOT_FOUND",
-                    message="Message not found",
-                )
-            if parent_user_message.role != "assistant":
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
-                    message="Message is not retryable",
-                )
-            if parent_user_message.parent_message_id is None:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
-                    message="Message is not retryable",
-                )
-            if require_latest_turn and parent_user_message.status not in {"completed", "failed", "cancelled"}:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
-                    message="Message is not retryable",
-                )
-            if not require_latest_turn and parent_user_message.status not in {"failed", "cancelled"}:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_MESSAGE_NOT_RETRYABLE",
-                    message="Message is not retryable",
-                )
-
-            base_user_message = session.get(ChatbotMessage, parent_user_message.parent_message_id)
-            if base_user_message is None or base_user_message.user_id != user_id:
-                raise ChatbotApiError(
-                    status_code=500,
-                    code="CHATBOT_CHAT_STATE_CORRUPTED",
-                    message="Chat state is inconsistent",
-                )
-
-            if require_latest_turn:
-                later_user_message = session.scalar(
-                    select(ChatbotMessage)
+                conversation = session.scalar(
+                    select(ChatbotConversation)
                     .where(
-                        ChatbotMessage.conversation_id == conversation_id,
-                        ChatbotMessage.user_id == user_id,
-                        ChatbotMessage.role == "user",
-                        ChatbotMessage.sequence_number > base_user_message.sequence_number,
+                        ChatbotConversation.id == conversation_id,
+                        ChatbotConversation.user_id == user_id,
+                        ChatbotConversation.deleted_at.is_(None),
                     )
+                    .with_for_update()
+                )
+                if conversation is None:
+                    raise ChatbotApiError(
+                        status_code=404,
+                        code="CHATBOT_CONVERSATION_NOT_FOUND",
+                        message="Conversation not found",
+                    )
+                if conversation.status != "active":
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_CONVERSATION_NOT_ACTIVE",
+                        message="Conversation is not active",
+                    )
+
+                active_run = session.scalar(
+                    select(ChatbotLLMRun)
+                    .where(
+                        ChatbotLLMRun.conversation_id == conversation_id,
+                        ChatbotLLMRun.user_id == user_id,
+                        ChatbotLLMRun.status.in_(("pending", "streaming")),
+                    )
+                    .order_by(ChatbotLLMRun.updated_at.desc(), ChatbotLLMRun.id.desc())
                     .limit(1)
                 )
-                if later_user_message is not None:
+                if active_run is not None:
                     raise ChatbotApiError(
                         status_code=409,
-                        code="CHATBOT_REGENERATE_NOT_LATEST_TURN",
-                        message="Regenerate requires the latest user turn",
+                        code="CHATBOT_CONVERSATION_BUSY",
+                        message="Conversation is busy",
                     )
 
-            accepted = self.chat_service._accept_variant_turn(
-                session,
-                user_id=user_id,
-                conversation=conversation,
-                parent_user_message=base_user_message,
-                client_request_id=client_request_id,
-            )
+                parent_user_message = session.get(ChatbotMessage, assistant_message_id)
+                if (
+                    parent_user_message is None
+                    or parent_user_message.user_id != user_id
+                    or parent_user_message.conversation_id != conversation_id
+                ):
+                    raise ChatbotApiError(
+                        status_code=404,
+                        code="CHATBOT_MESSAGE_NOT_FOUND",
+                        message="Message not found",
+                    )
+                if parent_user_message.role != "assistant" and parent_user_message.role != "user":
+                    raise ChatbotApiError(
+                        status_code=404,
+                        code="CHATBOT_MESSAGE_NOT_FOUND",
+                        message="Message not found",
+                    )
+                if parent_user_message.role != "assistant":
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                        message="Message is not retryable",
+                    )
+                if parent_user_message.parent_message_id is None:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                        message="Message is not retryable",
+                    )
+                if require_latest_turn and parent_user_message.status not in {"completed", "failed", "cancelled"}:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                        message="Message is not retryable",
+                    )
+                if not require_latest_turn and parent_user_message.status not in {"failed", "cancelled"}:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_MESSAGE_NOT_RETRYABLE",
+                        message="Message is not retryable",
+                    )
+
+                base_user_message = session.get(ChatbotMessage, parent_user_message.parent_message_id)
+                if base_user_message is None or base_user_message.user_id != user_id:
+                    raise ChatbotApiError(
+                        status_code=500,
+                        code="CHATBOT_CHAT_STATE_CORRUPTED",
+                        message="Chat state is inconsistent",
+                    )
+
+                if require_latest_turn:
+                    later_user_message = session.scalar(
+                        select(ChatbotMessage)
+                        .where(
+                            ChatbotMessage.conversation_id == conversation_id,
+                            ChatbotMessage.user_id == user_id,
+                            ChatbotMessage.role == "user",
+                            ChatbotMessage.sequence_number > base_user_message.sequence_number,
+                        )
+                        .limit(1)
+                    )
+                    if later_user_message is not None:
+                        raise ChatbotApiError(
+                            status_code=409,
+                            code="CHATBOT_REGENERATE_NOT_LATEST_TURN",
+                            message="Regenerate requires the latest user turn",
+                        )
+
+                accepted = self.chat_service._accept_variant_turn(
+                    session,
+                    user_id=user_id,
+                    conversation=conversation,
+                    parent_user_message=base_user_message,
+                    client_request_id=client_request_id,
+                )
+        finally:
+            self.chat_service.concurrency_service.release(lease)
 
         request = self.chat_service._build_request(accepted, base_user_message.content)
         queue: Queue[ChatStreamEvent | None] = Queue()

@@ -245,7 +245,7 @@ def test_chat_service_replays_completed_request_and_conflict_detects_payload_mis
             "What is a different deployment flow?",
             "00000000-0000-0000-0000-000000000555",
         )
-    assert exc.value.code == "CHATBOT_REQUEST_CONFLICT"
+    assert exc.value.code == "CHATBOT_IDEMPOTENCY_CONFLICT"
 
 
 def test_chat_service_rejects_busy_conversation(tmp_path) -> None:

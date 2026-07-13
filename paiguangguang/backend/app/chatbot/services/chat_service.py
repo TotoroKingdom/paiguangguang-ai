@@ -24,6 +24,7 @@ from app.chatbot.llm.exceptions import (
 from app.chatbot.llm.prompt_builder import PromptBuilder
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage
 from app.chatbot.memory.conversation_summary import ConversationSummaryService
+from app.chatbot.services.concurrency_service import ConcurrencyService, get_concurrency_service
 from app.chatbot.services.memory_service import MemoryService
 from app.chatbot.services.context_service import ContextService
 from app.chatbot.models.conversation import ChatbotConversation
@@ -33,6 +34,7 @@ from app.chatbot.schemas.chat import ChatCompletionData, ChatLLMRunData
 from app.chatbot.schemas.message import MessageData
 from app.chatbot.memory.short_term_memory import ShortTermMemoryService
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import RateLimitConfig, get_rate_limiter
 from app.db.session import build_session_factory
 
 
@@ -62,6 +64,7 @@ class ChatService:
         session_factory: sessionmaker[Session] | None = None,
         *,
         llm_client: LLMClient | None = None,
+        concurrency_service: ConcurrencyService | None = None,
         settings: Settings | None = None,
         prompt_builder_factory: type[PromptBuilder] = PromptBuilder,
     ) -> None:
@@ -72,6 +75,7 @@ class ChatService:
             provider=DeepSeekProvider(settings=self.settings),
             settings=self.settings,
         )
+        self.concurrency_service = concurrency_service or get_concurrency_service()
         self._prompt_builder_factory = prompt_builder_factory
         self.short_term_memory = ShortTermMemoryService(self.session_factory, settings=self.settings)
         self.context_service = ContextService(
@@ -88,6 +92,19 @@ class ChatService:
             self.session_factory,
             llm_client=self.llm_client,
             settings=self.settings,
+        )
+
+    def _apply_rate_limit(self, user_id: str, conversation_id: str, *, operation: str) -> None:
+        config = RateLimitConfig(
+            max_requests=self.settings.chatbot_rate_limit_max_requests,
+            window_seconds=self.settings.chatbot_rate_limit_window_seconds,
+        )
+        limiter = get_rate_limiter()
+        limiter.check(f"chatbot:rate:user={user_id}", config, operation=operation)
+        limiter.check(
+            f"chatbot:rate:user={user_id}:conversation={conversation_id}",
+            config,
+            operation=operation,
         )
 
     def close(self) -> None:
@@ -123,52 +140,66 @@ class ChatService:
             if replay is not None:
                 return replay
 
-            conversation = session.scalar(
-                select(ChatbotConversation)
-                .where(
-                    ChatbotConversation.id == conversation_id,
-                    ChatbotConversation.user_id == user_id,
-                    ChatbotConversation.deleted_at.is_(None),
-                )
-                .with_for_update()
-            )
-            if conversation is None:
-                raise ChatbotApiError(
-                    status_code=404,
-                    code="CHATBOT_CONVERSATION_NOT_FOUND",
-                    message="Conversation not found",
-                )
-            if conversation.status != "active":
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_NOT_ACTIVE",
-                    message="Conversation is not active",
-                )
+        self._apply_rate_limit(user_id, conversation_id, operation="Chatbot message generation")
 
-            active_run = session.scalar(
-                select(ChatbotLLMRun)
-                .where(
-                    ChatbotLLMRun.conversation_id == conversation_id,
-                    ChatbotLLMRun.user_id == user_id,
-                    ChatbotLLMRun.status.in_(("pending", "streaming")),
-                )
-                .order_by(desc(ChatbotLLMRun.updated_at), desc(ChatbotLLMRun.id))
-                .limit(1)
+        lease = self.concurrency_service.acquire(conversation_id, user_id)
+        if lease is None:
+            raise ChatbotApiError(
+                status_code=409,
+                code="CHATBOT_CONVERSATION_BUSY",
+                message="Conversation is busy",
             )
-            if active_run is not None:
-                raise ChatbotApiError(
-                    status_code=409,
-                    code="CHATBOT_CONVERSATION_BUSY",
-                    message="Conversation is busy",
-                )
 
-            accepted = self._accept_turn(
-                session,
-                user_id=user_id,
-                conversation=conversation,
-                content=content,
-                client_request_id=client_request_id,
-            )
+        try:
+            with self._session() as session:
+                conversation = session.scalar(
+                    select(ChatbotConversation)
+                    .where(
+                        ChatbotConversation.id == conversation_id,
+                        ChatbotConversation.user_id == user_id,
+                        ChatbotConversation.deleted_at.is_(None),
+                    )
+                    .with_for_update()
+                )
+                if conversation is None:
+                    raise ChatbotApiError(
+                        status_code=404,
+                        code="CHATBOT_CONVERSATION_NOT_FOUND",
+                        message="Conversation not found",
+                    )
+                if conversation.status != "active":
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_CONVERSATION_NOT_ACTIVE",
+                        message="Conversation is not active",
+                    )
+
+                active_run = session.scalar(
+                    select(ChatbotLLMRun)
+                    .where(
+                        ChatbotLLMRun.conversation_id == conversation_id,
+                        ChatbotLLMRun.user_id == user_id,
+                        ChatbotLLMRun.status.in_(("pending", "streaming")),
+                    )
+                    .order_by(desc(ChatbotLLMRun.updated_at), desc(ChatbotLLMRun.id))
+                    .limit(1)
+                )
+                if active_run is not None:
+                    raise ChatbotApiError(
+                        status_code=409,
+                        code="CHATBOT_CONVERSATION_BUSY",
+                        message="Conversation is busy",
+                    )
+
+                accepted = self._accept_turn(
+                    session,
+                    user_id=user_id,
+                    conversation=conversation,
+                    content=content,
+                    client_request_id=client_request_id,
+                )
+        finally:
+            self.concurrency_service.release(lease)
 
         request = self._build_request(accepted, content)
         started_at = perf_counter()
@@ -452,7 +483,7 @@ class ChatService:
         if existing_user_message.content != content:
             raise ChatbotApiError(
                 status_code=409,
-                code="CHATBOT_REQUEST_CONFLICT",
+                code="CHATBOT_IDEMPOTENCY_CONFLICT",
                 message="client_request_id already exists with different content",
             )
 
