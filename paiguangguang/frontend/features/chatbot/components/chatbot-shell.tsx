@@ -181,7 +181,7 @@ function ChatbotShellContent() {
           </div>
 
           <div className={view === "memories" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}>
-            <MemoryPanel token={token} />
+            <MemoryPanel token={token} conversationId={conversations.selectedConversation?.id ?? null} />
           </div>
         </div>
       </div>

@@ -1,11 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-
 import type { MessageData } from "../types/message";
+import { MarkdownContent } from "./markdown-content";
 
 type MessageItemProps = {
   message: MessageData;
@@ -16,33 +12,6 @@ type MessageItemProps = {
   onRegenerate?: () => void | Promise<void>;
   actionsDisabled?: boolean;
 };
-
-function SafeAnchor({
-  href,
-  children,
-}: {
-  href?: string;
-  children?: ReactNode;
-}) {
-  if (!href) {
-    return <span>{children}</span>;
-  }
-
-  try {
-    const url = new URL(href, "http://localhost");
-    if (!["http:", "https:", "mailto:"].includes(url.protocol)) {
-      return <span>{children}</span>;
-    }
-    const targetHref = url.protocol === "mailto:" ? href : url.toString();
-    return (
-      <a href={targetHref} target="_blank" rel="noreferrer noopener">
-        {children}
-      </a>
-    );
-  } catch {
-    return <span>{children}</span>;
-  }
-}
 
 export function MessageItem({
   message,
@@ -57,45 +26,36 @@ export function MessageItem({
   const showStop = !isUser && (message.status === "pending" || message.status === "streaming") && onStop;
   const showRetry = !isUser && (message.status === "failed" || message.status === "cancelled") && onRetry;
   const showRegenerate = !isUser && message.status === "completed" && onRegenerate;
+  const assistantContent =
+    message.content || ((message.status === "pending" || message.status === "streaming") ? "Thinking..." : "");
 
   return (
     <article
       data-message-id={message.id}
-      className={["flex", isUser ? "justify-end" : "justify-start"].join(" ")}
+      data-testid={`message-${message.id}`}
+      className={["flex min-w-0", isUser ? "justify-end" : "justify-start"].join(" ")}
     >
       <div
         className={[
-          "max-w-[min(42rem,85%)] rounded-2xl px-4 py-3 shadow-sm",
-          isUser ? "bg-ink text-paper" : "border border-ink/10 bg-white text-ink",
+          "min-w-0",
+          isUser
+            ? "max-w-[min(40rem,88%)] rounded-2xl border border-ink/10 bg-ink/[0.04] px-4 py-3 text-ink"
+            : "max-w-[min(50rem,100%)] py-1 text-ink",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-wide">
-          <span className={isUser ? "text-paper/70" : "text-ink/45"}>{isUser ? "You" : "Assistant"}</span>
-          <span className={isUser ? "text-paper/60" : "text-ink/40"}>
+        <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em]">
+          <span className={isUser ? "text-ink/60" : "text-ink/45"}>{isUser ? "You" : "Assistant"}</span>
+          <span className={isUser ? "text-ink/45" : "text-ink/40"}>
             {message.status}
-            {isStreaming ? " • streaming" : ""}
+            {isStreaming ? " · streaming" : ""}
           </span>
         </div>
 
-        <div className={["mt-2 text-sm leading-7", isUser ? "whitespace-pre-wrap" : ""].join(" ")}>
+        <div className={["mt-2 min-w-0", isUser ? "text-sm leading-7 whitespace-pre-wrap" : "pr-1"].join(" ")}>
           {isUser ? (
             <p className="whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ href, children }) => <SafeAnchor href={href}>{children}</SafeAnchor>,
-                code: ({ children, ...props }) => (
-                  <code className="rounded bg-paper px-1.5 py-0.5 font-mono text-[0.9em] text-ink" {...props}>
-                    {children}
-                  </code>
-                ),
-                pre: ({ children }) => <pre className="overflow-x-auto rounded-lg bg-paper">{children}</pre>,
-                p: ({ children }) => <p className="whitespace-pre-wrap">{children}</p>,
-              }}
-            >
-              {message.content || (message.status === "pending" ? "Thinking…" : "")}
-            </ReactMarkdown>
+            <MarkdownContent value={assistantContent} />
           )}
         </div>
 

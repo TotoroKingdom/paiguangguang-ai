@@ -118,6 +118,7 @@ export function ChatConversationPanel({
           disabled={!canSend}
           sending={messages.sending}
           error={conversation.status !== "active" ? "Only active conversations can send new messages." : messages.streamError}
+          model={conversation.model}
           onChange={messages.setDraft}
           onSubmit={(content) => void messages.sendMessage(content)}
           onStop={

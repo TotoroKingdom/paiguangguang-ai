@@ -40,7 +40,7 @@ describe("MessageList", () => {
       />
     );
 
-    expect(screen.getByText("Hello")).toBeInTheDocument();
+    expect(screen.getByText(/Hello/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "OpenAI" })).toHaveAttribute("href", "https://openai.com/");
     expect(screen.getByText("inline")).toBeInTheDocument();
   });
@@ -74,6 +74,31 @@ describe("MessageList", () => {
 
     expect(scroller.scrollTop).toBe(200);
     expect(screen.getByRole("button", { name: "Back to bottom" })).toBeInTheDocument();
+  });
+
+  it("smoothly jumps to the bottom when requested", () => {
+    const props = {
+      loadingHistory: false,
+      historyError: null,
+      hasMore: false,
+      onLoadMore: vi.fn(),
+      streamPhase: "streaming" as const,
+      streamingMessageId: "msg-1",
+    };
+    const { container } = render(<MessageList {...props} messages={[makeMessage({ content: "First" })]} />);
+    const scroller = container.querySelector(".overflow-y-auto") as HTMLDivElement;
+    const scrollTo = vi.fn();
+    Object.defineProperties(scroller, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+      scrollTo: { configurable: true, value: scrollTo },
+    });
+    scroller.scrollTop = 200;
+    fireEvent.scroll(scroller);
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to bottom" }));
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: "smooth" });
   });
 });
 
