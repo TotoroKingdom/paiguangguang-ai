@@ -103,5 +103,7 @@ describe("ConversationSidebar", () => {
     expect(handlers.onDeleteConversation).toHaveBeenCalledTimes(1);
     expect(handlers.onLoadMore).toHaveBeenCalledTimes(1);
     expect(handlers.onCreateConversation).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Trash" })).not.toBeInTheDocument();
+    expect(screen.queryByText("deleted")).not.toBeInTheDocument();
   });
 });

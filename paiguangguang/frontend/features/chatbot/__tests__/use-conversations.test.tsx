@@ -211,7 +211,10 @@ describe("useConversations", () => {
       await result.current.deleteConversation(makeConversation("conv-1"));
     });
     expect(client.deleteConversation).toHaveBeenCalledTimes(1);
-    expect(result.current.pages.deleted.items.some((conversation) => conversation.id === "conv-1")).toBe(true);
+    expect(result.current.pages.active.items.some((conversation) => conversation.id === "conv-1")).toBe(false);
+    expect(result.current.pages.archived.items.some((conversation) => conversation.id === "conv-1")).toBe(false);
+    expect(result.current.selectedConversationId).toBe(null);
+    expect(replace).toHaveBeenCalledWith("/chat-bot");
     confirmSpy.mockRestore();
   });
 
@@ -252,7 +255,7 @@ describe("useConversations", () => {
 
   it("hydrates from session storage without refetching when the page is already cached", async () => {
     const snapshot = {
-      version: 1,
+      version: 2,
       state: {
         selectedStatus: "archived",
         selectedConversationId: "conv-9",
@@ -269,12 +272,6 @@ describe("useConversations", () => {
             hasMore: false,
             loaded: true,
           },
-          deleted: {
-            items: [],
-            nextCursor: null,
-            hasMore: false,
-            loaded: false,
-          },
         },
       },
     };
@@ -288,5 +285,42 @@ describe("useConversations", () => {
     });
     expect(result.current.selectedConversation?.title).toBe("Archived memory");
     expect(client.listConversations).not.toHaveBeenCalled();
+  });
+
+  it("rejects legacy snapshots that contain a deleted page", async () => {
+    window.sessionStorage.setItem(
+      "chatbot:test",
+      JSON.stringify({
+        version: 1,
+        state: {
+          selectedStatus: "deleted",
+          selectedConversationId: "conv-deleted",
+          pages: {
+            active: { items: [], nextCursor: null, hasMore: false, loaded: true },
+            archived: { items: [], nextCursor: null, hasMore: false, loaded: true },
+            deleted: {
+              items: [makeConversation("conv-deleted")],
+              nextCursor: null,
+              hasMore: false,
+              loaded: true,
+            },
+          },
+        },
+      })
+    );
+    const client = makeClient({
+      listConversations: vi.fn().mockResolvedValue({
+        items: [],
+        next_cursor: null,
+        has_more: false,
+      }),
+    });
+
+    const { result } = renderConversationsHook(client);
+
+    await waitFor(() => expect(result.current.selectedStatus).toBe("active"));
+    expect(result.current.selectedConversationId).toBe(null);
+    expect(result.current.pages.active.items).toEqual([]);
+    expect(result.current.pages.archived.items).toEqual([]);
   });
 });
