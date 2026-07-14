@@ -59,6 +59,10 @@ class Settings:
     chatbot_rate_limit_window_seconds: int = 60
     chatbot_lock_ttl_seconds: int = 90
     chatbot_stale_run_seconds: int = 300
+    chatbot_worker_interval_seconds: int = 30
+    chatbot_job_batch_size: int = 20
+    chatbot_job_max_attempts: int = 8
+    chatbot_job_stale_seconds: int = 300
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
     rerank_provider: str = ""
@@ -125,6 +129,10 @@ def get_settings() -> Settings:
         chatbot_rate_limit_window_seconds=int(os.getenv("CHATBOT_RATE_LIMIT_WINDOW_SECONDS", "60")),
         chatbot_lock_ttl_seconds=int(os.getenv("CHATBOT_LOCK_TTL_SECONDS", "90")),
         chatbot_stale_run_seconds=int(os.getenv("CHATBOT_STALE_RUN_SECONDS", "300")),
+        chatbot_worker_interval_seconds=int(os.getenv("CHATBOT_WORKER_INTERVAL_SECONDS", "30")),
+        chatbot_job_batch_size=int(os.getenv("CHATBOT_JOB_BATCH_SIZE", "20")),
+        chatbot_job_max_attempts=int(os.getenv("CHATBOT_JOB_MAX_ATTEMPTS", "8")),
+        chatbot_job_stale_seconds=int(os.getenv("CHATBOT_JOB_STALE_SECONDS", "300")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         rerank_provider=os.getenv("RERANK_PROVIDER", ""),
