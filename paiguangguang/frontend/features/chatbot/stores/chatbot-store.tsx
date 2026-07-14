@@ -7,6 +7,7 @@ import {
   useState,
   useMemo,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -200,16 +201,40 @@ export function ChatbotStoreProvider({
   children: ReactNode;
   storageKey?: string | null;
 }) {
-  const [state, dispatch] = useReducer(reducer, undefined, createInitialChatbotStoreState);
   const normalizedStorageKey = storageKey?.trim() || null;
-  const [isHydrated, setIsHydrated] = useState(!normalizedStorageKey);
+  const previousStorageKey = useRef(normalizedStorageKey);
 
   useEffect(() => {
-    if (!normalizedStorageKey || typeof window === "undefined") {
+    const previous = previousStorageKey.current;
+    if (previous && !normalizedStorageKey && typeof window !== "undefined") {
+      window.sessionStorage.removeItem(previous);
+    }
+    previousStorageKey.current = normalizedStorageKey;
+  }, [normalizedStorageKey]);
+
+  return (
+    <ScopedChatbotStoreProvider key={normalizedStorageKey ?? "logged-out"} storageKey={normalizedStorageKey}>
+      {children}
+    </ScopedChatbotStoreProvider>
+  );
+}
+
+function ScopedChatbotStoreProvider({
+  children,
+  storageKey,
+}: {
+  children: ReactNode;
+  storageKey: string | null;
+}) {
+  const [state, dispatch] = useReducer(reducer, undefined, createInitialChatbotStoreState);
+  const [isHydrated, setIsHydrated] = useState(!storageKey);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") {
       setIsHydrated(true);
       return;
     }
-    const raw = window.sessionStorage.getItem(normalizedStorageKey);
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) {
       setIsHydrated(true);
       return;
@@ -221,22 +246,22 @@ export function ChatbotStoreProvider({
         dispatch({ type: "hydrate", state: normalized });
       }
     } catch {
-      window.sessionStorage.removeItem(normalizedStorageKey);
+      window.sessionStorage.removeItem(storageKey);
     } finally {
       setIsHydrated(true);
     }
-  }, [normalizedStorageKey]);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!normalizedStorageKey || typeof window === "undefined" || !isHydrated) {
+    if (!storageKey || typeof window === "undefined" || !isHydrated) {
       return;
     }
     const snapshot: ChatbotStoreSnapshot = {
       version: 2,
       state,
     };
-    window.sessionStorage.setItem(normalizedStorageKey, JSON.stringify(snapshot));
-  }, [isHydrated, normalizedStorageKey, state]);
+    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+  }, [isHydrated, storageKey, state]);
 
   const value = useMemo(
     () => ({

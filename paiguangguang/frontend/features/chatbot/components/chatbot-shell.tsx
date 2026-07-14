@@ -68,7 +68,7 @@ function ChatbotShellContent() {
 
 export function ChatbotShell() {
   const { user } = useAuth();
-  const storageKey = user ? `paiguangguang.chatbot:${user.id}` : "paiguangguang.chatbot:anonymous";
+  const storageKey = user ? `paiguangguang.chatbot:${user.id}` : null;
 
   return (
     <ChatbotStoreProvider storageKey={storageKey}>

@@ -75,4 +75,35 @@ describe("useChatStream", () => {
     expect(onEvent).not.toHaveBeenCalled();
     expect(onFailure).not.toHaveBeenCalled();
   });
+
+  it("detaches the active reader when authentication is cleared", async () => {
+    let controller: ReadableStreamDefaultController<Uint8Array>;
+    const response = new Response(new ReadableStream<Uint8Array>({
+      start(nextController) {
+        controller = nextController;
+      },
+    }), { headers: { "Content-Type": "text/event-stream" } });
+    streamMocks.openChatStream.mockResolvedValue(response);
+    const onEvent = vi.fn();
+
+    const { result, rerender } = renderHook(
+      ({ token }) => useChatStream({ token, conversationId: "conv-a", onEvent }),
+      { initialProps: { token: "token" as string | null } }
+    );
+
+    let pending: Promise<boolean>;
+    act(() => {
+      pending = result.current.sendMessage("hello", "req-a");
+    });
+    await waitFor(() => expect(streamMocks.openChatStream).toHaveBeenCalledTimes(1));
+
+    rerender({ token: null });
+    act(() => controller!.close());
+    await act(async () => {
+      await pending!;
+    });
+
+    expect(onEvent).not.toHaveBeenCalled();
+    expect(result.current.sending).toBe(false);
+  });
 });
