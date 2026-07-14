@@ -21,6 +21,24 @@ type StreamGenerationAction =
   | { kind: "retry"; messageId: string }
   | { kind: "regenerate"; messageId: string };
 
+function isAbortError(error: unknown) {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+function eventConversationId(event: ParsedChatStreamEvent) {
+  if (
+    event.data &&
+    typeof event.data === "object" &&
+    "conversation_id" in event.data &&
+    typeof (event.data as { conversation_id?: unknown }).conversation_id === "string"
+  ) {
+    return (event.data as { conversation_id: string }).conversation_id;
+  }
+  return null;
+}
+
 export function useChatStream({
   token,
   conversationId,
@@ -33,12 +51,18 @@ export function useChatStream({
   const [error, setError] = useState<string | null>(null);
   const activeRequestId = useRef<string | null>(null);
   const abortController = useRef<AbortController | null>(null);
+  const activeConversationId = useRef<string | null>(conversationId);
+  activeConversationId.current = conversationId;
 
   useEffect(() => {
+    abortController.current?.abort();
+    abortController.current = null;
+    activeRequestId.current = null;
+    setSending(false);
     return () => {
       abortController.current?.abort();
     };
-  }, []);
+  }, [conversationId, token]);
 
   const runGeneration = useCallback(
     async (action: StreamGenerationAction, clientRequestId: string) => {
@@ -46,6 +70,7 @@ export function useChatStream({
         return false;
       }
 
+      const startedConversationId = conversationId;
       abortController.current?.abort();
       const controller = new AbortController();
       abortController.current = controller;
@@ -79,7 +104,11 @@ export function useChatStream({
                   signal: controller.signal,
                 });
         for await (const event of readChatStreamEvents(response)) {
-          if (controller.signal.aborted) {
+          if (
+            controller.signal.aborted ||
+            activeConversationId.current !== startedConversationId ||
+            eventConversationId(event) !== startedConversationId
+          ) {
             break;
           }
           onEvent?.(event);
@@ -97,18 +126,29 @@ export function useChatStream({
         }
         return true;
       } catch (exception) {
-        const message = exception instanceof ApiError ? exception.message : exception instanceof Error ? exception.message : "Unable to send message.";
+        if (controller.signal.aborted || isAbortError(exception)) {
+          return false;
+        }
+        const message =
+          exception instanceof ApiError
+            ? exception.message
+            : exception instanceof Error
+              ? exception.message
+              : "Unable to send message.";
         setError(message);
         onFailure?.(message);
         return false;
       } finally {
-        if (activeRequestId.current === clientRequestId) {
-          activeRequestId.current = null;
+        if (abortController.current === controller) {
+          abortController.current = null;
+          if (activeRequestId.current === clientRequestId) {
+            activeRequestId.current = null;
+          }
+          setSending(false);
         }
-        setSending(false);
       }
     },
-    [conversationId, onCreated, onEvent, onTerminal, token]
+    [conversationId, onCreated, onEvent, onFailure, onTerminal, token]
   );
 
   const sendMessage = useCallback(
