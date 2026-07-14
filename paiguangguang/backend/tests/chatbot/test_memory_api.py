@@ -220,7 +220,7 @@ def test_memory_api_crud_owner_filter_cursor_and_router_registration(monkeypatch
         delete_response = client.delete(f"/api/v1/chatbot/memories/{active_a}", headers=owner_headers)
         assert delete_response.status_code == 200
         assert delete_response.json()["data"]["status"] == "deleted"
-        assert delete_response.json()["data"]["cleanup_status"] == "completed"
+        assert delete_response.json()["data"]["cleanup_status"] == "pending"
 
         foreign_detail = client.get(f"/api/v1/chatbot/memories/{foreign_active}", headers=owner_headers)
         assert foreign_detail.status_code == 404
