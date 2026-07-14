@@ -21,6 +21,7 @@ from app.chatbot.observability import log_chatbot_event
 from app.core.request_id import RequestIdMiddleware
 from app.core.request_id import get_request_id
 from app.db.bootstrap import initialize_database
+from app.chatbot.services.runtime import build_chatbot_runtime
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -30,7 +31,12 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
-    yield
+    runtime = build_chatbot_runtime()
+    await runtime.start()
+    try:
+        yield
+    finally:
+        await runtime.stop()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

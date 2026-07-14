@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.models.llm_run import ChatbotLLMRun
@@ -60,17 +60,14 @@ class RecoveryService:
             )
             now = _utcnow()
             for run in stale_runs:
-                message = session.get(ChatbotMessage, run.message_id)
-                if message is not None:
-                    message.status = "failed"
-                    message.error_code = "CHATBOT_STALE_GENERATION"
-                    message.updated_at = now
-                run.status = "failed"
-                run.error_code = "CHATBOT_STALE_GENERATION"
-                run.error_message = "Generation expired before completion"
-                run.completed_at = now
-                run.updated_at = now
-                recovered += 1
+                if self._mark_stale_run(
+                    session,
+                    run_id=run.id,
+                    message_id=run.message_id,
+                    stale_before=stale_before,
+                    now=now,
+                ):
+                    recovered += 1
         if recovered:
             log_chatbot_event(
                 "chatbot.recovery.stale_runs",
@@ -79,6 +76,44 @@ class RecoveryService:
                 source="postgres",
             )
         return recovered
+
+    def _mark_stale_run(
+        self,
+        session: Session,
+        *,
+        run_id: str,
+        message_id: str,
+        stale_before: datetime,
+        now: datetime,
+    ) -> bool:
+        result = session.execute(
+            update(ChatbotLLMRun)
+            .where(
+                ChatbotLLMRun.id == run_id,
+                ChatbotLLMRun.status.in_(("pending", "streaming")),
+                ChatbotLLMRun.updated_at < stale_before,
+            )
+            .values(
+                status="failed",
+                error_code="CHATBOT_STALE_GENERATION",
+                error_message="Generation expired before completion",
+                completed_at=now,
+                updated_at=now,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if not result.rowcount:
+            return False
+        session.execute(
+            update(ChatbotMessage)
+            .where(
+                ChatbotMessage.id == message_id,
+                ChatbotMessage.status.in_(("pending", "streaming")),
+            )
+            .values(status="failed", error_code="CHATBOT_STALE_GENERATION", updated_at=now)
+            .execution_options(synchronize_session=False)
+        )
+        return True
 
 
 _RECOVERY_SERVICE: RecoveryService | None = None
