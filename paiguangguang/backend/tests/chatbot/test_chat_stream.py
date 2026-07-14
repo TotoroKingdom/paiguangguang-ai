@@ -15,12 +15,13 @@ from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionUsage,
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
 from app.chatbot.models.job import ChatbotJob
+from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.repositories.conversation_repository import ConversationRepository
 from app.chatbot.repositories.llm_run_repository import LLMRunRepository
 from app.chatbot.repositories.message_repository import MessageRepository
 from app.chatbot.schemas.stream import ChatStreamEvent
 from app.chatbot.services.chat_service import ChatService
-from app.chatbot.services.stream_service import ChatStreamService
+from app.chatbot.services.stream_service import ChatStreamService, _CheckpointTracker
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.models import User
@@ -174,6 +175,134 @@ def test_chat_stream_service_emits_created_delta_completed_usage_and_end(tmp_pat
         assert stored_run.status == "completed"
         assert stored_run.prompt_tokens == 11
         assert stored_run.total_tokens == 24
+
+
+def test_chat_stream_throttles_many_small_delta_checkpoints(monkeypatch, tmp_path) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    conversation_repo = ConversationRepository(session_factory)
+    request_id = "00000000-0000-0000-0000-000000000334"
+    deltas = [
+        LLMStreamEvent(
+            kind="delta",
+            request_id=request_id,
+            prompt_version="v1",
+            model="deepseek-chat",
+            content="x",
+        )
+        for _ in range(100)
+    ]
+    fake_llm = FakeLLMClient(
+        outcomes=[
+            [
+                *deltas,
+                LLMStreamEvent(
+                    kind="completed",
+                    request_id=request_id,
+                    prompt_version="v1",
+                    model="deepseek-chat",
+                    content="x" * 100,
+                    finish_reason="stop",
+                ),
+            ]
+        ]
+    )
+    service = _build_service(session_factory, fake_llm)
+    checkpoint_calls = 0
+    original = service._checkpoint_partial
+
+    def counted_checkpoint(*args, **kwargs):
+        nonlocal checkpoint_calls
+        checkpoint_calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_checkpoint_partial", counted_checkpoint)
+    with session_factory() as session:
+        owner = _create_user(session, email="checkpoint-owner@example.com")
+        session.commit()
+    conversation = conversation_repo.create(
+        owner.id, "Thread", "deepseek-chat", system_prompt_version="v1"
+    )
+
+    events = list(
+        service.stream_completion(
+            owner.id,
+            conversation.id,
+            "hello",
+            request_id,
+        )
+    )
+
+    assert checkpoint_calls == 1
+    assert events[-1].event == "stream.end"
+
+
+def test_checkpoint_tracker_uses_time_and_character_thresholds() -> None:
+    tracker = _CheckpointTracker(interval_seconds=1.0, chars=512, last_checkpoint_at=10.0)
+
+    assert tracker.should_checkpoint(now=10.0, content_length=1) is True
+    tracker.mark(now=10.0, content_length=1)
+    assert tracker.should_checkpoint(now=10.5, content_length=101) is False
+    assert tracker.should_checkpoint(now=11.0, content_length=101) is True
+    tracker.mark(now=11.0, content_length=101)
+    assert tracker.should_checkpoint(now=11.1, content_length=613) is True
+
+
+def test_chat_stream_checkpoints_after_character_threshold_and_finalizes_full_content(
+    monkeypatch, tmp_path
+) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    request_id = "00000000-0000-0000-0000-000000000335"
+    final_content = "y" * 600
+    fake_llm = FakeLLMClient(
+        outcomes=[
+            [
+                *[
+                    LLMStreamEvent(
+                        kind="delta",
+                        request_id=request_id,
+                        prompt_version="v1",
+                        model="deepseek-chat",
+                        content="y",
+                    )
+                    for _ in range(600)
+                ],
+                LLMStreamEvent(
+                    kind="completed",
+                    request_id=request_id,
+                    prompt_version="v1",
+                    model="deepseek-chat",
+                    content=final_content,
+                    finish_reason="stop",
+                ),
+            ]
+        ]
+    )
+    service = _build_service(session_factory, fake_llm)
+    checkpoint_calls = 0
+    original = service._checkpoint_partial
+
+    def counted_checkpoint(*args, **kwargs):
+        nonlocal checkpoint_calls
+        checkpoint_calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_checkpoint_partial", counted_checkpoint)
+    with session_factory() as session:
+        owner = _create_user(session, email="checkpoint-chars@example.com")
+        session.commit()
+    conversation = ConversationRepository(session_factory).create(
+        owner.id, "Thread", "deepseek-chat", system_prompt_version="v1"
+    )
+
+    events = list(
+        service.stream_completion(owner.id, conversation.id, "hello", request_id)
+    )
+
+    completed = next(event for event in events if event.event == "message.completed")
+    with session_factory() as session:
+        assistant = session.get(ChatbotMessage, str(completed.data.message.id))
+    assert checkpoint_calls >= 2
+    assert assistant is not None and assistant.content == final_content
 
 
 def test_chat_stream_service_replays_terminal_turn_without_second_llm_call(tmp_path) -> None:

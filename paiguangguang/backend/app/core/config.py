@@ -63,6 +63,8 @@ class Settings:
     chatbot_job_batch_size: int = 20
     chatbot_job_max_attempts: int = 8
     chatbot_job_stale_seconds: int = 300
+    chatbot_checkpoint_interval_seconds: float = 1.0
+    chatbot_checkpoint_chars: int = 512
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
     rerank_provider: str = ""
@@ -133,6 +135,10 @@ def get_settings() -> Settings:
         chatbot_job_batch_size=int(os.getenv("CHATBOT_JOB_BATCH_SIZE", "20")),
         chatbot_job_max_attempts=int(os.getenv("CHATBOT_JOB_MAX_ATTEMPTS", "8")),
         chatbot_job_stale_seconds=int(os.getenv("CHATBOT_JOB_STALE_SECONDS", "300")),
+        chatbot_checkpoint_interval_seconds=float(
+            os.getenv("CHATBOT_CHECKPOINT_INTERVAL_SECONDS", "1.0")
+        ),
+        chatbot_checkpoint_chars=int(os.getenv("CHATBOT_CHECKPOINT_CHARS", "512")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         rerank_provider=os.getenv("RERANK_PROVIDER", ""),
