@@ -678,7 +678,6 @@ class ChatStreamService:
                         first_delta_at=first_delta_at,
                         request_id=request_id,
                     )
-                    self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
                         ChatStreamEvent(
                             event="message.completed",
@@ -894,6 +893,13 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            self.chat_service.completion_jobs.enqueue_completed_turn(
+                session,
+                user_id=user_id,
+                conversation_id=accepted.conversation_id,
+                user_message_id=accepted.user_message_id,
+                assistant_message_id=accepted.assistant_message_id,
+            )
             log_chatbot_event(
                 "chatbot.stream.completed",
                 request_id=request_id,

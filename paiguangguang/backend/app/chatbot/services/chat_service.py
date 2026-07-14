@@ -27,6 +27,7 @@ from app.chatbot.memory.conversation_summary import ConversationSummaryService
 from app.chatbot.observability import log_chatbot_event
 from app.chatbot.services.concurrency_service import ConcurrencyService, get_concurrency_service
 from app.chatbot.services.memory_service import MemoryService
+from app.chatbot.services.completion_jobs import CompletionJobService
 from app.chatbot.services.context_service import ContextService
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
@@ -34,6 +35,7 @@ from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.schemas.chat import ChatCompletionData, ChatLLMRunData
 from app.chatbot.schemas.message import MessageData
 from app.chatbot.memory.short_term_memory import ShortTermMemoryService
+from app.chatbot.repositories.job_repository import JobRepository
 from app.core.config import Settings, get_settings
 from app.core.rate_limit import RateLimitConfig, get_rate_limiter
 from app.core.request_id import get_request_id
@@ -69,6 +71,7 @@ class ChatService:
         concurrency_service: ConcurrencyService | None = None,
         settings: Settings | None = None,
         prompt_builder_factory: type[PromptBuilder] = PromptBuilder,
+        completion_jobs: CompletionJobService | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.session_factory = session_factory or build_session_factory(self.settings)
@@ -93,6 +96,11 @@ class ChatService:
         self.memory_service = MemoryService(
             self.session_factory,
             llm_client=self.llm_client,
+            settings=self.settings,
+        )
+        self.job_repository = JobRepository(self.session_factory)
+        self.completion_jobs = completion_jobs or CompletionJobService(
+            self.job_repository,
             settings=self.settings,
         )
 
@@ -226,16 +234,7 @@ class ChatService:
             self.refresh_short_term_memory(user_id, conversation_id)
             return response
 
-        response = self._finalize_completed(accepted, user_id, result, started_at)
-        self.refresh_short_term_memory(user_id, conversation_id)
-        self.memory_service.submit_completed_turn(
-            user_id,
-            conversation_id,
-            accepted.user_message_id,
-            accepted.assistant_message_id,
-            source_message_ids=[accepted.user_message_id, accepted.assistant_message_id],
-        )
-        return response
+        return self._finalize_completed(accepted, user_id, result, started_at)
 
     def _accept_turn(
         self,
@@ -626,6 +625,13 @@ class ChatService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            self.completion_jobs.enqueue_completed_turn(
+                session,
+                user_id=user_id,
+                conversation_id=accepted.conversation_id,
+                user_message_id=accepted.user_message_id,
+                assistant_message_id=accepted.assistant_message_id,
+            )
             log_chatbot_event(
                 "chatbot.request.completed",
                 request_id=get_request_id(),

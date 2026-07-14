@@ -14,6 +14,7 @@ from app.chatbot.llm.exceptions import LLMTimeoutError
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionUsage, LLMMessage, LLMStreamEvent
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
+from app.chatbot.models.job import ChatbotJob
 from app.chatbot.repositories.conversation_repository import ConversationRepository
 from app.chatbot.repositories.llm_run_repository import LLMRunRepository
 from app.chatbot.repositories.message_repository import MessageRepository
@@ -159,6 +160,10 @@ def test_chat_stream_service_emits_created_delta_completed_usage_and_end(tmp_pat
     end = events[5].data
     assert end.final_status == "completed"
     assert len(fake_llm.stream_calls) == 1
+    with session_factory() as session:
+        jobs = list(session.scalars(select(ChatbotJob)))
+    assert {job.kind for job in jobs} == {"auto_title", "refresh_conversation_context"}
+    assert len(jobs) == 2
 
     with session_factory() as session:
         stored_conversation = session.get(ChatbotConversation, conversation.id)
@@ -223,6 +228,10 @@ def test_chat_stream_service_replays_terminal_turn_without_second_llm_call(tmp_p
         "stream.end",
     ]
     assert len(fake_llm.stream_calls) == 1
+    with session_factory() as session:
+        jobs = list(session.scalars(select(ChatbotJob)))
+    assert {job.kind for job in jobs} == {"auto_title", "refresh_conversation_context"}
+    assert len(jobs) == 2
 
 
 def test_chat_stream_service_rejects_pending_duplicate_request(tmp_path) -> None:
