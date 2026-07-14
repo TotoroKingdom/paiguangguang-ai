@@ -96,7 +96,7 @@ export function MessageList({
       return;
     }
 
-    if (stickToBottomRef.current || streamPhase === "streaming") {
+    if (stickToBottomRef.current) {
       container.scrollTop = container.scrollHeight;
       setShowJumpButton(false);
     }
