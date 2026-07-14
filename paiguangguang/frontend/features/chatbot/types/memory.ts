@@ -1,4 +1,8 @@
-export type MemoryStatus = "candidate" | "active" | "superseded";
+export type MemoryListStatus = "candidate" | "active" | "superseded";
+
+export type MemoryRecordStatus = MemoryListStatus | "deleted" | "failed";
+
+export type MemoryStatus = MemoryListStatus;
 
 export type MemoryType =
   | "preference"
@@ -16,7 +20,7 @@ export type MemoryData = {
   importance: number;
   confidence: number;
   source_message_ids: string[];
-  status: MemoryStatus;
+  status: MemoryRecordStatus;
   last_accessed_at: string | null;
   expires_at: string | null;
   created_at: string;
@@ -31,6 +35,6 @@ export type MemoryPageData = {
 
 export type MemoryUpdateRequest = {
   content?: string;
-  status?: Extract<MemoryStatus, "candidate" | "active">;
+  status?: Extract<MemoryListStatus, "candidate" | "active">;
   expires_at?: string | null;
 };

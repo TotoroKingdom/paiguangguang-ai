@@ -16,6 +16,7 @@ import {
   getConversation,
   listConversations,
   restoreConversation,
+  stopGeneration,
   updateConversation,
 } from "../api/client";
 
@@ -39,6 +40,11 @@ describe("chatbot API path contract", () => {
     await archiveConversation({ token: "token", conversationId: "conv-1" });
     await restoreConversation({ token: "token", conversationId: "conv-1" });
     await deleteConversation({ token: "token", conversationId: "conv-1" });
+    await stopGeneration({
+      token: "token",
+      conversationId: "conv-1",
+      request: { assistant_message_id: "message-1" },
+    });
 
     expect(apiMocks.getJson).toHaveBeenNthCalledWith(
       1,
@@ -62,6 +68,12 @@ describe("chatbot API path contract", () => {
     );
     expect(apiMocks.deleteJson.mock.calls[0][0]).toBe(
       "/api/v1/chatbot/conversations/conv-1"
+    );
+    expect(apiMocks.postJson).toHaveBeenNthCalledWith(
+      4,
+      "/api/v1/chatbot/conversations/conv-1/stop",
+      { assistant_message_id: "message-1" },
+      { token: "token" }
     );
   });
 });

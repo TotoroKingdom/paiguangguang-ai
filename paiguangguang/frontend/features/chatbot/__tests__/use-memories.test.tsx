@@ -30,6 +30,7 @@ describe("useMemories", () => {
         next_cursor: null,
         has_more: false,
       }),
+      getMemory: vi.fn().mockResolvedValue(makeMemory("memory-1")),
       updateMemory: vi
         .fn()
         .mockResolvedValue(makeMemory("memory-1", { content: "updated" })),
