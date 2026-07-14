@@ -39,7 +39,9 @@ export function useMessages({
   conversationStatus,
   pageSize = 50,
 }: UseMessagesOptions) {
-  const [streamState, setStreamState] = useState<ChatStreamState>(() => createInitialChatStreamState());
+  const [streamState, setStreamState] = useState<ChatStreamState>(() =>
+    createInitialChatStreamState([], conversationId)
+  );
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -51,7 +53,7 @@ export function useMessages({
   const activeConversationRef = useRef<string | null>(null);
 
   const resetConversationState = useCallback(() => {
-    setStreamState(createInitialChatStreamState());
+    setStreamState(createInitialChatStreamState([], conversationId));
     setLoadingHistory(false);
     setHistoryError(null);
     setHasMore(false);
@@ -59,11 +61,11 @@ export function useMessages({
     setDraft("");
     setStoppingMessageId(null);
     setControlError(null);
-  }, []);
+  }, [conversationId]);
 
   const loadHistory = useCallback(
     async (before: string | null = null, append = false) => {
-      if (!token || !conversationId || conversationStatus === "deleted") {
+      if (!token || !conversationId) {
         return null;
       }
 
@@ -89,7 +91,7 @@ export function useMessages({
   );
 
   useEffect(() => {
-    if (!conversationId || !token || conversationStatus === "deleted") {
+    if (!conversationId || !token) {
       activeConversationRef.current = conversationId;
       resetConversationState();
       return;

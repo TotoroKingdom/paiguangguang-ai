@@ -5,6 +5,7 @@ import type {
   ParsedChatStreamEvent,
   StreamEventName,
 } from "../types/stream";
+import { CHATBOT_API_BASE } from "./client";
 
 function buildQuery(params: Record<string, string | number | boolean | null | undefined>) {
   const query = new URLSearchParams();
@@ -40,7 +41,7 @@ export async function listMessages(options: {
 }): Promise<MessagePageData> {
   const { token, conversationId, limit = 50, before = null } = options;
   return getJson<MessagePageData>(
-    `/api/v1/chatbot/conversations/${conversationId}/messages${buildQuery({ limit, before })}`,
+    `${CHATBOT_API_BASE}/conversations/${conversationId}/messages${buildQuery({ limit, before })}`,
     { token }
   );
 }
@@ -63,7 +64,7 @@ async function openChatSseRequest(options: {
     headers.set("Authorization", `Bearer ${normalizedToken}`);
   }
 
-  const response = await fetch(`${getBackendBaseUrl()}/api/v1/chatbot${path}`, {
+  const response = await fetch(`${getBackendBaseUrl()}${CHATBOT_API_BASE}${path}`, {
     method: "POST",
     body: JSON.stringify(body),
     headers,

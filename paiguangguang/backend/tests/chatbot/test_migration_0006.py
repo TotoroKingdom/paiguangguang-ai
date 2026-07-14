@@ -19,7 +19,7 @@ def test_chatbot_migration_0006_creates_tables_and_revision(monkeypatch, tmp_pat
     db_path = _configure_test_db(monkeypatch, tmp_path)
 
     alembic_config = get_alembic_config()
-    command.upgrade(alembic_config, "head")
+    command.upgrade(alembic_config, "0006_create_chatbot_tables")
 
     with sqlite3.connect(db_path) as connection:
         table_rows = connection.execute(

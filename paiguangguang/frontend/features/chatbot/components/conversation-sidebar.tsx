@@ -26,7 +26,6 @@ type ConversationSidebarProps = {
 const STATUS_LABELS: Record<ConversationStatus, string> = {
   active: "Active",
   archived: "Archived",
-  deleted: "Trash",
 };
 
 function formatTimestamp(value: string) {
@@ -127,7 +126,6 @@ export function ConversationSidebar({
 
         {conversations.map((conversation) => {
           const isSelected = selectedConversationId === conversation.id;
-          const isDeleted = conversation.status === "deleted";
           return (
             <article
               key={conversation.id}
@@ -174,7 +172,7 @@ export function ConversationSidebar({
                     Archive
                   </button>
                 ) : null}
-                {conversation.status === "archived" || conversation.status === "deleted" ? (
+                {conversation.status === "archived" ? (
                   <button
                     type="button"
                     onClick={() => void onRestoreConversation(conversation)}
@@ -183,15 +181,13 @@ export function ConversationSidebar({
                     Restore
                   </button>
                 ) : null}
-                {!isDeleted ? (
-                  <button
-                    type="button"
-                    onClick={() => void onDeleteConversation(conversation)}
-                    className="border border-clay/20 bg-clay/5 px-3 py-1.5 text-xs font-semibold text-clay transition hover:border-clay/40 hover:bg-clay/10"
-                  >
-                    Delete
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void onDeleteConversation(conversation)}
+                  className="border border-clay/20 bg-clay/5 px-3 py-1.5 text-xs font-semibold text-clay transition hover:border-clay/40 hover:bg-clay/10"
+                >
+                  Delete
+                </button>
               </div>
             </article>
           );

@@ -4,14 +4,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatbotShell } from "../components/chatbot-shell";
 
 let storageKey: string | null = null;
+let authUser: { id: string; email: string } | null;
 
 vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({
     token: "token-123",
-    user: {
-      id: "user-123",
-      email: "owner@example.com",
-    },
+    user: authUser,
   }),
 }));
 
@@ -116,6 +114,7 @@ vi.mock("../components/chat-conversation-panel", () => ({
 
 beforeEach(() => {
   storageKey = null;
+  authUser = { id: "user-123", email: "owner@example.com" };
 });
 
 describe("ChatbotShell workspace", () => {
@@ -126,5 +125,12 @@ describe("ChatbotShell workspace", () => {
     expect(screen.getByTestId("sidebar").textContent).toContain("Workspace conversation");
     expect(screen.getByTestId("panel").textContent).toContain("token-123");
     expect(screen.getByTestId("panel").textContent).toContain("streaming");
+  });
+
+  it("disables persistence when the user is logged out", () => {
+    authUser = null;
+    render(<ChatbotShell />);
+
+    expect(storageKey).toBeNull();
   });
 });

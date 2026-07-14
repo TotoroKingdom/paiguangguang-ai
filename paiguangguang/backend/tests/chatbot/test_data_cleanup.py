@@ -21,6 +21,9 @@ from app.chatbot.repositories.memory_repository import MemoryRepository
 from app.chatbot.repositories.message_repository import MessageRepository
 from app.chatbot.services.conversation_service import ConversationService
 from app.chatbot.services.memory_service import MemoryService
+from app.chatbot.repositories.job_repository import JobRepository
+from app.chatbot.services.cleanup_service import CleanupService
+from app.chatbot.services.job_runner import JobRunner
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.models import User
@@ -196,7 +199,9 @@ def test_data_cleanup_short_term_cache_misses_rebuild_and_deleted_conversation_r
     assert [message.content for message in rebuilt.recent_messages][-1] == "assistant-3-updated"
 
     with session_factory() as session:
-        delete_result = ConversationService().delete_conversation(session, owner.id, conversation.id)
+        delete_result = ConversationService(
+            job_repository=JobRepository(session_factory)
+        ).delete_conversation(session, owner.id, conversation.id)
     assert delete_result.cleanup_status == "pending"
 
     with session_factory() as session:
@@ -244,9 +249,26 @@ def test_data_cleanup_deletes_semantic_index_entries_and_rebuilds_stale_chroma_r
 
     deleted = memory_service.delete_memory(session_factory(), owner.id, active_memory.id)
     assert deleted.status == "deleted"
+    assert deleted.cleanup_status == "pending"
     deleted_record = memory_repo.get_owned(active_memory.id, owner.id, include_deleted=True)
     assert deleted_record is not None
     assert deleted_record.embedding_status == "deleted"
+    cleanup_service = CleanupService(
+        session_factory=session_factory,
+        short_term_memory=ShortTermMemoryService(session_factory, settings=settings),
+        settings=settings,
+        semantic_index=index,
+    )
+    runner = JobRunner(
+        repository=memory_service.job_repository,
+        memory_service=SimpleNamespace(),
+        short_term_memory=SimpleNamespace(),
+        conversation_summary=SimpleNamespace(),
+        title_service=SimpleNamespace(),
+        cleanup_service=cleanup_service,
+        settings=settings,
+    )
+    assert runner.run_once(limit=10) == 1
     assert client.collections[index.collection_name].delete_calls[-1] == {"ids": [active_memory.id], "where": None}
 
     active_memory_id = _seed_memory(

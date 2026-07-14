@@ -1,4 +1,4 @@
-export type ConversationStatus = "active" | "archived" | "deleted";
+export type ConversationStatus = "active" | "archived";
 
 export type ConversationTitleSource = "default" | "auto" | "manual";
 

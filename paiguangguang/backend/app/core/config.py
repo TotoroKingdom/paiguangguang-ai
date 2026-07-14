@@ -20,6 +20,7 @@ def _parse_bool(raw: str | None, *, default: bool = False) -> bool:
 class Settings:
     app_name: str = "Paiguangguang Backend"
     api_v1_prefix: str = "/api/v1"
+    chatbot_enabled: bool = True
     chatbot_env: str = "development"
     chatbot_redis_schema_version: int = 1
     chatbot_short_memory_ttl_seconds: int = 7 * 24 * 60 * 60
@@ -59,6 +60,12 @@ class Settings:
     chatbot_rate_limit_window_seconds: int = 60
     chatbot_lock_ttl_seconds: int = 90
     chatbot_stale_run_seconds: int = 300
+    chatbot_worker_interval_seconds: int = 30
+    chatbot_job_batch_size: int = 20
+    chatbot_job_max_attempts: int = 8
+    chatbot_job_stale_seconds: int = 300
+    chatbot_checkpoint_interval_seconds: float = 1.0
+    chatbot_checkpoint_chars: int = 512
     query_rewrite_enabled: bool = False
     query_rewrite_model: str = ""
     rerank_provider: str = ""
@@ -82,6 +89,7 @@ class Settings:
 
 def get_settings() -> Settings:
     return Settings(
+        chatbot_enabled=_parse_bool(os.getenv("CHATBOT_ENABLED"), default=True),
         chatbot_env=os.getenv("CHATBOT_ENV", "development"),
         chatbot_redis_schema_version=int(os.getenv("CHATBOT_REDIS_SCHEMA_VERSION", "1")),
         chatbot_short_memory_ttl_seconds=int(os.getenv("CHATBOT_SHORT_MEMORY_TTL_SECONDS", str(7 * 24 * 60 * 60))),
@@ -125,6 +133,14 @@ def get_settings() -> Settings:
         chatbot_rate_limit_window_seconds=int(os.getenv("CHATBOT_RATE_LIMIT_WINDOW_SECONDS", "60")),
         chatbot_lock_ttl_seconds=int(os.getenv("CHATBOT_LOCK_TTL_SECONDS", "90")),
         chatbot_stale_run_seconds=int(os.getenv("CHATBOT_STALE_RUN_SECONDS", "300")),
+        chatbot_worker_interval_seconds=int(os.getenv("CHATBOT_WORKER_INTERVAL_SECONDS", "30")),
+        chatbot_job_batch_size=int(os.getenv("CHATBOT_JOB_BATCH_SIZE", "20")),
+        chatbot_job_max_attempts=int(os.getenv("CHATBOT_JOB_MAX_ATTEMPTS", "8")),
+        chatbot_job_stale_seconds=int(os.getenv("CHATBOT_JOB_STALE_SECONDS", "300")),
+        chatbot_checkpoint_interval_seconds=float(
+            os.getenv("CHATBOT_CHECKPOINT_INTERVAL_SECONDS", "1.0")
+        ),
+        chatbot_checkpoint_chars=int(os.getenv("CHATBOT_CHECKPOINT_CHARS", "512")),
         query_rewrite_enabled=_parse_bool(os.getenv("QUERY_REWRITE_ENABLED"), default=False),
         query_rewrite_model=os.getenv("QUERY_REWRITE_MODEL", ""),
         rerank_provider=os.getenv("RERANK_PROVIDER", ""),

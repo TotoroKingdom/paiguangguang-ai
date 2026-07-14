@@ -311,7 +311,8 @@ def test_memory_service_syncs_semantic_index_and_marks_embedding_status(tmp_path
         deleted = service.delete_memory(session, owner.id, created[0].id)
 
     assert deleted.status == "deleted"
-    assert fake_semantic_index.delete_calls[-1] == created[0].id
+    assert deleted.cleanup_status == "pending"
+    assert fake_semantic_index.delete_calls == []
     assert memory_repo.get_owned(created[0].id, owner.id, include_deleted=True).embedding_status == "deleted"
 
 

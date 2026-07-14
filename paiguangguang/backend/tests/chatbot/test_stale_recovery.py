@@ -106,3 +106,58 @@ def test_recovery_service_marks_only_stale_runs_failed(tmp_path) -> None:
     assert fresh_run_model.status == "pending"
     assert fresh_message_model is not None
     assert fresh_message_model.status == "pending"
+
+
+def test_recovery_compare_and_set_preserves_refreshed_run(tmp_path) -> None:
+    session_factory = _build_session_factory(tmp_path)
+    conversation_repo = ConversationRepository(session_factory)
+    message_repo = MessageRepository(session_factory)
+    llm_run_repo = LLMRunRepository(session_factory)
+    service = RecoveryService(session_factory, settings=Settings(chatbot_stale_run_seconds=60))
+
+    with session_factory() as session:
+        owner = _create_user(session, email="cas-owner@example.com")
+        session.commit()
+    conversation = conversation_repo.create(
+        owner.id, "Thread", "deepseek-chat", system_prompt_version="v1"
+    )
+    _, assistant = message_repo.create_user_and_assistant(
+        conversation.id,
+        owner.id,
+        content="still running",
+        client_request_id="00000000-0000-0000-0000-000000002001",
+        assistant_model="deepseek-chat",
+    )
+    run = llm_run_repo.create(
+        request_id="00000000-0000-0000-0000-000000002002",
+        user_id=owner.id,
+        conversation_id=conversation.id,
+        message_id=assistant.id,
+        provider="deepseek",
+        model="deepseek-chat",
+        prompt_version="v1",
+    )
+    now = datetime.now(timezone.utc)
+    stale_before = now - timedelta(seconds=60)
+    with session_factory() as session:
+        session.execute(
+            update(ChatbotLLMRun)
+            .where(ChatbotLLMRun.id == run.id)
+            .values(status="streaming", updated_at=now)
+        )
+        session.commit()
+        changed = service._mark_stale_run(
+            session,
+            run_id=run.id,
+            message_id=assistant.id,
+            stale_before=stale_before,
+            now=now,
+        )
+        session.commit()
+
+    assert changed is False
+    with session_factory() as session:
+        stored_run = session.get(ChatbotLLMRun, run.id)
+        stored_message = session.get(ChatbotMessage, assistant.id)
+    assert stored_run is not None and stored_run.status == "streaming"
+    assert stored_message is not None and stored_message.status == "pending"
