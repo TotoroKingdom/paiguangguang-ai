@@ -1,5 +1,12 @@
 import { getJson, postJson } from "@/lib/api";
-import type { AuthTokenData, AuthUser, LoginRequest } from "@/types/auth";
+import { encryptLoginPassword } from "@/lib/login-encryption";
+import type {
+  AuthTokenData,
+  AuthUser,
+  EncryptedLoginRequest,
+  LoginEncryptionKeyData,
+  LoginRequest,
+} from "@/types/auth";
 
 const AUTH_TOKEN_STORAGE_KEY = "paiguangguang.auth.token";
 
@@ -25,7 +32,16 @@ export function clearStoredAuthToken() {
 }
 
 export async function login(request: LoginRequest) {
-  return postJson<AuthTokenData, LoginRequest>("/api/v1/auth/login", request);
+  const keyData = await getJson<LoginEncryptionKeyData>("/api/v1/auth/encryption-key");
+  const encryptedPassword = await encryptLoginPassword(request.password, keyData);
+  const encryptedRequest: EncryptedLoginRequest = {
+    email: request.email,
+    ...encryptedPassword,
+  };
+  return postJson<AuthTokenData, EncryptedLoginRequest>(
+    "/api/v1/auth/login",
+    encryptedRequest
+  );
 }
 
 export async function fetchCurrentUser(token?: string | null) {
