@@ -11,6 +11,8 @@ import type {
 } from "../types/conversation";
 import type { StopGenerationData, StopGenerationRequest } from "../types/message";
 
+export const CHATBOT_API_BASE = "/api/v1/chatbot";
+
 const DEFAULT_PAGE_SIZE = 20;
 
 function buildQuery(params: Record<string, string | number | boolean | null | undefined>) {
@@ -33,7 +35,7 @@ export async function listConversations(options: {
 }): Promise<ConversationPageData> {
   const { token, status = "active", cursor = null, limit = DEFAULT_PAGE_SIZE } = options;
   return getJson<ConversationPageData>(
-    `/api/v1/conversations${buildQuery({ status, cursor, limit })}`,
+    `${CHATBOT_API_BASE}/conversations${buildQuery({ status, cursor, limit })}`,
     { token }
   );
 }
@@ -43,7 +45,9 @@ export async function getConversation(options: {
   conversationId: string;
 }): Promise<ConversationDetailData> {
   const { token, conversationId } = options;
-  return getJson<ConversationDetailData>(`/api/v1/conversations/${conversationId}`, { token });
+  return getJson<ConversationDetailData>(`${CHATBOT_API_BASE}/conversations/${conversationId}`, {
+    token,
+  });
 }
 
 export async function createConversation(
@@ -52,9 +56,11 @@ export async function createConversation(
   },
   request: ConversationCreateRequest = {}
 ): Promise<ConversationData> {
-  return postJson<ConversationData, ConversationCreateRequest>("/api/v1/conversations", request, {
-    token: options.token,
-  });
+  return postJson<ConversationData, ConversationCreateRequest>(
+    `${CHATBOT_API_BASE}/conversations`,
+    request,
+    { token: options.token }
+  );
 }
 
 export async function updateConversation(
@@ -65,7 +71,7 @@ export async function updateConversation(
   request: ConversationUpdateRequest
 ): Promise<ConversationData> {
   return patchJson<ConversationData, ConversationUpdateRequest>(
-    `/api/v1/conversations/${options.conversationId}`,
+    `${CHATBOT_API_BASE}/conversations/${options.conversationId}`,
     request,
     { token: options.token }
   );
@@ -76,7 +82,7 @@ export async function archiveConversation(options: {
   conversationId: string;
 }): Promise<ConversationData> {
   return postJson<ConversationData, Record<string, never>>(
-    `/api/v1/conversations/${options.conversationId}/archive`,
+    `${CHATBOT_API_BASE}/conversations/${options.conversationId}/archive`,
     {},
     { token: options.token }
   );
@@ -87,7 +93,7 @@ export async function restoreConversation(options: {
   conversationId: string;
 }): Promise<ConversationData> {
   return postJson<ConversationData, Record<string, never>>(
-    `/api/v1/conversations/${options.conversationId}/restore`,
+    `${CHATBOT_API_BASE}/conversations/${options.conversationId}/restore`,
     {},
     { token: options.token }
   );
@@ -97,7 +103,7 @@ export async function deleteConversation(options: {
   token: string | null;
   conversationId: string;
 }): Promise<DeleteResultData> {
-  return deleteJson<DeleteResultData>(`/api/v1/conversations/${options.conversationId}`, {
+  return deleteJson<DeleteResultData>(`${CHATBOT_API_BASE}/conversations/${options.conversationId}`, {
     token: options.token,
   });
 }
@@ -108,7 +114,7 @@ export async function stopGeneration(options: {
   request: StopGenerationRequest;
 }): Promise<StopGenerationData> {
   return postJson<StopGenerationData, StopGenerationRequest>(
-    `/api/v1/chatbot/conversations/${options.conversationId}/stop`,
+    `${CHATBOT_API_BASE}/conversations/${options.conversationId}/stop`,
     options.request,
     { token: options.token }
   );
