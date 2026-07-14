@@ -14,6 +14,7 @@ from app.db.base import Base
 from app.db.models import User
 from app.db.session import get_db_session
 from app.services.auth import AuthService, get_auth_service
+from app.core.config import Settings, get_settings
 
 
 def _build_session_factory(tmp_path: Path) -> sessionmaker[Session]:
@@ -42,6 +43,29 @@ def _create_user(session: Session, auth_service: AuthService, *, email: str) -> 
         password="Secret123!",
         is_active=True,
     )
+
+
+def test_conversation_api_returns_503_when_chatbot_is_disabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-chatbot-api")
+    session_factory = _build_session_factory(tmp_path)
+    session = session_factory()
+    auth_service = AuthService()
+    owner = _create_user(session, auth_service, email="disabled-owner@example.com")
+    app = _build_test_app(session, auth_service)
+    app.dependency_overrides[get_settings] = lambda: Settings(chatbot_enabled=False)
+    client = TestClient(app)
+    try:
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": owner.email, "password": "Secret123!"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['data']['access_token']}"}
+        response = client.get("/api/v1/chatbot/conversations", headers=headers)
+        assert response.status_code == 503
+        assert response.json()["error"]["code"] == "CHATBOT_DISABLED"
+    finally:
+        app.dependency_overrides.clear()
+        session.close()
 
 
 def test_conversation_api_crud_owner_filter_and_router_registration(monkeypatch, tmp_path) -> None:
