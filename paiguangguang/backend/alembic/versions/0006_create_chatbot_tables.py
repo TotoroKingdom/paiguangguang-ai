@@ -66,13 +66,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["conversation_id"],
             ["chatbot_conversations.id"],
-            name="fk_chatbot_conversation_summaries_conversation_id_chatbot_conversations",
+            name="fk_chatbot_summaries_conversation",
             ondelete="CASCADE",
         ),
         sa.UniqueConstraint(
             "conversation_id",
             "summary_version",
-            name="uq_chatbot_conversation_summaries_conversation_id_summary_version",
+            name="uq_chatbot_summaries_conversation_version",
         ),
         sa.CheckConstraint("start_sequence >= 1", name="ck_chatbot_conversation_summaries_start_sequence"),
         sa.CheckConstraint("end_sequence >= 1", name="ck_chatbot_conversation_summaries_end_sequence"),

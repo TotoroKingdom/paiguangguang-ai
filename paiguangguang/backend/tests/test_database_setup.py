@@ -52,6 +52,15 @@ def test_settings_load_admin_bootstrap_configuration(monkeypatch) -> None:
     assert settings.admin_user_display_name == "Primary Admin"
 
 
+def test_settings_load_login_private_key_path(monkeypatch, tmp_path) -> None:
+    key_path = tmp_path / "login-private-key.pem"
+    monkeypatch.setenv("AUTH_LOGIN_PRIVATE_KEY_PATH", str(key_path))
+
+    settings = get_settings()
+
+    assert settings.auth_login_private_key_path == str(key_path)
+
+
 def test_database_session_dependency_uses_test_database_url(monkeypatch, tmp_path) -> None:
     test_db_path = tmp_path / "task17.sqlite3"
     monkeypatch.setenv(
@@ -125,6 +134,8 @@ def test_initialize_database_runs_migrations_and_bootstraps_defaults(monkeypatch
     assert admin_user is not None
     assert admin_user.display_name == "Primary Admin"
     assert admin_user.is_active is True
+    assert admin_user.hashed_password.startswith("$pbkdf2-sha256$")
+    assert admin_user.hashed_password != "Secret123!"
     assert authenticated_user is not None
     assert any(role.name == "system_admin" for role in admin_user.roles)
     assert any(membership.workspace_id == default_workspace.id for membership in admin_user.workspace_memberships)

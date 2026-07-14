@@ -1,10 +1,26 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
 import sqlite3
 
 from alembic import command
 
 from app.db.alembic import get_alembic_config
+
+
+def test_migration_0006_identifiers_fit_postgresql_limit() -> None:
+    migration_path = Path(__file__).resolve().parents[2] / "alembic" / "versions" / "0006_create_chatbot_tables.py"
+    tree = ast.parse(migration_path.read_text(encoding="utf-8"))
+    identifiers = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and node.value.startswith(("fk_", "uq_", "ix_", "ck_"))
+    ]
+
+    assert [name for name in identifiers if len(name) > 63] == []
 
 
 def _configure_test_db(monkeypatch, tmp_path) -> str:
