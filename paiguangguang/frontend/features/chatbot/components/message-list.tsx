@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import type { MessageData } from "../types/message";
 import type { ChatStreamPhase } from "../utils/merge-stream-event";
@@ -50,14 +50,18 @@ export function MessageList({
   const [showJumpButton, setShowJumpButton] = useState(false);
   const [loadMorePending, setLoadMorePending] = useState(false);
 
-  const canJumpToBottom = useMemo(() => messages.length > 0, [messages.length]);
-
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current;
     if (!container) {
       return;
     }
-    container.scrollTop = container.scrollHeight;
+
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    } else {
+      container.scrollTop = container.scrollHeight;
+    }
+
     stickToBottomRef.current = true;
     setShowJumpButton(false);
   }, []);
@@ -66,11 +70,13 @@ export function MessageList({
     if (!hasMore || loadingHistory || loadingMoreRef.current) {
       return;
     }
+
     const container = containerRef.current;
     if (!container) {
       await onLoadMore();
       return;
     }
+
     loadingMoreRef.current = true;
     previousScrollHeightRef.current = container.scrollHeight;
     preserveAnchorRef.current = true;
@@ -102,7 +108,7 @@ export function MessageList({
     }
   }, [messages, streamPhase]);
 
-  const handleScroll = useCallback(async () => {
+  const handleScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) {
       return;
@@ -110,12 +116,12 @@ export function MessageList({
 
     const nearBottom = isNearBottom(container);
     stickToBottomRef.current = nearBottom;
-    setShowJumpButton(!nearBottom && canJumpToBottom);
+    setShowJumpButton(!nearBottom && messages.length > 0);
 
     if (container.scrollTop <= TOP_THRESHOLD_PX) {
       void requestLoadMore();
     }
-  }, [canJumpToBottom, requestLoadMore]);
+  }, [messages.length, requestLoadMore]);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col rounded-2xl border border-ink/10 bg-white/80 shadow-sm">
@@ -123,7 +129,7 @@ export function MessageList({
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-ink">Messages</p>
           <div className="text-xs text-ink/55">
-            {loadingHistory ? "Loading history…" : `${messages.length} messages`}
+            {loadingHistory ? "Loading history..." : `${messages.length} messages`}
           </div>
         </div>
         {historyError ? <p className="mt-2 text-sm leading-6 text-clay">{historyError}</p> : null}
@@ -131,12 +137,12 @@ export function MessageList({
 
       <div
         ref={containerRef}
-        onScroll={() => void handleScroll()}
-        className="min-h-0 flex-1 overflow-y-auto scroll-smooth px-4 py-4"
+        onScroll={handleScroll}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       >
         {loadMorePending ? (
           <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/45">
-            Loading earlier messages…
+            Loading earlier messages...
           </div>
         ) : null}
 

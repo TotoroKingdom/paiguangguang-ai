@@ -1,126 +1,100 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback } from "react";
 
 import { useMemories } from "../hooks/use-memories";
-import type { MemoryData, MemoryStatus } from "../types/memory";
+import { MemoryDetailEditor } from "./memory-detail-editor";
+import { MemoryFilters } from "./memory-filters";
+import { MemoryList } from "./memory-list";
 
-const FILTERS: Array<{ status: MemoryStatus; label: string }> = [
-  { status: "active", label: "Active" },
-  { status: "candidate", label: "Candidate" },
-  { status: "superseded", label: "Superseded" },
-];
+type MemoryPanelProps = {
+  token: string | null;
+  conversationId?: string | null;
+};
 
-export function MemoryPanel({ token }: { token: string | null }) {
-  const memories = useMemories({ token });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingContent, setEditingContent] = useState("");
+export function MemoryPanel({ token, conversationId = null }: MemoryPanelProps) {
+  const memories = useMemories({ token, conversationId });
 
-  function beginEdit(memory: MemoryData) {
-    setEditingId(memory.id);
-    setEditingContent(memory.content);
-  }
+  const handleRefresh = useCallback(() => {
+    void memories.refresh();
+  }, [memories.refresh]);
 
-  async function save(memoryId: string) {
-    const content = editingContent.trim();
-    if (!content) {
-      return;
-    }
-    const updated = await memories.updateMemory(memoryId, { content });
-    if (updated) {
-      setEditingId(null);
-      setEditingContent("");
-    }
-  }
+  const handleSelectMemory = useCallback(
+    (memoryId: string) => {
+      void memories.selectMemory(memoryId);
+    },
+    [memories.selectMemory]
+  );
 
-  async function remove(memory: MemoryData) {
-    if (!window.confirm(`Delete memory "${memory.content.slice(0, 40)}"?`)) {
-      return;
-    }
-    await memories.deleteMemory(memory.id);
-  }
+  const handleSaveMemory = useCallback(
+    (memoryId: string, request: Parameters<typeof memories.updateMemory>[1]) => {
+      void memories.updateMemory(memoryId, request);
+    },
+    [memories.updateMemory]
+  );
+
+  const handleDeleteMemory = useCallback(
+    (memoryId: string) => {
+      void memories.deleteMemory(memoryId);
+    },
+    [memories.deleteMemory]
+  );
 
   return (
-    <section aria-label="Memories" className="border border-ink/10 bg-white/80 p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-2xl font-semibold text-ink">Memories</h2>
-        <button type="button" onClick={() => void memories.refresh()}>
-          Refresh
-        </button>
-      </div>
-      <div className="mt-4 flex gap-2">
-        {FILTERS.map((filter) => (
-          <button
-            key={filter.status}
-            type="button"
-            aria-pressed={memories.status === filter.status}
-            onClick={() => memories.setStatus(filter.status)}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
-      {memories.error ? <p role="alert">{memories.error}</p> : null}
-      {!memories.loading && memories.items.length === 0 ? <p>No memories.</p> : null}
-      <div className="mt-4 space-y-3">
-        {memories.items.map((memory) => (
-          <article key={memory.id} className="border border-ink/10 p-4">
-            <p className="text-xs uppercase text-ink/60">
-              {memory.memory_type} · confidence {memory.confidence.toFixed(2)}
+    <section aria-label="Memories" className="flex h-full min-h-0 flex-col gap-4">
+      <div className="rounded-2xl border border-ink/10 bg-white/80 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-clay">Memory workspace</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">Memories</h2>
+            <p className="mt-2 text-sm leading-6 text-ink/60">
+              Manage active knowledge, candidate notes, and superseded records.
             </p>
-            {editingId === memory.id ? (
-              <>
-                <textarea
-                  aria-label="Memory content"
-                  value={editingContent}
-                  onChange={(event) => setEditingContent(event.target.value)}
-                />
-                <button type="button" onClick={() => void save(memory.id)}>
-                  Save
-                </button>
-                <button type="button" onClick={() => setEditingId(null)}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <p>{memory.content}</p>
-            )}
-            <p className="text-xs text-ink/50">Updated {memory.updated_at}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={() => beginEdit(memory)}>
-                Edit
-              </button>
-              {memory.status === "candidate" ? (
-                <button
-                  type="button"
-                  onClick={() => void memories.updateMemory(memory.id, { status: "active" })}
-                >
-                  Activate
-                </button>
-              ) : null}
-              {memory.status === "active" ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    void memories.updateMemory(memory.id, { status: "candidate" })
-                  }
-                >
-                  Move to candidate
-                </button>
-              ) : null}
-              <button type="button" onClick={() => void remove(memory)}>
-                Delete
-              </button>
-            </div>
-          </article>
-        ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="rounded-full border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-tide/90"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
-      {memories.hasMore ? (
-        <button type="button" onClick={() => void memories.loadMore()}>
-          Load more
-        </button>
-      ) : null}
-      {memories.loading ? <p>Loading memories…</p> : null}
+
+      <MemoryFilters
+        status={memories.status}
+        memoryType={memories.memoryType}
+        scope={memories.scope}
+        conversationScopeAvailable={Boolean(conversationId)}
+        onChangeStatus={memories.setStatus}
+        onChangeMemoryType={memories.setMemoryType}
+        onChangeScope={memories.setScope}
+      />
+
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <MemoryList
+          items={memories.items}
+          loading={memories.loading}
+          loadingMore={memories.loadingMore}
+          error={memories.error}
+          hasMore={memories.hasMore}
+          selectedMemoryId={memories.selectedMemoryId}
+          currentConversationId={conversationId}
+          onSelectMemory={handleSelectMemory}
+          onLoadMore={() => void memories.loadMore()}
+        />
+
+        <MemoryDetailEditor
+          memory={memories.selectedMemory}
+          loading={memories.detailLoading}
+          error={memories.detailError}
+          saving={Boolean(memories.savingMemoryId)}
+          deleting={Boolean(memories.deletingMemoryId)}
+          onSave={handleSaveMemory}
+          onDelete={handleDeleteMemory}
+        />
+      </div>
     </section>
   );
 }

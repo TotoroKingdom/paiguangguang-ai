@@ -34,5 +34,28 @@ describe("ChatComposer", () => {
 
     expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
-});
 
+  it("shows the current model in the composer footer and ignores enter while composing", () => {
+    const onSubmit = vi.fn();
+
+    render(
+      <ChatComposer
+        value={"Hello"}
+        model="deepseek-chat"
+        onChange={vi.fn()}
+        onSubmit={onSubmit}
+      />
+    );
+
+    expect(screen.getByText("Model: deepseek-chat")).toBeInTheDocument();
+
+    const textbox = screen.getByRole("textbox");
+    fireEvent.compositionStart(textbox);
+    fireEvent.keyDown(textbox, { key: "Enter" });
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    fireEvent.compositionEnd(textbox);
+    fireEvent.keyDown(textbox, { key: "Enter" });
+    expect(onSubmit).toHaveBeenCalledWith("Hello");
+  });
+});
