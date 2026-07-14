@@ -7,6 +7,7 @@ import {
   useState,
   useMemo,
   useReducer,
+  useRef,
   type Dispatch,
   type ReactNode,
 } from "react";
@@ -27,7 +28,7 @@ export type ChatbotStoreState = {
 };
 
 type ChatbotStoreSnapshot = {
-  version: 1;
+  version: 2;
   state: ChatbotStoreState;
 };
 
@@ -48,7 +49,7 @@ const PAGE_TEMPLATE: ConversationPageState = {
   loaded: false,
 };
 
-export const CONVERSATION_STATUSES: ConversationStatus[] = ["active", "archived", "deleted"];
+export const CONVERSATION_STATUSES: ConversationStatus[] = ["active", "archived"];
 
 export function createInitialChatbotStoreState(): ChatbotStoreState {
   return {
@@ -57,7 +58,6 @@ export function createInitialChatbotStoreState(): ChatbotStoreState {
     pages: {
       active: { ...PAGE_TEMPLATE, items: [] },
       archived: { ...PAGE_TEMPLATE, items: [] },
-      deleted: { ...PAGE_TEMPLATE, items: [] },
     },
   };
 }
@@ -78,7 +78,6 @@ function cloneState(state: ChatbotStoreState): ChatbotStoreState {
     pages: {
       active: clonePage(state.pages.active),
       archived: clonePage(state.pages.archived),
-      deleted: clonePage(state.pages.deleted),
     },
   };
 }
@@ -106,7 +105,6 @@ function upsertConversation(pages: Record<ConversationStatus, ConversationPageSt
   const nextPages = {
     active: removeConversationFromPage(pages.active, conversation.id),
     archived: removeConversationFromPage(pages.archived, conversation.id),
-    deleted: removeConversationFromPage(pages.deleted, conversation.id),
   };
   const targetPage = nextPages[conversation.status];
   targetPage.items = sortByRecency([conversation, ...targetPage.items]);
@@ -118,7 +116,7 @@ function normalizeSnapshot(snapshot: unknown): ChatbotStoreState | null {
     return null;
   }
   const candidate = snapshot as Partial<ChatbotStoreSnapshot>;
-  if (candidate.version !== 1 || !candidate.state) {
+  if (candidate.version !== 2 || !candidate.state) {
     return null;
   }
   const state = candidate.state;
@@ -180,7 +178,6 @@ function reducer(state: ChatbotStoreState, action: ChatbotStoreAction): ChatbotS
         pages: {
           active: removeConversationFromPage(state.pages.active, action.conversationId),
           archived: removeConversationFromPage(state.pages.archived, action.conversationId),
-          deleted: removeConversationFromPage(state.pages.deleted, action.conversationId),
         },
       };
     case "clear_pages":
@@ -204,16 +201,40 @@ export function ChatbotStoreProvider({
   children: ReactNode;
   storageKey?: string | null;
 }) {
-  const [state, dispatch] = useReducer(reducer, undefined, createInitialChatbotStoreState);
   const normalizedStorageKey = storageKey?.trim() || null;
-  const [isHydrated, setIsHydrated] = useState(!normalizedStorageKey);
+  const previousStorageKey = useRef(normalizedStorageKey);
 
   useEffect(() => {
-    if (!normalizedStorageKey || typeof window === "undefined") {
+    const previous = previousStorageKey.current;
+    if (previous && !normalizedStorageKey && typeof window !== "undefined") {
+      window.sessionStorage.removeItem(previous);
+    }
+    previousStorageKey.current = normalizedStorageKey;
+  }, [normalizedStorageKey]);
+
+  return (
+    <ScopedChatbotStoreProvider key={normalizedStorageKey ?? "logged-out"} storageKey={normalizedStorageKey}>
+      {children}
+    </ScopedChatbotStoreProvider>
+  );
+}
+
+function ScopedChatbotStoreProvider({
+  children,
+  storageKey,
+}: {
+  children: ReactNode;
+  storageKey: string | null;
+}) {
+  const [state, dispatch] = useReducer(reducer, undefined, createInitialChatbotStoreState);
+  const [isHydrated, setIsHydrated] = useState(!storageKey);
+
+  useEffect(() => {
+    if (!storageKey || typeof window === "undefined") {
       setIsHydrated(true);
       return;
     }
-    const raw = window.sessionStorage.getItem(normalizedStorageKey);
+    const raw = window.sessionStorage.getItem(storageKey);
     if (!raw) {
       setIsHydrated(true);
       return;
@@ -225,22 +246,22 @@ export function ChatbotStoreProvider({
         dispatch({ type: "hydrate", state: normalized });
       }
     } catch {
-      window.sessionStorage.removeItem(normalizedStorageKey);
+      window.sessionStorage.removeItem(storageKey);
     } finally {
       setIsHydrated(true);
     }
-  }, [normalizedStorageKey]);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (!normalizedStorageKey || typeof window === "undefined" || !isHydrated) {
+    if (!storageKey || typeof window === "undefined" || !isHydrated) {
       return;
     }
     const snapshot: ChatbotStoreSnapshot = {
-      version: 1,
+      version: 2,
       state,
     };
-    window.sessionStorage.setItem(normalizedStorageKey, JSON.stringify(snapshot));
-  }, [isHydrated, normalizedStorageKey, state]);
+    window.sessionStorage.setItem(storageKey, JSON.stringify(snapshot));
+  }, [isHydrated, storageKey, state]);
 
   const value = useMemo(
     () => ({

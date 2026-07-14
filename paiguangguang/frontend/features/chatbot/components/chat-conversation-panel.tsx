@@ -32,7 +32,7 @@ export function ChatConversationPanel({
   activeGeneration = null,
 }: ChatConversationPanelProps) {
   const conversationId = conversation?.id ?? null;
-  const conversationStatus = conversation?.status ?? "deleted";
+  const conversationStatus = conversation?.status ?? "active";
   const messages = useMessages({
     token,
     conversationId,

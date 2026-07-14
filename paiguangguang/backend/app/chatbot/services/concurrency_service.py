@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.core.config import Settings, get_settings
+from app.chatbot.observability import log_chatbot_event
 
 try:  # Optional dependency when Redis is configured.
     import redis  # type: ignore
@@ -67,8 +68,18 @@ return 0
             try:
                 self._client = self._redis_module.from_url(self._redis_url, decode_responses=True)
                 self._client.ping()
-            except Exception:
-                self._client = None
+            except Exception as exc:
+                self._degrade("ping", exc)
+
+    def _degrade(self, operation: str, exc: Exception) -> None:
+        self._client = None
+        log_chatbot_event(
+            "chatbot.redis.degraded",
+            source="concurrency",
+            reason=type(exc).__name__,
+            status="memory_fallback",
+            extra={"operation": operation},
+        )
 
     @staticmethod
     def build_key(conversation_id: str, user_id: str) -> str:
@@ -81,7 +92,14 @@ return 0
             ]
         )
 
-    def _build_lease(self, conversation_id: str, user_id: str, owner_token: str) -> ConcurrencyLease:
+    def _build_lease(
+        self,
+        conversation_id: str,
+        user_id: str,
+        owner_token: str,
+        *,
+        backend: str,
+    ) -> ConcurrencyLease:
         acquired_at = _utcnow()
         return ConcurrencyLease(
             conversation_id=conversation_id,
@@ -89,7 +107,7 @@ return 0
             owner_token=owner_token,
             acquired_at=acquired_at,
             expires_at=acquired_at + timedelta(seconds=self._ttl_seconds),
-            backend=self.backend_name,
+            backend=backend,
         )
 
     @property
@@ -100,10 +118,15 @@ return 0
         key = self.build_key(conversation_id, user_id)
         owner_token = str(uuid4())
         if self._client is not None:
-            stored = self._client.set(key, owner_token, nx=True, px=self._ttl_seconds * 1000)
-            if not stored:
-                return None
-            return self._build_lease(conversation_id, user_id, owner_token)
+            try:
+                stored = self._client.set(key, owner_token, nx=True, px=self._ttl_seconds * 1000)
+                if not stored:
+                    return None
+                return self._build_lease(
+                    conversation_id, user_id, owner_token, backend="redis"
+                )
+            except Exception as exc:
+                self._degrade("set", exc)
 
         now = _utcnow()
         with self._lock:
@@ -112,15 +135,29 @@ return 0
                 return None
             if current is not None and current.expires_at <= now:
                 self._memory_locks.pop(key, None)
-            lease = self._build_lease(conversation_id, user_id, owner_token)
+            lease = self._build_lease(
+                conversation_id, user_id, owner_token, backend="memory"
+            )
             self._memory_locks[key] = lease
             return lease
 
     def renew(self, lease: ConcurrencyLease) -> bool:
         key = self.build_key(lease.conversation_id, lease.user_id)
-        if self._client is not None:
-            result = self._client.eval(self.RENEW_SCRIPT, 1, key, lease.owner_token, str(self._ttl_seconds * 1000))
-            return bool(result)
+        if lease.backend == "redis":
+            if self._client is None:
+                return False
+            try:
+                result = self._client.eval(
+                    self.RENEW_SCRIPT,
+                    1,
+                    key,
+                    lease.owner_token,
+                    str(self._ttl_seconds * 1000),
+                )
+                return bool(result)
+            except Exception as exc:
+                self._degrade("eval", exc)
+                return False
 
         now = _utcnow()
         with self._lock:
@@ -140,9 +177,15 @@ return 0
 
     def release(self, lease: ConcurrencyLease) -> bool:
         key = self.build_key(lease.conversation_id, lease.user_id)
-        if self._client is not None:
-            result = self._client.eval(self.RELEASE_SCRIPT, 1, key, lease.owner_token)
-            return bool(result)
+        if lease.backend == "redis":
+            if self._client is None:
+                return False
+            try:
+                result = self._client.eval(self.RELEASE_SCRIPT, 1, key, lease.owner_token)
+                return bool(result)
+            except Exception as exc:
+                self._degrade("eval", exc)
+                return False
 
         with self._lock:
             current = self._memory_locks.get(key)

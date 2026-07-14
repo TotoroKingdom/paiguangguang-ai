@@ -10,11 +10,12 @@ from uuid import uuid4
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.llm.provider import ChatCompletionRequest, ChatCompletionResult, ChatCompletionUsage, LLMMessage, LLMStreamEvent
 from app.chatbot.models.conversation import ChatbotConversation
+from app.chatbot.models.job import ChatbotJob
 from app.chatbot.repositories.conversation_repository import ConversationRepository
 from app.chatbot.repositories.message_repository import MessageRepository
 from app.chatbot.services.chat_service import ChatService
@@ -139,7 +140,7 @@ def _seed_completed_turn(session_factory: sessionmaker[Session], owner_id: str, 
     )
 
 
-def test_chatbot_end_to_end_complete_refreshes_context_and_memory_pipeline(monkeypatch, tmp_path) -> None:
+def test_chatbot_end_to_end_complete_enqueues_post_completion_pipeline(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("JWT_SECRET_KEY", "test-secret-key-for-chatbot-e2e")
     monkeypatch.setenv("JWT_ALGORITHM", "HS256")
 
@@ -188,13 +189,13 @@ def test_chatbot_end_to_end_complete_refreshes_context_and_memory_pipeline(monke
     assert result.assistant_message.content == "final answer"
     assert len(fake_llm.complete_calls) == 1
     assert fake_llm.complete_calls[0].messages[-1].content == "How is the current project structured?"
-    assert refresh_calls == [(owner.id, conversation.id)]
-    assert summary_calls == [(owner.id, conversation.id)]
-    assert len(memory_calls) == 1
-    assert memory_calls[0][0][0] == owner.id
-    assert memory_calls[0][0][1] == conversation.id
-    assert memory_calls[0][0][2] == str(result.user_message.id)
-    assert memory_calls[0][0][3] == str(result.assistant_message.id)
+    assert refresh_calls == []
+    assert summary_calls == []
+    assert memory_calls == []
+    with session_factory() as verification_session:
+        jobs = list(verification_session.scalars(select(ChatbotJob)))
+    assert {job.kind for job in jobs} == {"auto_title", "refresh_conversation_context"}
+    assert len(jobs) == 2
 
 
 def test_chatbot_end_to_end_stream_replay_stop_retry_and_regenerate(monkeypatch, tmp_path) -> None:

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MessageList } from "../components/message-list";
@@ -43,6 +43,37 @@ describe("MessageList", () => {
     expect(screen.getByText("Hello")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "OpenAI" })).toHaveAttribute("href", "https://openai.com/");
     expect(screen.getByText("inline")).toBeInTheDocument();
+  });
+
+  it("does not force the viewport to the bottom while the user reads earlier messages", () => {
+    const props = {
+      loadingHistory: false,
+      historyError: null,
+      hasMore: false,
+      onLoadMore: vi.fn(),
+      streamPhase: "streaming" as const,
+      streamingMessageId: "msg-1",
+    };
+    const { container, rerender } = render(
+      <MessageList {...props} messages={[makeMessage({ content: "First" })]} />
+    );
+    const scroller = container.querySelector(".overflow-y-auto") as HTMLDivElement;
+    Object.defineProperties(scroller, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 200 },
+    });
+    scroller.scrollTop = 200;
+    fireEvent.scroll(scroller);
+
+    rerender(
+      <MessageList
+        {...props}
+        messages={[makeMessage({ content: "First and another streamed token" })]}
+      />
+    );
+
+    expect(scroller.scrollTop).toBe(200);
+    expect(screen.getByRole("button", { name: "Back to bottom" })).toBeInTheDocument();
   });
 });
 

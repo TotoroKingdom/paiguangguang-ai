@@ -4,13 +4,15 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import and_, desc, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, desc, or_, select, update
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.errors import ChatbotApiError
 from app.chatbot.observability import log_chatbot_event
 from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.models.llm_run import ChatbotLLMRun
+from app.chatbot.models.memory import ChatbotMemory
+from app.chatbot.repositories.job_repository import JobRepository
 from app.chatbot.repositories.cursor import (
     ConversationCursor,
     ConversationCursorError,
@@ -37,8 +39,14 @@ def _utcnow() -> datetime:
 
 
 class ConversationService:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        job_repository: JobRepository | None = None,
+    ) -> None:
         self.settings = settings or get_settings()
+        self.job_repository = job_repository
 
     def _allowed_models(self) -> set[str]:
         allowed = {model.strip() for model in self.settings.chatbot_allowed_models if model.strip()}
@@ -413,11 +421,48 @@ class ConversationService:
                 code="CHATBOT_CONVERSATION_NOT_FOUND",
                 message="Conversation not found",
             )
+        now = _utcnow()
+        memory_ids = list(
+            session.scalars(
+                select(ChatbotMemory.id).where(
+                    ChatbotMemory.user_id == user_id,
+                    ChatbotMemory.conversation_id == model.id,
+                    ChatbotMemory.deleted_at.is_(None),
+                )
+            )
+        )
+        session.execute(
+            update(ChatbotMemory)
+            .where(
+                ChatbotMemory.user_id == user_id,
+                ChatbotMemory.conversation_id == model.id,
+                ChatbotMemory.deleted_at.is_(None),
+            )
+            .values(
+                status="deleted",
+                embedding_status="deleted",
+                deleted_at=now,
+                updated_at=now,
+            )
+        )
         model.status = "deleted"
-        model.deleted_at = _utcnow()
+        model.deleted_at = now
         model.cleanup_status = "pending"
-        model.updated_at = _utcnow()
+        model.updated_at = now
         try:
+            job_repository = self.job_repository or JobRepository(
+                sessionmaker(bind=session.get_bind(), expire_on_commit=False, future=True)
+            )
+            job_repository.enqueue(
+                session,
+                kind="cleanup_conversation",
+                dedup_key=f"cleanup-conversation:{model.id}",
+                payload={
+                    "user_id": user_id,
+                    "conversation_id": model.id,
+                    "memory_ids": memory_ids,
+                },
+            )
             session.flush()
             session.commit()
         except Exception:

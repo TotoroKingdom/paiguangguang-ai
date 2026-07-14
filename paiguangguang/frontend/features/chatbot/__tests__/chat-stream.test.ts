@@ -16,6 +16,38 @@ function makeStream(chunks: string[]) {
   });
 }
 
+function createdEvent(requestId: string, conversationId: string, suffix: string) {
+  return {
+    event: "message.created" as const,
+    sequence: 1,
+    data: {
+      schema_version: "1" as const,
+      request_id: requestId,
+      conversation_id: conversationId,
+      assistant_message_id: `assistant-${suffix}`,
+      sequence: 1,
+      created_at: "2026-07-14T00:00:00.000Z",
+      replayed: false,
+      user_message: {
+        id: `user-${suffix}`,
+        sequence_number: suffix === "1" ? 1 : 3,
+        status: "completed" as const,
+        content: `question-${suffix}`,
+        model: null,
+        updated_at: "2026-07-14T00:00:00.000Z",
+      },
+      assistant_message: {
+        id: `assistant-${suffix}`,
+        sequence_number: suffix === "1" ? 2 : 4,
+        status: "pending" as const,
+        content: "",
+        model: "deepseek-chat",
+        updated_at: "2026-07-14T00:00:00.000Z",
+      },
+    },
+  };
+}
+
 describe("chat stream utilities", () => {
   it("parses chunked SSE blocks across boundaries", async () => {
     const response = new Response(
@@ -121,5 +153,86 @@ describe("chat stream utilities", () => {
 
     const deduped = mergeChatStreamEvent(stateAfterCompleted, completed);
     expect(deduped.messages).toHaveLength(2);
+  });
+
+  it("resets sequence deduplication for a new request", () => {
+    const initial = createInitialChatStreamState([], "conv-1");
+    const firstCreated = mergeChatStreamEvent(initial, createdEvent("req-1", "conv-1", "1"));
+    const firstEnd = mergeChatStreamEvent(firstCreated, {
+      event: "stream.end",
+      sequence: 5,
+      data: {
+        schema_version: "1",
+        request_id: "req-1",
+        conversation_id: "conv-1",
+        assistant_message_id: "assistant-1",
+        sequence: 5,
+        created_at: "2026-07-14T00:00:01.000Z",
+        final_status: "completed",
+      },
+    });
+
+    const secondCreated = mergeChatStreamEvent(
+      firstEnd,
+      createdEvent("req-2", "conv-1", "2")
+    );
+    const secondDelta = mergeChatStreamEvent(secondCreated, {
+      event: "message.delta",
+      sequence: 2,
+      data: {
+        schema_version: "1",
+        request_id: "req-2",
+        conversation_id: "conv-1",
+        assistant_message_id: "assistant-2",
+        sequence: 2,
+        created_at: "2026-07-14T00:00:02.000Z",
+        delta: "second answer",
+        content_length: 13,
+      },
+    });
+
+    expect(secondCreated.lastSequence).toBe(1);
+    expect(secondDelta.messages.find((item) => item.id === "assistant-2")?.content).toBe(
+      "second answer"
+    );
+  });
+
+  it("ignores events from another conversation or inactive request", () => {
+    const current = mergeChatStreamEvent(
+      createInitialChatStreamState([], "conv-b"),
+      createdEvent("req-b", "conv-b", "2")
+    );
+
+    const staleConversation = mergeChatStreamEvent(current, {
+      event: "message.delta",
+      sequence: 9,
+      data: {
+        schema_version: "1",
+        request_id: "req-a",
+        conversation_id: "conv-a",
+        assistant_message_id: "assistant-a",
+        sequence: 9,
+        created_at: "2026-07-14T00:00:03.000Z",
+        delta: "stale",
+        content_length: 5,
+      },
+    });
+    const staleRequest = mergeChatStreamEvent(current, {
+      event: "message.delta",
+      sequence: 9,
+      data: {
+        schema_version: "1",
+        request_id: "req-a",
+        conversation_id: "conv-b",
+        assistant_message_id: "assistant-a",
+        sequence: 9,
+        created_at: "2026-07-14T00:00:03.000Z",
+        delta: "stale",
+        content_length: 5,
+      },
+    });
+
+    expect(staleConversation).toBe(current);
+    expect(staleRequest).toBe(current);
   });
 });

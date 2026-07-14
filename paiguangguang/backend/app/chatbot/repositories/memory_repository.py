@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.observability import log_chatbot_event
 from app.chatbot.models.memory import ChatbotMemory
+from app.chatbot.models.conversation import ChatbotConversation
 from app.chatbot.repositories.cursor import MemoryCursor, MemoryCursorError, encode_memory_cursor
 
 
@@ -283,9 +284,20 @@ class MemoryRepository:
 
         now = _utcnow()
         with self._session() as session:
-            stmt = select(ChatbotMemory).where(
-                ChatbotMemory.user_id == user_id,
-                ChatbotMemory.deleted_at.is_(None),
+            stmt = (
+                select(ChatbotMemory)
+                .outerjoin(
+                    ChatbotConversation,
+                    ChatbotConversation.id == ChatbotMemory.conversation_id,
+                )
+                .where(
+                    ChatbotMemory.user_id == user_id,
+                    ChatbotMemory.deleted_at.is_(None),
+                    or_(
+                        ChatbotMemory.conversation_id.is_(None),
+                        ChatbotConversation.deleted_at.is_(None),
+                    ),
+                )
             )
             if status is None:
                 stmt = stmt.where(ChatbotMemory.status.in_(("candidate", "active", "superseded")))

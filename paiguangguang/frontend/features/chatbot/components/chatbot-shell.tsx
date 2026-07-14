@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 
 import { chatbotApiClient } from "../api/client";
@@ -7,9 +8,11 @@ import { ChatConversationPanel } from "./chat-conversation-panel";
 import { ConversationSidebar } from "./conversation-sidebar";
 import { ChatbotStoreProvider } from "../stores/chatbot-store";
 import { useConversations } from "../hooks/use-conversations";
+import { MemoryPanel } from "./memory-panel";
 
 function ChatbotShellContent() {
   const { token } = useAuth();
+  const [view, setView] = useState<"chat" | "memories">("chat");
   const conversations = useConversations({
     token,
     client: chatbotApiClient,
@@ -17,7 +20,23 @@ function ChatbotShellContent() {
   });
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
+    <div>
+      <div className="mb-4 flex gap-2">
+        <button type="button" aria-pressed={view === "chat"} onClick={() => setView("chat")}>
+          Chat
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "memories"}
+          onClick={() => setView("memories")}
+        >
+          Memories
+        </button>
+      </div>
+      {view === "memories" ? (
+        <MemoryPanel token={token} />
+      ) : (
+        <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
       <ConversationSidebar
         selectedStatus={conversations.selectedStatus}
         selectedConversationId={conversations.selectedConversationId}
@@ -41,13 +60,15 @@ function ChatbotShellContent() {
         conversation={conversations.selectedConversation}
         activeGeneration={conversations.selectedConversationDetail?.active_generation ?? null}
       />
+        </div>
+      )}
     </div>
   );
 }
 
 export function ChatbotShell() {
   const { user } = useAuth();
-  const storageKey = user ? `paiguangguang.chatbot:${user.id}` : "paiguangguang.chatbot:anonymous";
+  const storageKey = user ? `paiguangguang.chatbot:${user.id}` : null;
 
   return (
     <ChatbotStoreProvider storageKey={storageKey}>

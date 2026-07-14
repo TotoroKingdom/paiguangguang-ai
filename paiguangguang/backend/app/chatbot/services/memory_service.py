@@ -20,6 +20,7 @@ from app.chatbot.models.memory import ChatbotMemory
 from app.chatbot.models.message import ChatbotMessage
 from app.chatbot.repositories.cursor import MemoryCursor, decode_memory_cursor
 from app.chatbot.repositories.memory_repository import MemoryPage, MemoryRecord, MemoryRepository
+from app.chatbot.repositories.job_repository import JobRepository
 from app.chatbot.observability import log_chatbot_event
 from app.chatbot.schemas.common import DeleteResultData
 from app.chatbot.schemas.memory import MemoryData, MemoryPageData, MemoryUpdateRequest
@@ -50,6 +51,7 @@ class MemoryService:
         settings: Settings | None = None,
         repository: MemoryRepository | None = None,
         semantic_index: SemanticMemoryIndex | None = None,
+        job_repository: JobRepository | None = None,
     ) -> None:
         self.settings = settings or get_settings()
         self.session_factory = session_factory or build_session_factory(self.settings)
@@ -62,6 +64,7 @@ class MemoryService:
         self._worker_started = False
         self._worker_lock = Lock()
         self._stop_event = Event()
+        self.job_repository = job_repository or JobRepository(self.session_factory)
 
     @contextmanager
     def _session(self) -> Iterator[Session]:
@@ -489,15 +492,34 @@ class MemoryService:
         return self._memory_data(updated)
 
     def delete_memory(self, session: Session, user_id: str, memory_id: str) -> DeleteResultData:
-        record = self.repository.soft_delete(memory_id, user_id)
-        if record is None:
+        row = session.scalar(
+            select(ChatbotMemory)
+            .where(
+                ChatbotMemory.id == memory_id,
+                ChatbotMemory.user_id == user_id,
+                ChatbotMemory.deleted_at.is_(None),
+            )
+            .with_for_update()
+        )
+        if row is None:
             raise ChatbotApiError(
                 status_code=404,
                 code="CHATBOT_MEMORY_NOT_FOUND",
                 message="Memory not found",
             )
-        self._sync_semantic_delete(record.id, record.user_id)
-        return DeleteResultData(id=record.id, status="deleted", cleanup_status="completed")
+        now = _utcnow()
+        row.status = "deleted"
+        row.embedding_status = "deleted"
+        row.deleted_at = now
+        row.updated_at = now
+        self.job_repository.enqueue(
+            session,
+            kind="cleanup_memory",
+            dedup_key=f"cleanup-memory:{row.id}",
+            payload={"user_id": user_id, "memory_id": row.id},
+        )
+        session.commit()
+        return DeleteResultData(id=row.id, status="deleted", cleanup_status="pending")
 
 
 _MEMORY_SERVICE: MemoryService | None = None

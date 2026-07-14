@@ -7,6 +7,7 @@ from threading import Lock
 from typing import Any
 
 from app.core.config import Settings, get_settings
+from app.chatbot.observability import log_chatbot_event
 
 try:  # Optional dependency when Redis is configured.
     import redis  # type: ignore
@@ -46,8 +47,21 @@ class CancellationService:
         self._memory_store: dict[str, str] = {}
         self._lock = Lock()
         if self._redis_url and self._redis_module is not None:
-            self._client = self._redis_module.from_url(self._redis_url, decode_responses=True)
-            self._client.ping()
+            try:
+                self._client = self._redis_module.from_url(self._redis_url, decode_responses=True)
+                self._client.ping()
+            except Exception as exc:
+                self._degrade("ping", exc)
+
+    def _degrade(self, operation: str, exc: Exception) -> None:
+        self._client = None
+        log_chatbot_event(
+            "chatbot.redis.degraded",
+            source="cancellation",
+            reason=type(exc).__name__,
+            status="memory_fallback",
+            extra={"operation": operation},
+        )
 
     @staticmethod
     def build_key(conversation_id: str, assistant_message_id: str) -> str:
@@ -101,8 +115,11 @@ class CancellationService:
     def get(self, conversation_id: str, assistant_message_id: str) -> CancellationRecord | None:
         key = self.build_key(conversation_id, assistant_message_id)
         if self._client is not None:
-            payload = self._client.get(key)
-            return self._deserialize(payload) if isinstance(payload, str) else None
+            try:
+                payload = self._client.get(key)
+                return self._deserialize(payload) if isinstance(payload, str) else None
+            except Exception as exc:
+                self._degrade("get", exc)
         with self._lock:
             payload = self._memory_store.get(key)
         return self._deserialize(payload) if payload is not None else None
@@ -118,11 +135,14 @@ class CancellationService:
         payload = self._serialize(record)
 
         if self._client is not None:
-            stored = self._client.set(key, payload, nx=True, px=self._ttl_seconds * 1000)
-            if not stored:
-                current = self.get(conversation_id, assistant_message_id)
-                return current or record
-            return record
+            try:
+                stored = self._client.set(key, payload, nx=True, px=self._ttl_seconds * 1000)
+                if not stored:
+                    current = self.get(conversation_id, assistant_message_id)
+                    return current or record
+                return record
+            except Exception as exc:
+                self._degrade("set", exc)
 
         with self._lock:
             existing = self._memory_store.get(key)
@@ -138,8 +158,11 @@ class CancellationService:
     def clear(self, conversation_id: str, assistant_message_id: str) -> None:
         key = self.build_key(conversation_id, assistant_message_id)
         if self._client is not None:
-            self._client.delete(key)
-            return
+            try:
+                self._client.delete(key)
+                return
+            except Exception as exc:
+                self._degrade("delete", exc)
         with self._lock:
             self._memory_store.pop(key, None)
 

@@ -61,6 +61,28 @@ class _TerminalState:
     finish_reason: str | None = None
 
 
+@dataclass(slots=True)
+class _CheckpointTracker:
+    interval_seconds: float
+    chars: int
+    last_checkpoint_at: float
+    last_content_length: int = 0
+    has_checkpoint: bool = False
+
+    def should_checkpoint(self, *, now: float, content_length: int) -> bool:
+        if not self.has_checkpoint:
+            return True
+        return (
+            now - self.last_checkpoint_at >= self.interval_seconds
+            or content_length - self.last_content_length >= self.chars
+        )
+
+    def mark(self, *, now: float, content_length: int) -> None:
+        self.has_checkpoint = True
+        self.last_checkpoint_at = now
+        self.last_content_length = content_length
+
+
 class ChatStreamService:
     KEEPALIVE_SECONDS = 15
 
@@ -556,6 +578,13 @@ class ChatStreamService:
     ) -> None:
         request_id = request_id or get_request_id()
         started_at = perf_counter()
+        checkpoint = _CheckpointTracker(
+            interval_seconds=max(
+                0.1, float(self.settings.chatbot_checkpoint_interval_seconds)
+            ),
+            chars=max(1, int(self.settings.chatbot_checkpoint_chars)),
+            last_checkpoint_at=started_at,
+        )
         next_sequence = 2
         partial_content = ""
         usage: ChatCompletionUsage | None = None
@@ -630,14 +659,23 @@ class ChatStreamService:
                             latency_ms=int((first_delta_at - started_at) * 1000),
                             content_length=len(partial_content),
                         )
-                    self._checkpoint_partial(
-                        accepted,
-                        user_id,
-                        partial_content=partial_content,
-                        usage=usage,
-                        started_at=started_at,
-                        first_delta_at=first_delta_at,
-                    )
+                    checkpoint_at = perf_counter()
+                    if checkpoint.should_checkpoint(
+                        now=checkpoint_at,
+                        content_length=len(partial_content),
+                    ):
+                        self._checkpoint_partial(
+                            accepted,
+                            user_id,
+                            partial_content=partial_content,
+                            usage=usage,
+                            started_at=started_at,
+                            first_delta_at=first_delta_at,
+                        )
+                        checkpoint.mark(
+                            now=checkpoint_at,
+                            content_length=len(partial_content),
+                        )
                     queue.put(
                         ChatStreamEvent(
                             event="message.delta",
@@ -663,6 +701,10 @@ class ChatStreamService:
                         started_at=started_at,
                         first_delta_at=first_delta_at,
                     )
+                    checkpoint.mark(
+                        now=perf_counter(),
+                        content_length=len(partial_content),
+                    )
                     continue
 
                 if llm_event.kind == "completed":
@@ -678,7 +720,6 @@ class ChatStreamService:
                         first_delta_at=first_delta_at,
                         request_id=request_id,
                     )
-                    self._refresh_short_term_memory(user_id, accepted.conversation_id)
                     queue.put(
                         ChatStreamEvent(
                             event="message.completed",
@@ -894,6 +935,13 @@ class ChatStreamService:
             conversation.last_message_at = now
             conversation.updated_at = now
             session.flush()
+            self.chat_service.completion_jobs.enqueue_completed_turn(
+                session,
+                user_id=user_id,
+                conversation_id=accepted.conversation_id,
+                user_message_id=accepted.user_message_id,
+                assistant_message_id=accepted.assistant_message_id,
+            )
             log_chatbot_event(
                 "chatbot.stream.completed",
                 request_id=request_id,
