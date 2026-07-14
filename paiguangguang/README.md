@@ -436,3 +436,45 @@ v1 阶段完成后，需要满足以下验收标准：
 ## 9. License
 
 This project is for personal portfolio and learning purposes.
+
+## 10. Chatbot operations
+
+The Chatbot workspace is available at `/chat-bot` and its API is mounted at
+`/api/v1/chatbot`. Before deploying a backend revision, apply the database
+migrations from the `backend` directory:
+
+```bash
+alembic upgrade head
+```
+
+The durable job worker starts with the FastAPI application. It recovers queued
+or interrupted title, cleanup, and post-completion jobs after a restart. Redis
+is used as an optimization for live coordination; transient Redis failures
+degrade to the database-backed path instead of taking the Chatbot API offline.
+
+Emergency feature flags:
+
+```env
+# Backend: returns 503 CHATBOT_DISABLED for all Chatbot API routes when false.
+CHATBOT_ENABLED=true
+
+# Frontend: hides the navigation entry and makes /chat-bot return not found when false.
+NEXT_PUBLIC_CHATBOT_ENABLED=true
+```
+
+Set both flags to `false` for a complete rollback at the product boundary. The
+frontend value is embedded at build time, so rebuild/redeploy the frontend after
+changing it. The backend value requires an application restart.
+
+Useful verification commands:
+
+```bash
+# backend (from the repository root)
+pytest backend/tests/chatbot -q
+
+# frontend
+cd frontend
+npm test
+npm run lint
+npm run build
+```
