@@ -6,9 +6,5 @@ export default function ChatBotPage() {
   if (!isChatbotEnabled()) {
     notFound();
   }
-  return (
-    <div className="mx-auto w-full max-w-7xl">
-      <ChatbotShell />
-    </div>
-  );
+  return <ChatbotShell />;
 }

@@ -67,7 +67,7 @@ export function ChatConversationPanel({
             <p className="text-xs font-semibold uppercase tracking-wide text-clay">Chat workspace</p>
             <h2 className="mt-2 text-2xl font-semibold text-ink">{headerTitle}</h2>
             <p className="mt-2 text-sm leading-6 text-ink/60">
-              Model {conversation.model} · Status {statusLabel(conversation.status)}
+              Status {statusLabel(conversation.status)}
             </p>
             {activeGeneration ? (
               <p className="mt-2 text-sm leading-6 text-tide">

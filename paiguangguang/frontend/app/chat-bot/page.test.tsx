@@ -21,6 +21,7 @@ describe("ChatBotPage", () => {
     render(<ChatBotPage />);
 
     expect(screen.getByTestId("chatbot-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("chatbot-shell").parentElement).not.toHaveClass("max-w-7xl");
   });
 
   it("returns not found when the Chatbot flag is disabled", () => {
