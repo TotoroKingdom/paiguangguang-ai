@@ -16,3 +16,15 @@ export type LoginRequest = {
   email: string;
   password: string;
 };
+
+export type EncryptedLoginRequest = {
+  email: string;
+  encrypted_password: string;
+  key_id: string;
+};
+
+export type LoginEncryptionKeyData = {
+  key_id: string;
+  algorithm: "RSA-OAEP-256";
+  public_key: JsonWebKey;
+};
