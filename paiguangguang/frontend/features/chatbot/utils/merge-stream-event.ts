@@ -9,6 +9,7 @@ export type ChatStreamPhase = "idle" | "streaming" | "completed" | "failed" | "c
 
 export type ChatStreamState = {
   messages: MessageData[];
+  conversationId: string | null;
   activeRequestId: string | null;
   activeAssistantMessageId: string | null;
   lastSequence: number;
@@ -88,9 +89,22 @@ function hasRequestId(data: unknown): data is { request_id: string } {
   return !!data && typeof data === "object" && "request_id" in data && typeof (data as { request_id?: unknown }).request_id === "string";
 }
 
-export function createInitialChatStreamState(messages: MessageData[] = []): ChatStreamState {
+function hasConversationId(data: unknown): data is { conversation_id: string } {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      "conversation_id" in data &&
+      typeof (data as { conversation_id?: unknown }).conversation_id === "string"
+  );
+}
+
+export function createInitialChatStreamState(
+  messages: MessageData[] = [],
+  conversationId: string | null = null
+): ChatStreamState {
   return {
     messages: sortMessages(messages),
+    conversationId,
     activeRequestId: null,
     activeAssistantMessageId: null,
     lastSequence: 0,
@@ -104,23 +118,40 @@ export function mergeChatStreamEvent(
   event: ParsedChatStreamEvent
 ): ChatStreamState {
   const requestId = hasRequestId(event.data) ? event.data.request_id : null;
-  if (event.sequence > 0 && event.sequence <= state.lastSequence && state.activeRequestId === requestId) {
+  const eventConversationId = hasConversationId(event.data) ? event.data.conversation_id : null;
+
+  if (
+    state.conversationId !== null &&
+    eventConversationId !== null &&
+    eventConversationId !== state.conversationId
+  ) {
     return state;
   }
 
   if (event.event === "message.created") {
     const data = event.data as StreamMessageCreatedData;
+    if (state.activeRequestId === data.request_id && event.sequence <= state.lastSequence) {
+      return state;
+    }
     const userMessage = createMessageFromSnapshot(data, data.request_id, "user");
     const assistantMessage = createMessageFromSnapshot(data, data.request_id, "assistant");
     return {
       ...state,
       messages: upsertMessage(upsertMessage(state.messages, userMessage), assistantMessage),
+      conversationId: data.conversation_id,
       activeRequestId: data.request_id,
       activeAssistantMessageId: data.assistant_message_id,
-      lastSequence: Math.max(state.lastSequence, event.sequence),
+      lastSequence: event.sequence,
       phase: assistantMessage.status === "completed" ? "completed" : "streaming",
       error: null,
     };
+  }
+
+  if (requestId === null || requestId !== state.activeRequestId) {
+    return state;
+  }
+  if (event.sequence > 0 && event.sequence <= state.lastSequence) {
+    return state;
   }
 
   if (event.event === "message.delta") {
