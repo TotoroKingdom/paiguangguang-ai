@@ -94,6 +94,7 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const allowAutoSelectRef = useRef(true);
+  const detailRequestVersionRef = useRef(0);
 
   const setStatusLoading = useCallback((status: ConversationStatus, next: boolean) => {
     setLoading((current) => ({ ...current, [status]: next }));
@@ -113,6 +114,18 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
     },
     [pathname, router, searchParams]
   );
+
+  useEffect(() => {
+    detailRequestVersionRef.current += 1;
+    setDetailLoading(false);
+    setDetailError(null);
+  }, [token]);
+
+  useEffect(() => {
+    return () => {
+      detailRequestVersionRef.current += 1;
+    };
+  }, []);
 
   const loadPage = useCallback(
     async (status: ConversationStatus, options: LoadOptions = {}) => {
@@ -161,11 +174,17 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
         return null;
       }
       allowAutoSelectRef.current = true;
+      const requestVersion = detailRequestVersionRef.current + 1;
+      detailRequestVersionRef.current = requestVersion;
+      const ownsRequest = () => detailRequestVersionRef.current === requestVersion;
 
       setDetailLoading(true);
       setDetailError(null);
       try {
         const detail = await client.getConversation({ token, conversationId });
+        if (!ownsRequest()) {
+          return null;
+        }
         const summary = conversationDetailToSummary(detail);
         dispatch({ type: "upsert_conversation", conversation: summary });
         dispatch({ type: "set_selected_status", status: summary.status });
@@ -176,6 +195,9 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
         }
         return detail;
       } catch (error) {
+        if (!ownsRequest()) {
+          return null;
+        }
         if (error instanceof ApiError && error.status === 404) {
           dispatch({ type: "set_selected_conversation_id", conversationId: null });
           dispatch({ type: "set_selected_status", status: "active" });
@@ -186,7 +208,9 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
         setDetailError(normalizeErrorMessage(error));
         return null;
       } finally {
-        setDetailLoading(false);
+        if (ownsRequest()) {
+          setDetailLoading(false);
+        }
       }
     },
     [clearUrl, dispatch, pushUrl, token]
