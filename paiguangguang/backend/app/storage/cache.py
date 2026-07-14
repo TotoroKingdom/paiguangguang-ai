@@ -154,6 +154,9 @@ class CacheAdapter(Protocol):
     def set(self, key: str, value: Any, *, ttl_seconds: int | None = None) -> None:
         ...
 
+    def add_if_absent(self, key: str, value: Any, *, ttl_seconds: int) -> bool:
+        ...
+
     def delete(self, key: str) -> None:
         ...
 
@@ -184,6 +187,18 @@ class InMemoryCacheAdapter:
         expires_at = _utcnow() + timedelta(seconds=ttl_seconds) if ttl_seconds is not None else None
         with self._lock:
             self._values[key] = (payload, expires_at)
+
+    def add_if_absent(self, key: str, value: Any, *, ttl_seconds: int) -> bool:
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        expires_at = _utcnow() + timedelta(seconds=ttl_seconds)
+        with self._lock:
+            record = self._values.get(key)
+            if record is not None:
+                _, existing_expiry = record
+                if existing_expiry is None or existing_expiry > _utcnow():
+                    return False
+            self._values[key] = (payload, expires_at)
+            return True
 
     def delete(self, key: str) -> None:
         with self._lock:
@@ -235,6 +250,16 @@ class RedisCacheAdapter:
             self._client.setex(namespaced_key, ttl_seconds, payload)
             return
         self._client.set(namespaced_key, payload)
+
+    def add_if_absent(self, key: str, value: Any, *, ttl_seconds: int) -> bool:
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str)
+        result = self._client.set(
+            self._namespaced_key(key),
+            payload,
+            nx=True,
+            ex=ttl_seconds,
+        )
+        return bool(result)
 
     def delete(self, key: str) -> None:
         self._client.delete(self._namespaced_key(key))

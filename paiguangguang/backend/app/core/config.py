@@ -42,6 +42,7 @@ class Settings:
     jwt_secret_key: str = "change-me-in-development-secret-key"
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
+    auth_login_private_key_path: str = "./auth-login-private-key.pem"
     admin_user_email: str = ""
     admin_user_password: str = ""
     admin_user_display_name: str = "Admin"
@@ -111,6 +112,10 @@ def get_settings() -> Settings:
         jwt_secret_key=os.getenv("JWT_SECRET_KEY", "change-me-in-development-secret-key"),
         jwt_algorithm=os.getenv("JWT_ALGORITHM", "HS256"),
         jwt_access_token_expire_minutes=int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "60")),
+        auth_login_private_key_path=os.getenv(
+            "AUTH_LOGIN_PRIVATE_KEY_PATH",
+            "./auth-login-private-key.pem",
+        ),
         admin_user_email=os.getenv("ADMIN_USER_EMAIL", ""),
         admin_user_password=os.getenv("ADMIN_USER_PASSWORD", ""),
         admin_user_display_name=os.getenv("ADMIN_USER_DISPLAY_NAME", "Admin"),

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import base64
+import json
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from app.main import app as fastapi_app
 from app.db.base import Base
@@ -13,10 +18,15 @@ from app.db.models import User
 from app.db.session import get_db_session
 from app.core.config import get_settings
 from app.services.auth import AuthService, get_auth_service
+from app.services.login_encryption import LoginEncryptionService, get_login_encryption_service
 from app.storage.cache import InMemoryCacheAdapter
 
 
-def _build_test_app(session: Session, auth_service: AuthService) -> FastAPI:
+def _build_test_app(
+    session: Session,
+    auth_service: AuthService,
+    login_encryption_service: LoginEncryptionService,
+) -> FastAPI:
     app = fastapi_app
     app.dependency_overrides.clear()
 
@@ -25,7 +35,56 @@ def _build_test_app(session: Session, auth_service: AuthService) -> FastAPI:
 
     app.dependency_overrides[get_db_session] = override_db_session
     app.dependency_overrides[get_auth_service] = lambda: auth_service
+    app.dependency_overrides[get_login_encryption_service] = lambda: login_encryption_service
     return app
+
+
+def _build_login_encryption(tmp_path, suffix: str):
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    key_path = tmp_path / f"login-key-{suffix}.pem"
+    key_path.write_bytes(
+        private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    settings = get_settings()
+    settings = settings.__class__(
+        **{
+            **settings.__dict__,
+            "auth_login_private_key_path": str(key_path),
+            "redis_url": "",
+        }
+    )
+    return private_key, LoginEncryptionService(
+        settings=settings,
+        cache=InMemoryCacheAdapter(),
+    )
+
+
+def _encrypted_login_body(private_key, service, *, password: str, nonce: str):
+    plaintext = json.dumps(
+        {
+            "password": password,
+            "issued_at": int(datetime.now(timezone.utc).timestamp()),
+            "nonce": nonce,
+        },
+        separators=(",", ":"),
+    ).encode()
+    ciphertext = private_key.public_key().encrypt(
+        plaintext,
+        padding.OAEP(
+            mgf=padding.MGF1(hashes.SHA256()),
+            algorithm=hashes.SHA256(),
+            label=None,
+        ),
+    )
+    return {
+        "email": "admin@example.com",
+        "encrypted_password": base64.urlsafe_b64encode(ciphertext).rstrip(b"=").decode(),
+        "key_id": service.get_public_key_data().key_id,
+    }
 
 
 def _create_user(session: Session, auth_service: AuthService) -> User:
@@ -49,13 +108,23 @@ def test_auth_login_me_and_invalid_token(monkeypatch, tmp_path) -> None:
     session = session_factory()
     auth_service = AuthService()
     _create_user(session, auth_service)
+    private_key, encryption_service = _build_login_encryption(tmp_path, "valid")
 
-    app = _build_test_app(session, auth_service)
+    app = _build_test_app(session, auth_service, encryption_service)
     client = TestClient(app)
+
+    key_response = client.get("/api/v1/auth/encryption-key")
+    assert key_response.status_code == 200
+    assert key_response.json()["data"]["key_id"] == encryption_service.get_public_key_data().key_id
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@example.com", "password": "Secret123!"},
+        json=_encrypted_login_body(
+            private_key,
+            encryption_service,
+            password="Secret123!",
+            nonce="valid-login-nonce-0001",
+        ),
     )
     assert login_response.status_code == 200
     login_body = login_response.json()
@@ -101,19 +170,31 @@ def test_auth_login_rejects_invalid_password(monkeypatch, tmp_path) -> None:
     session = session_factory()
     auth_service = AuthService()
     _create_user(session, auth_service)
+    private_key, encryption_service = _build_login_encryption(tmp_path, "invalid")
 
-    app = _build_test_app(session, auth_service)
+    app = _build_test_app(session, auth_service, encryption_service)
     client = TestClient(app)
 
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@example.com", "password": "WrongPassword!"},
+        json=_encrypted_login_body(
+            private_key,
+            encryption_service,
+            password="WrongPassword!",
+            nonce="invalid-login-nonce-01",
+        ),
     )
 
     assert response.status_code == 401
     body = response.json()
     assert body["success"] is False
     assert body["error"]["message"] == "Invalid email or password"
+
+    plaintext_response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "Secret123!"},
+    )
+    assert plaintext_response.status_code == 422
 
     app.dependency_overrides.clear()
     session.close()
@@ -130,15 +211,21 @@ def test_auth_login_populates_cached_user_context(monkeypatch, tmp_path) -> None
     session = session_factory()
     auth_service = AuthService()
     _create_user(session, auth_service)
+    private_key, encryption_service = _build_login_encryption(tmp_path, "cache")
     cache = InMemoryCacheAdapter()
     monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
 
-    app = _build_test_app(session, auth_service)
+    app = _build_test_app(session, auth_service, encryption_service)
     client = TestClient(app)
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@example.com", "password": "Secret123!"},
+        json=_encrypted_login_body(
+            private_key,
+            encryption_service,
+            password="Secret123!",
+            nonce="cache-login-nonce-0001",
+        ),
     )
 
     assert login_response.status_code == 200
@@ -166,15 +253,21 @@ def test_auth_me_uses_cached_user_context(monkeypatch, tmp_path) -> None:
     session = session_factory()
     auth_service = AuthService()
     _create_user(session, auth_service)
+    private_key, encryption_service = _build_login_encryption(tmp_path, "me-cache")
     cache = InMemoryCacheAdapter()
     monkeypatch.setattr("app.services.auth.get_cache_adapter", lambda settings=None: cache, raising=False)
 
-    app = _build_test_app(session, auth_service)
+    app = _build_test_app(session, auth_service, encryption_service)
     client = TestClient(app)
 
     login_response = client.post(
         "/api/v1/auth/login",
-        json={"email": "admin@example.com", "password": "Secret123!"},
+        json=_encrypted_login_body(
+            private_key,
+            encryption_service,
+            password="Secret123!",
+            nonce="me-cache-login-nonce",
+        ),
     )
     access_token = login_response.json()["data"]["access_token"]
     auth_service.get_user_by_id = lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("database lookup should be skipped"))  # type: ignore[method-assign]

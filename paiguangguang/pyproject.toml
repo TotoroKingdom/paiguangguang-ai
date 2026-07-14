@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.5",
     "chromadb>=1.5.9",
+    "cryptography>=43,<46",
     "fastapi>=0.139.0",
     "PyJWT>=2.9,<3",
     "passlib>=1.7.4",

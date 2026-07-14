@@ -5,9 +5,16 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 
-class LoginRequest(BaseModel):
+class EncryptedLoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=1, max_length=256)
+    encrypted_password: str = Field(min_length=1, max_length=4096)
+    key_id: str = Field(min_length=1, max_length=128)
+
+
+class LoginEncryptionKeyData(BaseModel):
+    key_id: str
+    algorithm: str = "RSA-OAEP-256"
+    public_key: dict[str, object]
 
 
 class AuthTokenData(BaseModel):

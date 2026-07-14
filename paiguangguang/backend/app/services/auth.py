@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.db.models import User
 from app.db.session import get_db_session
-from app.schemas.auth import AuthTokenData, AuthenticatedUserContextData, LoginRequest, UserData
+from app.schemas.auth import AuthTokenData, AuthenticatedUserContextData, UserData
 from app.storage.cache import build_auth_user_context_cache_key, get_cache_adapter
 
 password_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -149,8 +149,8 @@ class AuthService:
             )
         return decoded
 
-    def login(self, session: Session, request: LoginRequest) -> AuthTokenData:
-        user = self.authenticate_user(session, request.email, request.password)
+    def login_with_password(self, session: Session, email: str, password: str) -> AuthTokenData:
+        user = self.authenticate_user(session, email, password)
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
