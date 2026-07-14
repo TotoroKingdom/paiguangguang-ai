@@ -124,6 +124,18 @@ class ShortTermMemoryService:
             self._best_effort_cache(user_id, conversation_id, context, resolved_before)
             return context
 
+    def clear_conversation(self, user_id: str, conversation_id: str) -> None:
+        if not self.settings.redis_url:
+            return
+        if self._adapter is None:
+            raise RuntimeError("Redis short-term memory is unavailable")
+        for memory_type in ("summary", "recent", "state"):
+            self._adapter.delete(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                memory_type=memory_type,
+            )
+
     def _read_cached_context(
         self,
         *,
