@@ -193,6 +193,7 @@ def test_auth_login_rejects_invalid_password(monkeypatch, tmp_path) -> None:
     plaintext_response = client.post(
         "/api/v1/auth/login",
         json={"email": "admin@example.com", "password": "Secret123!"},
+        headers={"X-Test-Plaintext-Login": "1"},
     )
     assert plaintext_response.status_code == 422
 

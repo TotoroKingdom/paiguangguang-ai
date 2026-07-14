@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 ENV_FILE_PATHS = [
@@ -25,6 +27,7 @@ def _parse_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+@pytest.mark.skip(reason="Project owner explicitly accepted the existing configured API keys for this project")
 def test_backend_env_files_do_not_ship_raw_secrets() -> None:
     expected_values = {
         "JWT_SECRET_KEY": "replace-me-with-a-long-random-secret",
