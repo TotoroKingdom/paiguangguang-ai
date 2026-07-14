@@ -46,6 +46,16 @@ function makeDetail(id: string, overrides: Partial<ConversationDetailData> = {})
   };
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function makeClient(overrides: Partial<ChatbotApiClient> = {}): ChatbotApiClient {
   return {
     listConversations: vi.fn(),
@@ -251,6 +261,45 @@ describe("useConversations", () => {
     });
 
     expect(replace).toHaveBeenCalledWith("/chat-bot");
+  });
+
+  it("ignores a stale conversation detail response after a newer selection", async () => {
+    const first = deferred<ConversationDetailData>();
+    const second = deferred<ConversationDetailData>();
+    const client = makeClient({
+      listConversations: vi.fn().mockResolvedValue({
+        items: [],
+        next_cursor: null,
+        has_more: false,
+      }),
+      getConversation: vi
+        .fn()
+        .mockImplementationOnce(() => first.promise)
+        .mockImplementationOnce(() => second.promise),
+    });
+    const { result } = renderConversationsHook(client);
+
+    await waitFor(() => expect(client.listConversations).toHaveBeenCalledTimes(1));
+
+    let firstSelection!: Promise<ConversationDetailData | null>;
+    let secondSelection!: Promise<ConversationDetailData | null>;
+    act(() => {
+      firstSelection = result.current.openConversation("conv-a");
+      secondSelection = result.current.openConversation("conv-b");
+    });
+
+    await act(async () => {
+      second.resolve(makeDetail("conv-b", { title: "Newest" }));
+      await secondSelection;
+    });
+    await act(async () => {
+      first.resolve(makeDetail("conv-a", { title: "Stale" }));
+      await firstSelection;
+    });
+
+    expect(result.current.selectedConversationId).toBe("conv-b");
+    expect(result.current.selectedConversation?.title).toBe("Newest");
+    expect(push).toHaveBeenLastCalledWith("/chat-bot?conversation=conv-b");
   });
 
   it("hydrates from session storage without refetching when the page is already cached", async () => {
