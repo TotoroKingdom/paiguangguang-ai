@@ -5,25 +5,37 @@ import type { DeleteResultData } from "../types/conversation";
 import type {
   MemoryData,
   MemoryPageData,
-  MemoryStatus,
+  MemoryListStatus,
+  MemoryType,
   MemoryUpdateRequest,
 } from "../types/memory";
 
 export const memoryApiClient = {
   listMemories(options: {
     token: string | null;
-    status: MemoryStatus;
+    status: MemoryListStatus;
+    memoryType?: MemoryType | null;
+    conversationId?: string | null;
     cursor: string | null;
     limit: number;
   }) {
-    const query = new URLSearchParams({
-      status: options.status,
-      limit: String(options.limit),
-    });
+    const query = new URLSearchParams({ status: options.status });
+    if (options.memoryType) {
+      query.set("memory_type", options.memoryType);
+    }
+    if (options.conversationId) {
+      query.set("conversation_id", options.conversationId);
+    }
+    query.set("limit", String(options.limit));
     if (options.cursor) {
       query.set("cursor", options.cursor);
     }
     return getJson<MemoryPageData>(`${CHATBOT_API_BASE}/memories?${query}`, {
+      token: options.token,
+    });
+  },
+  getMemory(options: { token: string | null; memoryId: string }) {
+    return getJson<MemoryData>(`${CHATBOT_API_BASE}/memories/${options.memoryId}`, {
       token: options.token,
     });
   },
