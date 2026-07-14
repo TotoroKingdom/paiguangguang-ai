@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { isChatbotEnabled } from "@/lib/features";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -18,6 +19,9 @@ export function SiteNav() {
   const pathname = usePathname();
   const { status, user, logout } = useAuth();
   const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
+  const visibleNavItems = navItems.filter(
+    (item) => item.href !== "/chat-bot" || isChatbotEnabled()
+  );
 
   return (
     <header className="border-b border-ink/10 bg-paper/85 backdrop-blur">
@@ -27,7 +31,7 @@ export function SiteNav() {
             Pai Guangguang AI Lab
           </Link>
           <div className="flex flex-wrap gap-2">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
