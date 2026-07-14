@@ -65,7 +65,7 @@ export function useMessages({
 
   const loadHistory = useCallback(
     async (before: string | null = null, append = false) => {
-      if (!token || !conversationId || conversationStatus === "deleted") {
+      if (!token || !conversationId) {
         return null;
       }
 
@@ -91,7 +91,7 @@ export function useMessages({
   );
 
   useEffect(() => {
-    if (!conversationId || !token || conversationStatus === "deleted") {
+    if (!conversationId || !token) {
       activeConversationRef.current = conversationId;
       resetConversationState();
       return;

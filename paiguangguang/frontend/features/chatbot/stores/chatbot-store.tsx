@@ -27,7 +27,7 @@ export type ChatbotStoreState = {
 };
 
 type ChatbotStoreSnapshot = {
-  version: 1;
+  version: 2;
   state: ChatbotStoreState;
 };
 
@@ -48,7 +48,7 @@ const PAGE_TEMPLATE: ConversationPageState = {
   loaded: false,
 };
 
-export const CONVERSATION_STATUSES: ConversationStatus[] = ["active", "archived", "deleted"];
+export const CONVERSATION_STATUSES: ConversationStatus[] = ["active", "archived"];
 
 export function createInitialChatbotStoreState(): ChatbotStoreState {
   return {
@@ -57,7 +57,6 @@ export function createInitialChatbotStoreState(): ChatbotStoreState {
     pages: {
       active: { ...PAGE_TEMPLATE, items: [] },
       archived: { ...PAGE_TEMPLATE, items: [] },
-      deleted: { ...PAGE_TEMPLATE, items: [] },
     },
   };
 }
@@ -78,7 +77,6 @@ function cloneState(state: ChatbotStoreState): ChatbotStoreState {
     pages: {
       active: clonePage(state.pages.active),
       archived: clonePage(state.pages.archived),
-      deleted: clonePage(state.pages.deleted),
     },
   };
 }
@@ -106,7 +104,6 @@ function upsertConversation(pages: Record<ConversationStatus, ConversationPageSt
   const nextPages = {
     active: removeConversationFromPage(pages.active, conversation.id),
     archived: removeConversationFromPage(pages.archived, conversation.id),
-    deleted: removeConversationFromPage(pages.deleted, conversation.id),
   };
   const targetPage = nextPages[conversation.status];
   targetPage.items = sortByRecency([conversation, ...targetPage.items]);
@@ -118,7 +115,7 @@ function normalizeSnapshot(snapshot: unknown): ChatbotStoreState | null {
     return null;
   }
   const candidate = snapshot as Partial<ChatbotStoreSnapshot>;
-  if (candidate.version !== 1 || !candidate.state) {
+  if (candidate.version !== 2 || !candidate.state) {
     return null;
   }
   const state = candidate.state;
@@ -180,7 +177,6 @@ function reducer(state: ChatbotStoreState, action: ChatbotStoreAction): ChatbotS
         pages: {
           active: removeConversationFromPage(state.pages.active, action.conversationId),
           archived: removeConversationFromPage(state.pages.archived, action.conversationId),
-          deleted: removeConversationFromPage(state.pages.deleted, action.conversationId),
         },
       };
     case "clear_pages":
@@ -236,7 +232,7 @@ export function ChatbotStoreProvider({
       return;
     }
     const snapshot: ChatbotStoreSnapshot = {
-      version: 1,
+      version: 2,
       state,
     };
     window.sessionStorage.setItem(normalizedStorageKey, JSON.stringify(snapshot));

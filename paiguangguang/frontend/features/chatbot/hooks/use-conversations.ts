@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ApiError } from "@/lib/api";
@@ -35,7 +35,6 @@ function createStatusFlags(value: boolean): StatusFlags {
   return {
     active: value,
     archived: value,
-    deleted: value,
   };
 }
 
@@ -43,7 +42,6 @@ function createErrorFlags(value: string | null): ErrorFlags {
   return {
     active: value,
     archived: value,
-    deleted: value,
   };
 }
 
@@ -74,7 +72,7 @@ function buildConversationHref(pathname: string, searchParams: URLSearchParams, 
 }
 
 function findConversationById(state: ChatbotStoreState, conversationId: string) {
-  for (const status of ["active", "archived", "deleted"] as const) {
+  for (const status of ["active", "archived"] as const) {
     const found = state.pages[status].items.find((item) => item.id === conversationId);
     if (found) {
       return found;
@@ -95,6 +93,7 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
   const [selectedConversationDetail, setSelectedConversationDetail] = useState<ConversationDetailData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const allowAutoSelectRef = useRef(true);
 
   const setStatusLoading = useCallback((status: ConversationStatus, next: boolean) => {
     setLoading((current) => ({ ...current, [status]: next }));
@@ -161,6 +160,7 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
       if (!token) {
         return null;
       }
+      allowAutoSelectRef.current = true;
 
       setDetailLoading(true);
       setDetailError(null);
@@ -213,6 +213,7 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
       setDetailError(null);
       try {
         const created = await client.createConversation({ token }, request);
+        allowAutoSelectRef.current = true;
         dispatch({ type: "upsert_conversation", conversation: created });
         dispatch({ type: "set_selected_status", status: created.status });
         dispatch({ type: "set_selected_conversation_id", conversationId: created.id });
@@ -321,24 +322,21 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
 
       try {
         await client.deleteConversation({ token, conversationId: conversation.id });
-        const existing = findConversationById(state, conversation.id) ?? conversation;
-        dispatch({
-          type: "upsert_conversation",
-          conversation: {
-            ...existing,
-            status: "deleted",
-          },
-        });
-        dispatch({ type: "set_selected_status", status: "deleted" });
-        dispatch({ type: "set_selected_conversation_id", conversationId: existing.id });
-        setSelectedConversationDetail(null);
-        return existing.id;
+        dispatch({ type: "remove_conversation", conversationId: conversation.id });
+        if (state.selectedConversationId === conversation.id) {
+          allowAutoSelectRef.current = false;
+          dispatch({ type: "set_selected_conversation_id", conversationId: null });
+          dispatch({ type: "set_selected_status", status: "active" });
+          setSelectedConversationDetail(null);
+          clearUrl();
+        }
+        return conversation.id;
       } catch (error) {
         setDetailError(normalizeErrorMessage(error));
         return null;
       }
     },
-    [dispatch, state, token]
+    [clearUrl, dispatch, state.selectedConversationId, token]
   );
 
   const refreshCurrentStatus = useCallback(async () => {
@@ -378,6 +376,9 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
     }
 
     if (!urlConversationId && !state.selectedConversationId) {
+      if (!allowAutoSelectRef.current) {
+        return;
+      }
       const firstConversation = state.pages[state.selectedStatus].items[0];
       if (firstConversation) {
         void openConversation(firstConversation.id, { syncUrl: true });
