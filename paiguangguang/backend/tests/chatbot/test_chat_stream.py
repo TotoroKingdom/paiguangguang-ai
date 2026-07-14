@@ -72,7 +72,9 @@ def _build_service(session_factory: sessionmaker[Session], llm_client: FakeLLMCl
     return ChatStreamService(chat_service=chat_service)
 
 
-def test_chat_stream_service_emits_created_delta_completed_usage_and_end(tmp_path) -> None:
+def test_chat_stream_service_emits_created_delta_completed_usage_and_end(
+    monkeypatch, tmp_path
+) -> None:
     session_factory = _build_session_factory(tmp_path)
     conversation_repo = ConversationRepository(session_factory)
     fake_llm = FakeLLMClient(
@@ -207,6 +209,11 @@ def test_chat_stream_throttles_many_small_delta_checkpoints(monkeypatch, tmp_pat
         ]
     )
     service = _build_service(session_factory, fake_llm)
+
+    def forbidden_refresh(*args, **kwargs):
+        raise AssertionError("summary refresh must not run before terminal SSE")
+
+    monkeypatch.setattr(service, "_refresh_short_term_memory", forbidden_refresh)
     checkpoint_calls = 0
     original = service._checkpoint_partial
 
