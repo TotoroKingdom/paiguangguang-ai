@@ -197,9 +197,11 @@ const ChatbotStoreContext = createContext<ChatbotStoreValue | null>(null);
 export function ChatbotStoreProvider({
   children,
   storageKey,
+  fallback = null,
 }: {
   children: ReactNode;
   storageKey?: string | null;
+  fallback?: ReactNode;
 }) {
   const normalizedStorageKey = storageKey?.trim() || null;
   const previousStorageKey = useRef(normalizedStorageKey);
@@ -213,7 +215,11 @@ export function ChatbotStoreProvider({
   }, [normalizedStorageKey]);
 
   return (
-    <ScopedChatbotStoreProvider key={normalizedStorageKey ?? "logged-out"} storageKey={normalizedStorageKey}>
+    <ScopedChatbotStoreProvider
+      key={normalizedStorageKey ?? "logged-out"}
+      storageKey={normalizedStorageKey}
+      fallback={fallback}
+    >
       {children}
     </ScopedChatbotStoreProvider>
   );
@@ -222,9 +228,11 @@ export function ChatbotStoreProvider({
 function ScopedChatbotStoreProvider({
   children,
   storageKey,
+  fallback,
 }: {
   children: ReactNode;
   storageKey: string | null;
+  fallback: ReactNode;
 }) {
   const [state, dispatch] = useReducer(reducer, undefined, createInitialChatbotStoreState);
   const [isHydrated, setIsHydrated] = useState(!storageKey);
@@ -272,7 +280,7 @@ function ScopedChatbotStoreProvider({
   );
 
   if (!isHydrated) {
-    return null;
+    return <ChatbotStoreContext.Provider value={value}>{fallback}</ChatbotStoreContext.Provider>;
   }
 
   return <ChatbotStoreContext.Provider value={value}>{children}</ChatbotStoreContext.Provider>;

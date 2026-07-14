@@ -20,9 +20,11 @@ vi.mock("../stores/chatbot-store", async () => {
     ChatbotStoreProvider: ({
       children,
       storageKey: nextStorageKey,
+      fallback: _fallback,
     }: {
       children: React.ReactNode;
       storageKey?: string | null;
+      fallback?: React.ReactNode;
     }) => {
       storageKey = nextStorageKey ?? null;
       return <>{children}</>;
@@ -94,6 +96,14 @@ vi.mock("../components/conversation-sidebar", () => ({
   ),
 }));
 
+vi.mock("../components/chatbot-sidebar", () => ({
+  ChatbotSidebar: ({ open }: { open: boolean }) => <section data-testid="chatbot-sidebar">{String(open)}</section>,
+}));
+
+vi.mock("../components/chatbot-header", () => ({
+  ChatbotHeader: ({ view }: { view: string }) => <header data-testid="chatbot-header">{view}</header>,
+}));
+
 vi.mock("../components/chat-conversation-panel", () => ({
   ChatConversationPanel: ({
     token,
@@ -112,6 +122,10 @@ vi.mock("../components/chat-conversation-panel", () => ({
   ),
 }));
 
+vi.mock("../components/memory-panel", () => ({
+  MemoryPanel: ({ token }: { token: string | null }) => <section data-testid="memory-panel">{token}</section>,
+}));
+
 beforeEach(() => {
   storageKey = null;
   authUser = { id: "user-123", email: "owner@example.com" };
@@ -122,7 +136,9 @@ describe("ChatbotShell workspace", () => {
     render(<ChatbotShell />);
 
     expect(storageKey).toBe("paiguangguang.chatbot:user-123");
-    expect(screen.getByTestId("sidebar").textContent).toContain("Workspace conversation");
+    expect(screen.getByTestId("chatbot-shell")).toHaveClass("chatbot-theme", "h-full", "min-h-0", "overflow-hidden");
+    expect(screen.getByTestId("chatbot-header").textContent).toBe("chat");
+    expect(screen.getByTestId("chatbot-sidebar").textContent).toBe("false");
     expect(screen.getByTestId("panel").textContent).toContain("token-123");
     expect(screen.getByTestId("panel").textContent).toContain("streaming");
   });
