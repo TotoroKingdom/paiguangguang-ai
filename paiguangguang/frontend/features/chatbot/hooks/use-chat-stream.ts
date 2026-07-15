@@ -6,6 +6,7 @@ import { ApiError } from "@/lib/api";
 
 import { openChatStream, openRegenerateStream, openRetryStream, readChatStreamEvents } from "../api/stream";
 import type { ParsedChatStreamEvent, StreamMessageCreatedData } from "../types/stream";
+import { createChatStreamEventBatcher } from "../utils/stream-event-batcher";
 
 type UseChatStreamOptions = {
   token: string | null;
@@ -77,6 +78,7 @@ export function useChatStream({
       activeRequestId.current = clientRequestId;
       setSending(true);
       setError(null);
+      let batcher: ReturnType<typeof createChatStreamEventBatcher> | null = null;
 
       try {
         const response =
@@ -103,17 +105,17 @@ export function useChatStream({
                   clientRequestId,
                   signal: controller.signal,
                 });
-        for await (const event of readChatStreamEvents(response)) {
-          if (
-            controller.signal.aborted ||
-            activeConversationId.current !== startedConversationId ||
-            eventConversationId(event) !== startedConversationId
-          ) {
-            break;
+        const dispatchEvent = (event: ParsedChatStreamEvent) => {
+          if (controller.signal.aborted || activeConversationId.current !== startedConversationId) {
+            return;
           }
           onEvent?.(event);
           if (event.event === "message.created") {
-            const createdEvent = event as { event: "message.created"; data: StreamMessageCreatedData; sequence: number };
+            const createdEvent = event as {
+              event: "message.created";
+              data: StreamMessageCreatedData;
+              sequence: number;
+            };
             onCreated?.({
               event: "message.created",
               data: createdEvent.data,
@@ -123,12 +125,33 @@ export function useChatStream({
           if (event.event === "stream.end" || event.event === "message.failed" || event.event === "message.cancelled") {
             onTerminal?.(event);
           }
+        };
+        batcher = createChatStreamEventBatcher({ emit: dispatchEvent });
+        let detached = false;
+
+        for await (const event of readChatStreamEvents(response)) {
+          if (
+            controller.signal.aborted ||
+            activeConversationId.current !== startedConversationId ||
+            eventConversationId(event) !== startedConversationId
+          ) {
+            detached = true;
+            break;
+          }
+          batcher.push(event);
+        }
+        if (detached) {
+          batcher.clear();
+        } else {
+          batcher.flush();
         }
         return true;
       } catch (exception) {
         if (controller.signal.aborted || isAbortError(exception)) {
+          batcher?.clear();
           return false;
         }
+        batcher?.flush();
         const message =
           exception instanceof ApiError
             ? exception.message
@@ -139,6 +162,7 @@ export function useChatStream({
         onFailure?.(message);
         return false;
       } finally {
+        batcher?.clear();
         if (abortController.current === controller) {
           abortController.current = null;
           if (activeRequestId.current === clientRequestId) {
