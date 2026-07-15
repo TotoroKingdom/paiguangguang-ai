@@ -111,6 +111,30 @@ select {
   background-color: rgb(var(--color-surface) / 1);
 }
 
+.chatbot-theme {
+  --color-background: 246 248 251;
+  --color-paper: 255 255 255;
+  --color-surface: 255 255 255;
+  --color-ink: 18 24 35;
+  --color-moss: 92 107 124;
+  --color-clay: 174 84 59;
+  --color-brass: 185 150 64;
+  --color-tide: 67 96 255;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chatbot-theme {
+    --color-background: 10 14 22;
+    --color-paper: 15 20 30;
+    --color-surface: 20 27 39;
+    --color-ink: 236 241 248;
+    --color-moss: 154 170 190;
+    --color-clay: 239 135 102;
+    --color-brass: 227 197 113;
+    --color-tide: 112 136 255;
+  }
+}
+
 ::selection {
   color: rgb(var(--color-paper));
   background: rgb(var(--color-tide));

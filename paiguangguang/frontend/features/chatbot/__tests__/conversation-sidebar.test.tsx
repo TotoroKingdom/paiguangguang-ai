@@ -48,7 +48,7 @@ describe("ConversationSidebar", () => {
     );
 
     expect(screen.getByText("Loading conversations")).toBeInTheDocument();
-    expect(screen.getByText("New chat")).toBeInTheDocument();
+    expect(screen.getByText("开启新对话")).toBeInTheDocument();
   });
 
   it("renders an error state with retry", () => {
@@ -94,7 +94,7 @@ describe("ConversationSidebar", () => {
     fireEvent.click(within(firstConversation).getByRole("button", { name: "Archive" }));
     fireEvent.click(within(firstConversation).getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    fireEvent.click(screen.getByRole("button", { name: /开启新对话/ }));
 
     expect(handlers.onChangeStatus).toHaveBeenCalledWith("archived");
     expect(handlers.onSelectConversation).toHaveBeenCalledWith("conv-1");
