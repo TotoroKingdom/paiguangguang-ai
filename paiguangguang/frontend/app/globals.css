@@ -160,6 +160,29 @@ select {
   background: rgb(var(--color-tide));
 }
 
+@keyframes chat-stream-cursor-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+
+  55%,
+  100% {
+    opacity: 0.2;
+  }
+}
+
+.chat-stream-cursor {
+  display: inline-block;
+  width: 0.5rem;
+  height: 1.05rem;
+  margin-left: 0.18rem;
+  border-radius: 999px;
+  background: currentColor;
+  vertical-align: -0.12rem;
+  animation: chat-stream-cursor-blink 0.9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html:focus-within {
     scroll-behavior: auto;
@@ -172,5 +195,9 @@ select {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .chat-stream-cursor {
+    opacity: 1;
   }
 }
