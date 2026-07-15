@@ -19,7 +19,7 @@ function ChatbotShellFrame({ children }: { children: ReactNode }) {
   return (
     <div
       data-testid="chatbot-shell"
-      className="chatbot-theme flex h-full min-h-0 overflow-hidden bg-paper text-ink pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="chatbot-theme flex h-full min-h-0 overflow-hidden bg-[var(--chat-page)] text-ink pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
     >
       {children}
     </div>
@@ -32,7 +32,7 @@ function ChatbotShellSkeleton() {
       data-testid="chatbot-shell-skeleton"
       className="flex h-full min-h-0 w-full overflow-hidden"
     >
-      <div className="hidden h-full min-h-0 w-[320px] shrink-0 border-r border-ink/10 bg-[rgb(var(--color-background))] lg:block">
+      <div className="hidden h-full min-h-0 w-[320px] shrink-0 border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] lg:block">
         <div className="space-y-3 p-4">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-full bg-ink/5" />
@@ -53,7 +53,7 @@ function ChatbotShellSkeleton() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-14 items-center justify-end px-4 sm:px-6 lg:px-8">
-          <div className="h-10 w-32 rounded-full border border-ink/10 bg-white/80" />
+          <div className="h-10 w-32 rounded-full border border-[var(--chat-border)] bg-white/80" />
         </div>
         <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-10">
           <div className="w-full max-w-3xl space-y-4">

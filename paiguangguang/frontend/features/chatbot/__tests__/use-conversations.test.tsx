@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { ChatbotStoreProvider } from "../stores/chatbot-store";
 import { useConversations } from "../hooks/use-conversations";
 import type { ChatbotApiClient } from "../api/client";
-import type { ConversationData, ConversationDetailData } from "../types/conversation";
+import type { ConversationData, ConversationDetailData, DeleteResultData } from "../types/conversation";
 
 const push = vi.fn();
 const replace = vi.fn();
@@ -225,6 +225,80 @@ describe("useConversations", () => {
     expect(result.current.pages.archived.items.some((conversation) => conversation.id === "conv-1")).toBe(false);
     expect(result.current.selectedConversationId).toBe(null);
     expect(replace).toHaveBeenCalledWith("/chat-bot");
+    confirmSpy.mockRestore();
+  });
+
+  it("removes a conversation from the sidebar immediately while delete is pending", async () => {
+    const deleteRequest = deferred<DeleteResultData>();
+    const client = makeClient({
+      listConversations: vi.fn().mockResolvedValue({
+        items: [makeConversation("conv-1"), makeConversation("conv-2")],
+        next_cursor: null,
+        has_more: false,
+      }),
+      deleteConversation: vi.fn().mockReturnValue(deleteRequest.promise),
+    });
+
+    const { result } = renderConversationsHook(client);
+
+    await waitFor(() => {
+      expect(result.current.conversations).toHaveLength(2);
+    });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const deletePromise = result.current.deleteConversation(makeConversation("conv-1"));
+
+    await waitFor(() => {
+      expect(result.current.pages.active.items.map((conversation) => conversation.id)).toEqual(["conv-2"]);
+    });
+    expect(client.deleteConversation).toHaveBeenCalledWith({ token: "token", conversationId: "conv-1" });
+
+    deleteRequest.resolve({
+      id: "conv-1",
+      status: "deleted",
+      cleanup_status: "completed",
+    });
+
+    await deletePromise;
+
+    expect(result.current.pages.active.items.map((conversation) => conversation.id)).toEqual(["conv-2"]);
+    confirmSpy.mockRestore();
+  });
+
+  it("restores a conversation if delete fails after the optimistic update", async () => {
+    const deleteRequest = deferred<DeleteResultData>();
+    const client = makeClient({
+      listConversations: vi.fn().mockResolvedValue({
+        items: [makeConversation("conv-1"), makeConversation("conv-2")],
+        next_cursor: null,
+        has_more: false,
+      }),
+      deleteConversation: vi.fn().mockReturnValue(deleteRequest.promise),
+    });
+
+    const { result } = renderConversationsHook(client);
+
+    await waitFor(() => {
+      expect(result.current.conversations).toHaveLength(2);
+    });
+
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const deletePromise = result.current.deleteConversation(makeConversation("conv-1"));
+
+    await waitFor(() => {
+      expect(result.current.pages.active.items.map((conversation) => conversation.id)).toEqual(["conv-2"]);
+    });
+
+    deleteRequest.reject(new Error("delete failed"));
+
+    await deletePromise;
+
+    await waitFor(() => {
+      expect(result.current.pages.active.items.map((conversation) => conversation.id)).toEqual([
+        "conv-2",
+        "conv-1",
+      ]);
+    });
     confirmSpy.mockRestore();
   });
 

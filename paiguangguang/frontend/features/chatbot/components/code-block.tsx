@@ -37,13 +37,13 @@ export function CodeBlock({ value, language = null }: CodeBlockProps) {
   }, [copied]);
 
   return (
-    <figure className="my-4 overflow-hidden rounded-2xl border border-ink/10 bg-ink/[0.03]">
-      <figcaption className="flex items-center justify-between gap-3 border-b border-ink/10 px-4 py-2 text-xs text-ink/50">
+    <figure className="my-4 overflow-hidden rounded-[18px] border border-[var(--chat-border)] bg-[var(--chat-code-bg)]">
+      <figcaption className="flex items-center justify-between gap-3 border-b border-[var(--chat-border)] px-4 py-2 text-xs text-ink/50">
         <span className="font-mono uppercase tracking-[0.18em] text-ink/45">{label}</span>
         <button
           type="button"
           onClick={() => void handleCopy()}
-          className="rounded-full border border-ink/10 bg-white px-3 py-1.5 font-semibold text-ink transition hover:border-tide/40 hover:bg-paper"
+          className="rounded-full border border-[var(--chat-border)] bg-white px-3 py-1.5 font-semibold text-ink transition hover:border-tide/35 hover:bg-white"
         >
           {copied ? "Copied" : "Copy code"}
         </button>

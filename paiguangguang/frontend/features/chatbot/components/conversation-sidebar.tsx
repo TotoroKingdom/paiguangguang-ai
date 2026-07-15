@@ -1,12 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo } from "react";
 
-import type {
-  ConversationData,
-  ConversationStatus,
-} from "../types/conversation";
+import type { ConversationData, ConversationStatus } from "../types/conversation";
 import { ChatbotMark } from "./chatbot-mark";
 
 type ConversationSidebarProps = {
@@ -32,6 +28,13 @@ const STATUS_LABELS: Record<ConversationStatus, string> = {
   archived: "Archived",
 };
 
+const APP_TITLE = "\u804a\u5929\u673a\u5668\u4eba";
+const CREATE_CONVERSATION_LABEL = "\u5f00\u542f\u65b0\u5bf9\u8bdd";
+const TODAY_LABEL = "\u4eca\u5929";
+const YESTERDAY_LABEL = "\u6628\u5929";
+const WEEK_LABEL = "7\u5929\u5185";
+const OLDER_LABEL = "\u66f4\u65e9";
+
 type ConversationGroup = {
   key: string;
   label: string;
@@ -53,45 +56,42 @@ function toStartOfDay(value: Date) {
 function classifyConversation(value: string, now = new Date()) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return { key: "older", label: "更早", order: 3 };
+    return { key: "older", label: OLDER_LABEL, order: 3 };
   }
 
   const diffDays = Math.floor((toStartOfDay(now).getTime() - toStartOfDay(date).getTime()) / 86_400_000);
 
   if (diffDays <= 0) {
-    return { key: "today", label: "今天", order: 0 };
+    return { key: "today", label: TODAY_LABEL, order: 0 };
   }
 
   if (diffDays === 1) {
-    return { key: "yesterday", label: "昨天", order: 1 };
+    return { key: "yesterday", label: YESTERDAY_LABEL, order: 1 };
   }
 
   if (diffDays <= 7) {
-    return { key: "week", label: "7天内", order: 2 };
+    return { key: "week", label: WEEK_LABEL, order: 2 };
   }
 
-  return { key: "older", label: "更早", order: 3 };
+  return { key: "older", label: OLDER_LABEL, order: 3 };
 }
 
-function SearchIcon() {
+function RefreshIcon() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
-      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none">
       <path
-        d="M16.5 16.5L20 20"
+        d="M20 12a8 8 0 1 1-2.4-5.7"
         stroke="currentColor"
         strokeWidth="1.8"
         strokeLinecap="round"
       />
-    </svg>
-  );
-}
-
-function LayoutIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
-      <rect x="4" y="4" width="7" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-      <rect x="13" y="4" width="7" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M17.2 4.8v4.2h-4.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -116,8 +116,10 @@ function ConversationItem({
   return (
     <article
       className={[
-        "group rounded-[18px] px-3 py-3 transition",
-        selected ? "bg-white shadow-[0_1px_2px_rgba(15,23,42,0.06)]" : "hover:bg-white/80",
+        "group rounded-[18px] border px-3 py-2.5 transition",
+        selected
+          ? "border-tide/30 bg-white shadow-[0_1px_2px_rgba(18,24,35,0.04)]"
+          : "border-transparent hover:border-[var(--chat-border)] hover:bg-white/80",
       ].join(" ")}
     >
       <button
@@ -127,44 +129,49 @@ function ConversationItem({
       >
         <div className="min-w-0">
           <h3 className="truncate text-[15px] font-medium leading-6 text-ink">{conversation.title}</h3>
-          <p className="mt-1 truncate text-xs text-ink/45">{conversation.model}</p>
+          <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-ink/45">
+            <span className="truncate">{conversation.model}</span>
+            <span className="h-1 w-1 shrink-0 rounded-full bg-current opacity-35" />
+            <span className="truncate">{formatTimestamp(conversation.last_message_at)}</span>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-ink/40">{formatTimestamp(conversation.last_message_at)}</p>
       </button>
 
-      <div className="mt-2 flex flex-wrap gap-2 opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100">
-        <button
-          type="button"
-          onClick={() => void onRenameConversation(conversation)}
-          className="rounded-full border border-ink/10 bg-paper px-3 py-1.5 text-xs font-medium text-ink/65 transition hover:border-tide/30 hover:bg-white hover:text-ink"
-        >
-          Rename
-        </button>
-        {conversation.status === "active" ? (
+      <div className="max-h-0 overflow-hidden opacity-0 transition-all duration-150 group-hover:mt-2 group-hover:max-h-16 group-hover:opacity-100 group-focus-within:mt-2 group-focus-within:max-h-16 group-focus-within:opacity-100">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void onArchiveConversation(conversation)}
-            className="rounded-full border border-ink/10 bg-paper px-3 py-1.5 text-xs font-medium text-ink/65 transition hover:border-tide/30 hover:bg-white hover:text-ink"
+            onClick={() => void onRenameConversation(conversation)}
+            className="rounded-full border border-[var(--chat-border)] bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:border-tide/30 hover:text-ink"
           >
-            Archive
+            Rename
           </button>
-        ) : null}
-        {conversation.status === "archived" ? (
+          {conversation.status === "active" ? (
+            <button
+              type="button"
+              onClick={() => void onArchiveConversation(conversation)}
+              className="rounded-full border border-[var(--chat-border)] bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:border-tide/30 hover:text-ink"
+            >
+              Archive
+            </button>
+          ) : null}
+          {conversation.status === "archived" ? (
+            <button
+              type="button"
+              onClick={() => void onRestoreConversation(conversation)}
+              className="rounded-full border border-[var(--chat-border)] bg-white px-3 py-1.5 text-xs font-medium text-ink/70 transition hover:border-tide/30 hover:text-ink"
+            >
+              Restore
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => void onRestoreConversation(conversation)}
-            className="rounded-full border border-ink/10 bg-paper px-3 py-1.5 text-xs font-medium text-ink/65 transition hover:border-tide/30 hover:bg-white hover:text-ink"
+            onClick={() => void onDeleteConversation(conversation)}
+            className="rounded-full border border-clay/20 bg-clay/5 px-3 py-1.5 text-xs font-medium text-clay transition hover:border-clay/35 hover:bg-clay/10"
           >
-            Restore
+            Delete
           </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => void onDeleteConversation(conversation)}
-          className="rounded-full border border-clay/20 bg-clay/5 px-3 py-1.5 text-xs font-medium text-clay transition hover:border-clay/40 hover:bg-clay/10"
-        >
-          Delete
-        </button>
+        </div>
       </div>
     </article>
   );
@@ -211,31 +218,24 @@ export function ConversationSidebar({
 
   return (
     <aside className="flex h-full flex-col bg-transparent">
-      <div className="border-b border-ink/8 px-4 pb-4 pt-4">
-        <div className="flex items-center justify-between gap-3">
-          <Link href="/" className="flex items-center gap-2 text-tide transition hover:opacity-90">
-            <ChatbotMark className="h-8 w-8 shrink-0 text-tide" />
-            <span className="text-[28px] font-semibold tracking-[-0.04em] text-tide">暖心助手</span>
-          </Link>
-
-          <div aria-hidden="true" className="flex items-center gap-3 text-ink/35">
-            <SearchIcon />
-            <LayoutIcon />
-          </div>
+      <div className="border-b border-[var(--chat-border)] px-4 pb-4 pt-4">
+        <div className="flex items-center gap-2">
+          <ChatbotMark className="h-8 w-8 shrink-0 text-tide" />
+          <span className="text-[26px] font-semibold tracking-[-0.05em] text-tide">{APP_TITLE}</span>
         </div>
 
         <button
           type="button"
           onClick={() => void onCreateConversation()}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-[22px] border border-ink/10 bg-white px-4 py-3 text-sm font-medium text-ink shadow-[0_1px_4px_rgba(15,23,42,0.04)] transition hover:border-tide/25 hover:bg-paper"
+          className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-full border border-[var(--chat-border)] bg-white px-4 text-sm font-medium text-ink shadow-[0_1px_3px_rgba(18,24,35,0.04)] transition hover:border-tide/25 hover:bg-white"
         >
-          <span className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-base leading-none">
+          <span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full border border-current text-base leading-none">
             +
           </span>
-          开启新对话
+          {CREATE_CONVERSATION_LABEL}
         </button>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4 flex items-center gap-2">
           {(Object.keys(STATUS_LABELS) as ConversationStatus[]).map((status) => (
             <button
               key={status}
@@ -244,9 +244,10 @@ export function ConversationSidebar({
               onClick={() => void onChangeStatus(status)}
               className={[
                 "rounded-full border px-3 py-2 text-sm font-medium transition",
+                status === "archived" ? "ml-auto" : "",
                 selectedStatus === status
                   ? "border-tide/55 bg-tide text-paper shadow-sm"
-                  : "border-ink/10 bg-paper/70 text-ink hover:border-tide/40 hover:bg-white",
+                  : "border-[var(--chat-border)] bg-white/75 text-ink hover:border-tide/35 hover:bg-white",
               ].join(" ")}
             >
               {STATUS_LABELS[status]}
@@ -255,16 +256,17 @@ export function ConversationSidebar({
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-b border-ink/8 px-4 py-3">
-        <div className="text-xs font-medium uppercase tracking-wide text-ink/45">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--chat-border)] px-4 py-3">
+        <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-ink/45">
           {loading ? "Loading conversations" : `${conversations.length} conversations`}
         </div>
         <button
           type="button"
           onClick={() => void onRefresh()}
-          className="text-sm font-semibold text-tide transition hover:text-tide/80"
+          aria-label="Refresh"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--chat-border)] bg-white text-ink/55 transition hover:border-tide/30 hover:text-tide"
         >
-          Refresh
+          <RefreshIcon />
         </button>
       </div>
 
@@ -284,16 +286,16 @@ export function ConversationSidebar({
         ) : null}
 
         {!error && !loading && conversations.length === 0 ? (
-          <div className="m-1 rounded-[18px] border border-dashed border-ink/15 bg-paper/55 p-5 text-sm leading-7 text-ink/65">
+          <div className="m-1 rounded-[18px] border border-dashed border-[var(--chat-border)] bg-white/70 p-5 text-sm leading-7 text-ink/65">
             <p className="font-semibold text-ink">No conversations yet</p>
             <p className="mt-2">Create a new conversation to start a session.</p>
           </div>
         ) : null}
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           {sections.map((section) => (
             <section key={section.key}>
-              <h3 className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-ink/45">
+              <h3 className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/45">
                 {section.label}
               </h3>
               <div className="space-y-1">
@@ -316,11 +318,11 @@ export function ConversationSidebar({
       </div>
 
       {hasMore ? (
-        <div className="border-t border-ink/8 p-4">
+        <div className="border-t border-[var(--chat-border)] p-4">
           <button
             type="button"
             onClick={() => void onLoadMore()}
-            className="w-full rounded-full border border-ink/10 bg-paper px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-tide/35 hover:bg-white"
+            className="w-full rounded-full border border-[var(--chat-border)] bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-tide/35 hover:bg-white"
           >
             Load more
           </button>

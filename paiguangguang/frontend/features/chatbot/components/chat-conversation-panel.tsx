@@ -20,6 +20,9 @@ type ChatConversationPanelProps = {
   activeGeneration?: ActiveGeneration;
 };
 
+const EMPTY_TITLE = "\u4f7f\u7528\u6696\u5fc3\u52a9\u624b\u5f00\u59cb\u5bf9\u8bdd";
+const EMPTY_BODY = "\u4ece\u5de6\u4fa7\u9009\u62e9\u4e00\u4e2a\u4f1a\u8bdd\uff0c\u6216\u70b9\u51fb\u201c\u5f00\u542f\u65b0\u5bf9\u8bdd\u201d\u521b\u5efa\u65b0\u7684\u5bf9\u8bdd\u3002";
+
 function statusLabel(status: ConversationStatus | null) {
   if (!status) {
     return "unknown";
@@ -45,20 +48,20 @@ export function ChatConversationPanel({
 
   if (!conversation) {
     return (
-      <section className="flex h-full min-h-0 flex-col">
+      <section className="flex h-full min-h-0 flex-col bg-[var(--chat-page)]">
         <div className="flex flex-1 items-center justify-center px-4 py-10">
-          <div className="w-full max-w-3xl text-center">
+          <div className="w-full max-w-2xl text-center">
             <ChatbotMark className="mx-auto h-14 w-14 text-tide" />
             <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-ink sm:text-4xl">
-              使用暖心助手开始对话
+              {EMPTY_TITLE}
             </h2>
             <p className="mt-3 text-sm leading-7 text-ink/45">
-              从左侧选择一个会话，或点击“开启新对话”创建新的对话。
+              {EMPTY_BODY}
             </p>
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-[68rem] px-4 pb-4 lg:px-6">
+        <div className="mx-auto w-full max-w-[56rem] px-4 pb-4 lg:px-6">
           <ChatComposer
             value={messages.draft}
             disabled={true}
@@ -75,11 +78,14 @@ export function ChatConversationPanel({
 
   const canSend = conversation.status === "active";
   const showStreamingStop = messages.streamPhase === "streaming";
+  const messageAlert = conversation.status !== "active"
+    ? "Only active conversations can send new messages."
+    : messages.controlError ?? messages.streamError;
 
   return (
-    <section className="flex h-full min-h-0 flex-col">
-      <div className="mx-auto flex w-full max-w-[68rem] min-h-0 flex-1 flex-col px-4 py-4 lg:px-6">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <section className="flex h-full min-h-0 flex-col bg-[var(--chat-page)]">
+      <div className="mx-auto flex w-full max-w-[56rem] min-h-0 flex-1 flex-col px-4 pt-3 pb-4 lg:px-6">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-ink">
               {headerTitle}
@@ -88,11 +94,10 @@ export function ChatConversationPanel({
             {activeGeneration ? (
               <p className="mt-2 text-sm leading-6 text-tide">
                 Active generation {activeGeneration.status}
-                {activeGeneration.started_at ? ` · started ${activeGeneration.started_at}` : ""}
+                {activeGeneration.started_at ? ` started ${activeGeneration.started_at}` : ""}
               </p>
             ) : null}
           </div>
-
         </div>
 
         {messages.streamError ? (
@@ -128,7 +133,7 @@ export function ChatConversationPanel({
             value={messages.draft}
             disabled={!canSend}
             sending={messages.sending}
-            error={conversation.status !== "active" ? "Only active conversations can send new messages." : messages.streamError}
+            error={messageAlert}
             model={conversation.model}
             onChange={messages.setDraft}
             onSubmit={(content) => void messages.sendMessage(content)}

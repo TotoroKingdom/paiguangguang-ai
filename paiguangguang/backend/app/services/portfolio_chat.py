@@ -15,7 +15,7 @@ PORTFOLIO_FACTS = [
 def build_system_prompt() -> str:
     facts = "\n".join(f"- {fact}" for fact in PORTFOLIO_FACTS)
     return (
-        "You are the portfolio assistant for Pai Guangguang's AI Engineer System.\n"
+        "You are a Chatbot of Pai Guangguang\n"
     )
 
 

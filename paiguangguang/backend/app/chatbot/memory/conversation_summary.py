@@ -436,7 +436,7 @@ class ConversationSummaryService:
     @staticmethod
     def _build_system_prompt() -> str:
         return (
-            "You are the summarization layer for the portfolio chatbot.\n"
+            "You are the summarization layer for the chatbot.\n"
             "Preserve user preferences, project context, open questions, and decisions.\n"
             "Do not invent facts. Update the cumulative conversation summary only."
         )

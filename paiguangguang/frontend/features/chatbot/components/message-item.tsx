@@ -39,21 +39,16 @@ export function MessageItem({
         className={[
           "min-w-0",
           isUser
-            ? "max-w-[min(40rem,88%)] rounded-2xl border border-ink/10 bg-ink/[0.04] px-4 py-3 text-ink"
-            : "max-w-[min(50rem,100%)] py-1 text-ink",
+            ? "max-w-[min(42rem,88%)] rounded-[18px] border border-[var(--chat-border)] bg-[rgba(18,24,35,0.04)] px-4 py-3 text-ink"
+            : "max-w-[min(48rem,100%)] py-1 text-ink",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.18em]">
-          <span className={isUser ? "text-ink/60" : "text-ink/45"}>{isUser ? "You" : "Assistant"}</span>
-          <span className={isUser ? "text-ink/45" : "text-ink/40"}>
-            {message.status}
-            {isStreaming ? " · streaming" : ""}
-          </span>
-        </div>
+        <span className="sr-only">{isUser ? "You" : "Assistant"}</span>
+        <span className="sr-only">{message.status}</span>
 
-        <div className={["mt-2 min-w-0", isUser ? "text-sm leading-7 whitespace-pre-wrap" : "pr-1"].join(" ")}>
+        <div className={["min-w-0", isUser ? "text-sm leading-7 whitespace-pre-wrap" : "pr-1"].join(" ")}>
           {isUser ? (
-            <p className="whitespace-pre-wrap">{message.content}</p>
+            <p className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</p>
           ) : (
             <MarkdownContent value={assistantContent} />
           )}
@@ -72,7 +67,7 @@ export function MessageItem({
                 type="button"
                 onClick={() => void onStop?.()}
                 disabled={actionsDisabled || stopping}
-                className="rounded-full border border-clay/30 bg-white px-3 py-1.5 text-xs font-semibold text-clay transition hover:border-clay/50 hover:bg-clay/5 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-clay/25 bg-white px-3 py-1.5 text-xs font-semibold text-clay transition hover:border-clay/40 hover:bg-clay/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {stopping ? "Stopping..." : "Stop generation"}
               </button>
@@ -82,7 +77,7 @@ export function MessageItem({
                 type="button"
                 onClick={() => void onRetry?.()}
                 disabled={actionsDisabled}
-                className="rounded-full border border-tide/30 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/50 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-tide/25 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/40 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Retry
               </button>
@@ -92,7 +87,7 @@ export function MessageItem({
                 type="button"
                 onClick={() => void onRegenerate?.()}
                 disabled={actionsDisabled}
-                className="rounded-full border border-tide/30 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/50 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full border border-tide/25 bg-white px-3 py-1.5 text-xs font-semibold text-tide transition hover:border-tide/40 hover:bg-tide/5 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Regenerate
               </button>

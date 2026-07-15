@@ -126,7 +126,10 @@ export function MessageList({
   return (
     <div className="relative flex h-full min-h-0 flex-col">
       {historyError ? (
-        <div role="alert" className="mb-3 rounded-2xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
+        <div
+          role="alert"
+          className="mb-3 rounded-[18px] border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink"
+        >
           {historyError}
         </div>
       ) : null}
@@ -134,21 +137,21 @@ export function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-1 py-5 sm:px-0"
+        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-0 py-4"
       >
         {loadMorePending ? (
-          <div className="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
+          <div className="mb-4 text-center text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/40">
             Loading earlier messages...
           </div>
         ) : null}
 
         {messages.length === 0 && !loadingHistory ? (
-          <div className="mx-auto flex max-w-2xl items-center justify-center rounded-[24px] border border-dashed border-ink/12 bg-white/65 px-8 py-10 text-sm leading-7 text-ink/60">
+          <div className="mx-auto flex max-w-2xl items-center justify-center rounded-[24px] border border-dashed border-[var(--chat-border)] bg-white/70 px-8 py-10 text-sm leading-7 text-ink/60">
             No messages yet. Start the conversation from the composer below.
           </div>
         ) : null}
 
-        <div className="space-y-4">
+        <div className="space-y-5">
           {messages.map((message) => (
             <MessageItem
               key={message.id}
@@ -169,7 +172,7 @@ export function MessageList({
           <button
             type="button"
             onClick={scrollToBottom}
-            className="pointer-events-auto rounded-full border border-tide/30 bg-tide px-4 py-2 text-sm font-semibold text-paper shadow-lg transition hover:bg-tide/90"
+            className="pointer-events-auto rounded-full border border-tide/25 bg-white px-4 py-2 text-sm font-semibold text-tide shadow-[0_6px_18px_rgba(67,96,255,0.12)] transition hover:border-tide/35 hover:bg-white"
           >
             Back to bottom
           </button>
