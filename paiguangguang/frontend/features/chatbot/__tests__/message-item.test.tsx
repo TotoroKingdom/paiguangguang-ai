@@ -51,4 +51,15 @@ describe("MessageItem", () => {
     expect(screen.getByText("You")).toBeInTheDocument();
     expect(screen.getByText("I need a summary")).toBeInTheDocument();
   });
+
+  it("shows the streaming cursor only while an assistant response is active", () => {
+    const { rerender } = render(
+      <MessageItem message={makeMessage({ status: "streaming", content: "Working" })} />
+    );
+
+    expect(screen.getByTestId("streaming-cursor")).toBeInTheDocument();
+
+    rerender(<MessageItem message={makeMessage({ status: "completed", content: "Done" })} />);
+    expect(screen.queryByTestId("streaming-cursor")).not.toBeInTheDocument();
+  });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import type { MessageData } from "../types/message";
-import { MarkdownContent } from "./markdown-content";
+import { StreamingMarkdownContent } from "./streaming-markdown-content";
 
 type MessageItemProps = {
   message: MessageData;
@@ -50,7 +50,10 @@ export function MessageItem({
           {isUser ? (
             <p className="whitespace-pre-wrap text-[15px] leading-7">{message.content}</p>
           ) : (
-            <MarkdownContent value={assistantContent} />
+            <StreamingMarkdownContent
+              value={assistantContent}
+              streaming={message.status === "pending" || message.status === "streaming" || isStreaming}
+            />
           )}
         </div>
 
