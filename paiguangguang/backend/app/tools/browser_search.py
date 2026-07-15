@@ -41,7 +41,7 @@ MOCK_BROWSER_CORPUS = (
     {
         "title": "DeepSeek Integration Summary",
         "url": "https://mock.local/deepseek-summary",
-        "summary": "Summarizes the chat-completion client and prompt orchestration used by portfolio workflows.",
+        "summary": "Summarizes the chat-completion client and prompt orchestration used by  workflows.",
         "tags": ("deepseek", "chat", "prompt", "llm"),
     },
 )

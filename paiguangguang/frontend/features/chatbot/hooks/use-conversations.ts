@@ -344,23 +344,41 @@ export function useConversations({ token, client = chatbotApiClient, pageSize = 
         return null;
       }
 
+      const wasSelected = state.selectedConversationId === conversation.id;
+      const previousStatus = state.selectedStatus;
+      const selectedDetailSnapshot =
+        wasSelected &&
+        selectedConversationDetail &&
+        selectedConversationDetail.id === conversation.id
+          ? selectedConversationDetail
+          : null;
+
+      dispatch({ type: "remove_conversation", conversationId: conversation.id });
+      if (wasSelected) {
+        allowAutoSelectRef.current = false;
+        dispatch({ type: "set_selected_conversation_id", conversationId: null });
+        dispatch({ type: "set_selected_status", status: "active" });
+        setSelectedConversationDetail(null);
+        clearUrl();
+      }
+
       try {
         await client.deleteConversation({ token, conversationId: conversation.id });
-        dispatch({ type: "remove_conversation", conversationId: conversation.id });
-        if (state.selectedConversationId === conversation.id) {
-          allowAutoSelectRef.current = false;
-          dispatch({ type: "set_selected_conversation_id", conversationId: null });
-          dispatch({ type: "set_selected_status", status: "active" });
-          setSelectedConversationDetail(null);
-          clearUrl();
-        }
         return conversation.id;
       } catch (error) {
+        dispatch({ type: "upsert_conversation", conversation });
+        if (wasSelected) {
+          dispatch({ type: "set_selected_status", status: previousStatus });
+          dispatch({ type: "set_selected_conversation_id", conversationId: conversation.id });
+          setSelectedConversationDetail(selectedDetailSnapshot);
+          pushUrl(conversation.id);
+          allowAutoSelectRef.current = true;
+        }
         setDetailError(normalizeErrorMessage(error));
         return null;
       }
     },
-    [clearUrl, dispatch, state.selectedConversationId, token]
+    [clearUrl, dispatch, pushUrl, selectedConversationDetail, state.selectedConversationId, state.selectedStatus, token]
   );
 
   const refreshCurrentStatus = useCallback(async () => {

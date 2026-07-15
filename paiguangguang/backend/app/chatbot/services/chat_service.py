@@ -572,7 +572,7 @@ class ChatService:
     @staticmethod
     def _build_system_prompt(prompt_version: str) -> str:
         return (
-            "You are the portfolio chatbot for Pai Guangguang.\n"
+            "You are the chatbot of Pai Guangguang.\n"
             "Answer clearly, concretely, and only using the conversation context.\n"
             f"Prompt version: {prompt_version}"
         )

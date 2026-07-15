@@ -15,36 +15,20 @@ export function ChatbotMark({ className = "" }: ChatbotMarkProps) {
     >
       <circle cx="20" cy="20" r="18" fill="currentColor" opacity="0.08" />
       <path
-        d="M13.5 12.5V10.5M26.5 12.5V10.5"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-      <circle cx="13.5" cy="9.5" r="1.6" fill="currentColor" />
-      <circle cx="26.5" cy="9.5" r="1.6" fill="currentColor" />
-      <rect
-        x="10.5"
-        y="12"
-        width="19"
-        height="16"
-        rx="8"
-        stroke="currentColor"
-        strokeWidth="1.8"
-      />
-      <circle cx="16" cy="19" r="1.5" fill="currentColor" />
-      <circle cx="24" cy="19" r="1.5" fill="currentColor" />
-      <path
-        d="M16.5 23.5c1.4 1.2 5.6 1.2 7 0"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
+        d="M28.7 11.8c-2.3-1.7-5.1-2.6-8.1-2.6-6.8 0-12.3 5.5-12.3 12.3 0 2.6.8 5 2.1 7l-2.1 4.8 5-1.8c1.7 1.2 3.7 2 6 2 6.8 0 12.3-5.5 12.3-12.3 0-2.9-1-5.5-2.9-7.7l2-5.1-4 1.4Z"
+        fill="currentColor"
+        opacity="0.18"
       />
       <path
-        d="M15.5 29.5h9"
-        stroke="currentColor"
-        strokeWidth="1.8"
+        d="M14.2 23.1c0-4.5 3.6-8.1 8.1-8.1 1.8 0 3.4.6 4.7 1.6l4.1-2.1-1.1 4.4c1 1.4 1.6 3.1 1.6 4.9 0 4.5-3.6 8.1-8.1 8.1-1.6 0-3.1-.5-4.4-1.2l-4.9 1.4 1.8-4.4c-.7-1.2-1.8-3-1.8-4.6Z"
+        fill="currentColor"
+      />
+      <circle cx="24.6" cy="19.7" r="1.3" fill="white" />
+      <path
+        d="M16.4 28.4c1.8 1.3 4 2 6.4 2 2.8 0 5.2-1 7.1-2.7"
+        stroke="white"
+        strokeWidth="1.5"
         strokeLinecap="round"
-        opacity="0.55"
       />
     </svg>
   );

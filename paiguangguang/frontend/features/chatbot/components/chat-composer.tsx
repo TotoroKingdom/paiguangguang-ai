@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useMemo, useRef, type FormEvent, type KeyboardEvent } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, type FormEvent, type KeyboardEvent, type MouseEvent } from "react";
 
 type ChatComposerProps = {
   value: string;
@@ -15,8 +15,9 @@ type ChatComposerProps = {
   stopping?: boolean;
 };
 
-const MIN_VISIBLE_ROWS = 4;
+const MIN_VISIBLE_ROWS = 3;
 const MAX_VISIBLE_ROWS = 6;
+const PLACEHOLDER = "\u7ed9\u6696\u5fc3\u52a9\u624b\u53d1\u9001\u6d88\u606f";
 
 function syncTextareaHeight(textarea: HTMLTextAreaElement) {
   const computed = window.getComputedStyle(textarea);
@@ -92,6 +93,13 @@ export function ChatComposer({
     [canSubmit, onSubmit, value]
   );
 
+  const handleMouseDown = useCallback((event: MouseEvent<HTMLFormElement>) => {
+    if (event.target instanceof HTMLElement && event.target.closest("button, textarea, input, select, a")) {
+      return;
+    }
+    textareaRef.current?.focus();
+  }, []);
+
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLTextAreaElement>) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -124,7 +132,8 @@ export function ChatComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto w-full max-w-[64rem] rounded-[28px] border border-ink/10 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)]"
+      onMouseDown={handleMouseDown}
+      className="mx-auto w-full max-w-[56rem] cursor-text rounded-[28px] border border-[var(--chat-border)] bg-white/95 p-4 shadow-[0_10px_30px_rgba(18,24,35,0.05)]"
     >
       <label className="block">
         <span className="sr-only">Message</span>
@@ -142,13 +151,13 @@ export function ChatComposer({
           onCompositionEnd={() => {
             isComposingRef.current = false;
           }}
-          placeholder="给暖心助手发送消息"
-          className="block w-full resize-none rounded-[24px] border-0 bg-transparent px-0 py-0 text-[15px] leading-7 text-ink outline-none placeholder:text-ink/30 disabled:cursor-not-allowed"
+          placeholder={PLACEHOLDER}
+          className="block w-full resize-none border-0 bg-transparent px-0 pt-1 text-[15px] leading-7 text-ink outline-none placeholder:text-ink/30 disabled:cursor-not-allowed"
         />
       </label>
 
       {error ? (
-        <p className="mt-3 rounded-xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
+        <p className="mt-3 rounded-[18px] border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
           {error}
         </p>
       ) : null}
@@ -156,7 +165,7 @@ export function ChatComposer({
       <div className="mt-4 flex items-end justify-between gap-4">
         <div className="min-w-0">
           {model ? (
-            <span className="inline-flex max-w-full rounded-full border border-ink/10 bg-paper px-3 py-1.5 text-[13px] font-medium text-ink/70">
+            <span className="inline-flex max-w-full rounded-full border border-[var(--chat-border)] bg-[var(--chat-subtle)] px-3 py-1.5 text-[13px] font-medium text-ink/72">
               Model: {model}
             </span>
           ) : null}
@@ -167,7 +176,7 @@ export function ChatComposer({
           onClick={canStop ? () => void onStop?.() : undefined}
           disabled={primaryDisabled}
           aria-label={primaryLabel}
-          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tide text-paper shadow-[0_4px_14px_rgba(67,96,255,0.22)] transition hover:bg-tide/90 disabled:cursor-not-allowed disabled:bg-ink/15 disabled:text-ink/45 disabled:shadow-none"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-tide text-paper shadow-[0_4px_14px_rgba(67,96,255,0.2)] transition hover:bg-tide/90 disabled:cursor-not-allowed disabled:bg-ink/12 disabled:text-ink/40 disabled:shadow-none"
         >
           <span className="sr-only">{primaryLabel}</span>
           {canStop ? <StopIcon /> : <SendIcon />}

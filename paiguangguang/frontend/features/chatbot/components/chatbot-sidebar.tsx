@@ -34,12 +34,12 @@ function SidebarFooter({ onClose }: { onClose: () => void }) {
   const { logout } = useAuth();
 
   return (
-    <div className="border-t border-ink/8 bg-white/55 px-4 py-3">
-      <div className="flex flex-wrap gap-2">
+    <div className="border-t border-[var(--chat-border)] bg-white/65 px-4 py-3">
+      <div className="flex w-full items-center justify-between gap-2">
         <Link
           href="/"
           onClick={onClose}
-          className="rounded-full border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/40 hover:bg-paper"
+          className="inline-flex h-9 items-center rounded-full border border-[var(--chat-border)] bg-white px-4 text-sm font-semibold text-ink/85 shadow-[0_1px_3px_rgba(18,24,35,0.04)] transition hover:border-tide/30 hover:text-ink"
         >
           Home
         </Link>
@@ -49,7 +49,7 @@ function SidebarFooter({ onClose }: { onClose: () => void }) {
             onClose();
             logout();
           }}
-          className="rounded-full border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:border-tide/40 hover:bg-paper"
+          className="inline-flex h-9 items-center rounded-full border border-[var(--chat-border)] bg-white px-4 text-sm font-semibold text-ink/85 shadow-[0_1px_3px_rgba(18,24,35,0.04)] transition hover:border-tide/30 hover:text-ink"
         >
           Logout
         </button>
@@ -99,7 +99,7 @@ export function ChatbotSidebar({ open, onClose, ...props }: ChatbotSidebarProps)
 
   return (
     <>
-      <aside className="hidden h-full min-h-0 w-[320px] shrink-0 border-r border-ink/10 bg-[rgb(var(--color-background))] lg:flex">
+      <aside className="hidden h-full min-h-0 w-[316px] shrink-0 border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] lg:flex">
         <SidebarContent {...props} onClose={onClose} />
       </aside>
 
@@ -108,10 +108,10 @@ export function ChatbotSidebar({ open, onClose, ...props }: ChatbotSidebarProps)
           <button
             type="button"
             aria-label="Close conversations"
-            className="absolute inset-0 bg-black/28"
+            className="absolute inset-0 bg-black/14 backdrop-blur-[1px]"
             onClick={onClose}
           />
-          <aside className="absolute left-0 top-0 z-10 h-full w-[min(88vw,340px)] border-r border-ink/10 bg-[rgb(var(--color-background))] shadow-[0_20px_50px_rgba(15,23,42,0.18)]">
+          <aside className="absolute left-0 top-0 z-10 h-full w-[min(88vw,320px)] border-r border-[var(--chat-border)] bg-[var(--chat-sidebar)] shadow-[0_20px_50px_rgba(18,24,35,0.12)]">
             <SidebarContent {...props} onClose={onClose} />
           </aside>
         </div>

@@ -120,6 +120,16 @@ select {
   --color-clay: 174 84 59;
   --color-brass: 185 150 64;
   --color-tide: 67 96 255;
+  --chat-page: rgb(var(--color-background));
+  --chat-sidebar: rgb(243 245 248);
+  --chat-surface: rgb(var(--color-surface));
+  --chat-subtle: rgb(245 247 250);
+  --chat-text: rgb(var(--color-ink));
+  --chat-muted: rgb(107 114 128);
+  --chat-border: rgb(223 228 234);
+  --chat-accent: rgb(var(--color-tide));
+  --chat-danger: rgb(var(--color-clay));
+  --chat-code-bg: rgb(247 249 251);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -132,6 +142,16 @@ select {
     --color-clay: 239 135 102;
     --color-brass: 227 197 113;
     --color-tide: 112 136 255;
+    --chat-page: rgb(var(--color-background));
+    --chat-sidebar: rgb(15 20 30);
+    --chat-surface: rgb(var(--color-surface));
+    --chat-subtle: rgb(26 34 48);
+    --chat-text: rgb(var(--color-ink));
+    --chat-muted: rgb(164 173 186);
+    --chat-border: rgb(51 62 80);
+    --chat-accent: rgb(var(--color-tide));
+    --chat-danger: rgb(var(--color-clay));
+    --chat-code-bg: rgb(15 20 30);
   }
 }
 
