@@ -32,34 +32,35 @@ function ChatbotShellSkeleton() {
       data-testid="chatbot-shell-skeleton"
       className="flex h-full min-h-0 w-full overflow-hidden"
     >
-      <div className="hidden h-full min-h-0 w-[280px] shrink-0 border-r border-ink/10 bg-white/75 lg:block">
+      <div className="hidden h-full min-h-0 w-[320px] shrink-0 border-r border-ink/10 bg-[rgb(var(--color-background))] lg:block">
         <div className="space-y-3 p-4">
-          <div className="h-4 w-28 rounded bg-ink/5" />
-          <div className="h-9 rounded-xl bg-ink/5" />
-          <div className="h-9 rounded-xl bg-ink/5" />
-          <div className="h-9 rounded-xl bg-ink/5" />
-          <div className="mt-6 h-4 w-24 rounded bg-ink/5" />
-          <div className="h-24 rounded-2xl bg-ink/5" />
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-ink/5" />
+            <div className="h-4 w-32 rounded-full bg-ink/5" />
+          </div>
+          <div className="h-12 rounded-[22px] bg-white/80" />
+          <div className="flex gap-2">
+            <div className="h-8 w-20 rounded-full bg-white/80" />
+            <div className="h-8 w-24 rounded-full bg-white/80" />
+          </div>
+          <div className="mt-6 h-4 w-24 rounded-full bg-ink/5" />
+          <div className="space-y-2">
+            <div className="h-14 rounded-[18px] bg-white/80" />
+            <div className="h-14 rounded-[18px] bg-white/80" />
+          </div>
         </div>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-14 items-center gap-3 border-b border-ink/10 bg-white/80 px-4">
-          <div className="h-9 w-9 rounded-lg bg-ink/5 lg:hidden" />
-          <div className="min-w-0 flex-1">
-            <div className="h-3 w-28 rounded bg-ink/5" />
-            <div className="mt-2 h-5 w-40 rounded bg-ink/5" />
-          </div>
-          <div className="flex gap-2">
-            <div className="h-9 w-20 rounded-full bg-ink/5" />
-            <div className="h-9 w-24 rounded-full bg-ink/5" />
-          </div>
+        <div className="flex h-14 items-center justify-end px-4 sm:px-6 lg:px-8">
+          <div className="h-10 w-32 rounded-full border border-ink/10 bg-white/80" />
         </div>
-        <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-10">
           <div className="w-full max-w-3xl space-y-4">
-            <div className="h-8 w-44 rounded bg-ink/5" />
-            <div className="h-56 rounded-3xl bg-ink/5" />
-            <div className="h-32 rounded-3xl bg-ink/5" />
+            <div className="mx-auto h-14 w-14 rounded-full bg-ink/5" />
+            <div className="mx-auto h-8 w-72 rounded-full bg-ink/5" />
+            <div className="mx-auto h-4 w-96 max-w-full rounded-full bg-ink/5" />
+            <div className="mx-auto mt-12 h-[13rem] rounded-[28px] border border-ink/10 bg-white/80" />
           </div>
         </div>
       </div>

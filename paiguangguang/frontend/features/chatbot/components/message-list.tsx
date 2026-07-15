@@ -124,30 +124,26 @@ export function MessageList({
   }, [messages.length, requestLoadMore]);
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col rounded-2xl border border-ink/10 bg-white/80 shadow-sm">
-      <div className="border-b border-ink/10 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-ink">Messages</p>
-          <div className="text-xs text-ink/55">
-            {loadingHistory ? "Loading history..." : `${messages.length} messages`}
-          </div>
+    <div className="relative flex h-full min-h-0 flex-col">
+      {historyError ? (
+        <div role="alert" className="mb-3 rounded-2xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
+          {historyError}
         </div>
-        {historyError ? <p className="mt-2 text-sm leading-6 text-clay">{historyError}</p> : null}
-      </div>
+      ) : null}
 
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-1 py-5 sm:px-0"
       >
         {loadMorePending ? (
-          <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/45">
+          <div className="mb-4 text-center text-xs font-semibold uppercase tracking-wide text-ink/40">
             Loading earlier messages...
           </div>
         ) : null}
 
         {messages.length === 0 && !loadingHistory ? (
-          <div className="rounded-2xl border border-dashed border-ink/15 bg-paper/50 p-8 text-sm leading-7 text-ink/65">
+          <div className="mx-auto flex max-w-2xl items-center justify-center rounded-[24px] border border-dashed border-ink/12 bg-white/65 px-8 py-10 text-sm leading-7 text-ink/60">
             No messages yet. Start the conversation from the composer below.
           </div>
         ) : null}

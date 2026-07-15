@@ -15,24 +15,19 @@ const VIEW_LABELS: Record<ChatbotView, string> = {
 
 export function ChatbotHeader({ view, onChangeView, onOpenSidebar }: ChatbotHeaderProps) {
   return (
-    <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 border-b border-ink/10 bg-white/85 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
+    <header className="relative flex min-h-14 shrink-0 items-center justify-end px-4 py-3 sm:px-6 lg:px-8">
       <button
         type="button"
         aria-label="Open conversations"
         onClick={onOpenSidebar}
-        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink/10 bg-white text-ink transition hover:border-tide/40 hover:bg-paper lg:hidden"
+        className="absolute left-4 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ink/10 bg-white text-ink shadow-[0_1px_4px_rgba(15,23,42,0.04)] transition hover:border-tide/40 hover:bg-paper lg:hidden"
       >
         <span aria-hidden="true" className="text-lg leading-none">
           ☰
         </span>
       </button>
 
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/45">Chatbot workspace</p>
-        <h1 className="truncate text-lg font-semibold text-ink">{VIEW_LABELS[view]}</h1>
-      </div>
-
-      <div className="ml-auto inline-flex rounded-full border border-ink/10 bg-paper p-1">
+      <div className="inline-flex rounded-full border border-ink/10 bg-white/80 p-1 shadow-[0_1px_4px_rgba(15,23,42,0.03)] backdrop-blur">
         {(Object.keys(VIEW_LABELS) as ChatbotView[]).map((item) => (
           <button
             key={item}

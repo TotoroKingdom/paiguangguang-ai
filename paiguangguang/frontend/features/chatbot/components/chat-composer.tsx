@@ -15,7 +15,8 @@ type ChatComposerProps = {
   stopping?: boolean;
 };
 
-const MAX_VISIBLE_ROWS = 3;
+const MIN_VISIBLE_ROWS = 4;
+const MAX_VISIBLE_ROWS = 6;
 
 function syncTextareaHeight(textarea: HTMLTextAreaElement) {
   const computed = window.getComputedStyle(textarea);
@@ -24,12 +25,33 @@ function syncTextareaHeight(textarea: HTMLTextAreaElement) {
   const paddingBottom = Number.parseFloat(computed.paddingBottom) || 0;
   const verticalPadding = paddingTop + paddingBottom;
   const maxHeight = lineHeight * MAX_VISIBLE_ROWS + verticalPadding;
-  const minHeight = lineHeight + verticalPadding;
+  const minHeight = lineHeight * MIN_VISIBLE_ROWS + verticalPadding;
 
   textarea.style.height = "auto";
   const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
   textarea.style.height = `${Math.max(nextHeight, minHeight)}px`;
   textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+function SendIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="none">
+      <path
+        d="M6 12L18 6L13 18L11 13L6 12Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5" fill="currentColor">
+      <rect x="7" y="7" width="10" height="10" rx="2.5" />
+    </svg>
+  );
 }
 
 export function ChatComposer({
@@ -86,13 +108,6 @@ export function ChatComposer({
     [canSubmit, onSubmit, value]
   );
 
-  const helperText = useMemo(() => {
-    if (sending) {
-      return "Sending... Press Stop to cancel the current generation.";
-    }
-    return "Enter to send, Shift+Enter for a new line.";
-  }, [sending]);
-
   const primaryLabel = useMemo(() => {
     if (canStop) {
       return stopping ? "Stopping..." : "Stop generation";
@@ -109,7 +124,7 @@ export function ChatComposer({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto w-full max-w-4xl rounded-2xl border border-ink/10 bg-white/80 p-4 shadow-sm"
+      className="mx-auto w-full max-w-[64rem] rounded-[28px] border border-ink/10 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.05)]"
     >
       <label className="block">
         <span className="sr-only">Message</span>
@@ -118,7 +133,7 @@ export function ChatComposer({
           value={value}
           disabled={disabled || sending}
           maxLength={maxLength}
-          rows={1}
+          rows={MIN_VISIBLE_ROWS}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           onCompositionStart={() => {
@@ -127,51 +142,36 @@ export function ChatComposer({
           onCompositionEnd={() => {
             isComposingRef.current = false;
           }}
-          placeholder="Ask about the project phases, architecture, or implementation choices."
-          className="block w-full resize-none rounded-xl border border-ink/15 bg-white px-4 py-3 text-sm leading-7 text-ink outline-none transition placeholder:text-ink/40 focus:border-tide/50 focus:ring-2 focus:ring-tide/10 disabled:cursor-not-allowed disabled:bg-paper"
+          placeholder="给暖心助手发送消息"
+          className="block w-full resize-none rounded-[24px] border-0 bg-transparent px-0 py-0 text-[15px] leading-7 text-ink outline-none placeholder:text-ink/30 disabled:cursor-not-allowed"
         />
       </label>
 
       {error ? (
-        <p className="mt-3 rounded-xl border border-clay/30 bg-clay/10 px-4 py-3 text-sm leading-6 text-ink">
+        <p className="mt-3 rounded-xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
           {error}
         </p>
       ) : null}
 
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex min-w-0 flex-col gap-1 text-xs text-ink/50">
+      <div className="mt-4 flex items-end justify-between gap-4">
+        <div className="min-w-0">
           {model ? (
-            <span className="truncate rounded-full border border-ink/10 bg-paper px-3 py-1.5 font-semibold text-ink/70">
+            <span className="inline-flex max-w-full rounded-full border border-ink/10 bg-paper px-3 py-1.5 text-[13px] font-medium text-ink/70">
               Model: {model}
             </span>
           ) : null}
-          <span>
-            {value.length}/{maxLength}
-          </span>
-          <span>{helperText}</span>
         </div>
 
-        <div className="flex items-center justify-end gap-3">
-          <button
-            type={primaryType}
-            onClick={canStop ? () => void onStop?.() : undefined}
-            disabled={primaryDisabled}
-            className="rounded-full border border-tide/40 bg-tide px-4 py-2.5 text-sm font-semibold text-paper transition hover:bg-tide/90 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {primaryLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              onChange("");
-              textareaRef.current?.focus();
-            }}
-            disabled={disabled || sending || value.length === 0}
-            className="rounded-full border border-ink/15 bg-white px-4 py-2.5 text-sm font-semibold text-ink transition hover:border-ink/25 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            Clear
-          </button>
-        </div>
+        <button
+          type={primaryType}
+          onClick={canStop ? () => void onStop?.() : undefined}
+          disabled={primaryDisabled}
+          aria-label={primaryLabel}
+          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-tide text-paper shadow-[0_4px_14px_rgba(67,96,255,0.22)] transition hover:bg-tide/90 disabled:cursor-not-allowed disabled:bg-ink/15 disabled:text-ink/45 disabled:shadow-none"
+        >
+          <span className="sr-only">{primaryLabel}</span>
+          {canStop ? <StopIcon /> : <SendIcon />}
+        </button>
       </div>
     </form>
   );

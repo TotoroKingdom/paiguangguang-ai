@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import type { ConversationData, ConversationStatus } from "../types/conversation";
+import { ChatbotMark } from "./chatbot-mark";
 import { ChatComposer } from "./chat-composer";
 import { MessageList } from "./message-list";
 import { useMessages } from "../hooks/use-messages";
@@ -44,13 +45,29 @@ export function ChatConversationPanel({
 
   if (!conversation) {
     return (
-      <section className="flex h-full min-h-[32rem] flex-col rounded-2xl border border-ink/10 bg-white/80 p-6 shadow-sm">
-        <div className="border-b border-ink/10 pb-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-clay">Chat workspace</p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">Select a conversation</h2>
+      <section className="flex h-full min-h-0 flex-col">
+        <div className="flex flex-1 items-center justify-center px-4 py-10">
+          <div className="w-full max-w-3xl text-center">
+            <ChatbotMark className="mx-auto h-14 w-14 text-tide" />
+            <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em] text-ink sm:text-4xl">
+              使用暖心助手开始对话
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-ink/45">
+              从左侧选择一个会话，或点击“开启新对话”创建新的对话。
+            </p>
+          </div>
         </div>
-        <div className="flex flex-1 items-center justify-center text-sm leading-7 text-ink/60">
-          Pick a conversation from the sidebar to load history and continue the thread.
+
+        <div className="mx-auto w-full max-w-[68rem] px-4 pb-4 lg:px-6">
+          <ChatComposer
+            value={messages.draft}
+            disabled={true}
+            sending={false}
+            error={null}
+            model={null}
+            onChange={messages.setDraft}
+            onSubmit={(content) => void messages.sendMessage(content)}
+          />
         </div>
       </section>
     );
@@ -60,15 +77,14 @@ export function ChatConversationPanel({
   const showStreamingStop = messages.streamPhase === "streaming";
 
   return (
-    <section className="flex h-full min-h-[32rem] flex-col gap-4">
-      <div className="rounded-2xl border border-ink/10 bg-white/80 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-clay">Chat workspace</p>
-            <h2 className="mt-2 text-2xl font-semibold text-ink">{headerTitle}</h2>
-            <p className="mt-2 text-sm leading-6 text-ink/60">
-              Status {statusLabel(conversation.status)}
-            </p>
+    <section className="flex h-full min-h-0 flex-col">
+      <div className="mx-auto flex w-full max-w-[68rem] min-h-0 flex-1 flex-col px-4 py-4 lg:px-6">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="truncate text-[18px] font-semibold tracking-[-0.02em] text-ink">
+              {headerTitle}
+            </h2>
+            <p className="mt-1 text-sm text-ink/45">Status {statusLabel(conversation.status)}</p>
             {activeGeneration ? (
               <p className="mt-2 text-sm leading-6 text-tide">
                 Active generation {activeGeneration.status}
@@ -76,56 +92,52 @@ export function ChatConversationPanel({
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-wide text-ink/50">
-            <span className="border border-ink/10 bg-paper px-3 py-1.5">
-              Messages {messages.messages.length}
-            </span>
-            <span className="border border-ink/10 bg-paper px-3 py-1.5">
-              Stream {messages.streamPhase}
-            </span>
-          </div>
+
         </div>
+
         {messages.streamError ? (
-          <p className="mt-3 rounded-xl border border-clay/30 bg-clay/10 px-4 py-3 text-sm leading-6 text-ink">
+          <p className="mb-3 rounded-2xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
             {messages.streamError}
           </p>
         ) : null}
         {messages.controlError ? (
-          <p className="mt-3 rounded-xl border border-clay/30 bg-clay/10 px-4 py-3 text-sm leading-6 text-ink">
+          <p className="mb-3 rounded-2xl border border-clay/20 bg-clay/8 px-4 py-3 text-sm leading-6 text-ink">
             {messages.controlError}
           </p>
         ) : null}
-      </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-rows-[minmax(0,1fr)_auto]">
-        <MessageList
-          messages={messages.messages}
-          loadingHistory={messages.loadingHistory}
-          historyError={messages.historyError}
-          hasMore={messages.hasMore}
-          onLoadMore={() => void messages.loadMore()}
-          streamPhase={messages.streamPhase}
-          streamingMessageId={messages.streamingMessageId}
-          onStopGeneration={(messageId) => void messages.stopGeneration(messageId)}
-          onRetryMessage={(messageId) => void messages.retryMessage(messageId)}
-          onRegenerateMessage={(messageId) => void messages.regenerateMessage(messageId)}
-          stoppingMessageId={messages.stoppingMessageId}
-          actionsDisabled={messages.sending}
-        />
+        <div className="min-h-0 flex-1">
+          <MessageList
+            messages={messages.messages}
+            loadingHistory={messages.loadingHistory}
+            historyError={messages.historyError}
+            hasMore={messages.hasMore}
+            onLoadMore={() => void messages.loadMore()}
+            streamPhase={messages.streamPhase}
+            streamingMessageId={messages.streamingMessageId}
+            onStopGeneration={(messageId) => void messages.stopGeneration(messageId)}
+            onRetryMessage={(messageId) => void messages.retryMessage(messageId)}
+            onRegenerateMessage={(messageId) => void messages.regenerateMessage(messageId)}
+            stoppingMessageId={messages.stoppingMessageId}
+            actionsDisabled={messages.sending}
+          />
+        </div>
 
-        <ChatComposer
-          value={messages.draft}
-          disabled={!canSend}
-          sending={messages.sending}
-          error={conversation.status !== "active" ? "Only active conversations can send new messages." : messages.streamError}
-          model={conversation.model}
-          onChange={messages.setDraft}
-          onSubmit={(content) => void messages.sendMessage(content)}
-          onStop={
-            showStreamingStop ? () => void messages.stopGeneration(messages.streamingMessageId) : undefined
-          }
-          stopping={messages.stoppingMessageId === messages.streamingMessageId && showStreamingStop}
-        />
+        <div className="pt-4">
+          <ChatComposer
+            value={messages.draft}
+            disabled={!canSend}
+            sending={messages.sending}
+            error={conversation.status !== "active" ? "Only active conversations can send new messages." : messages.streamError}
+            model={conversation.model}
+            onChange={messages.setDraft}
+            onSubmit={(content) => void messages.sendMessage(content)}
+            onStop={
+              showStreamingStop ? () => void messages.stopGeneration(messages.streamingMessageId) : undefined
+            }
+            stopping={messages.stoppingMessageId === messages.streamingMessageId && showStreamingStop}
+          />
+        </div>
       </div>
     </section>
   );
