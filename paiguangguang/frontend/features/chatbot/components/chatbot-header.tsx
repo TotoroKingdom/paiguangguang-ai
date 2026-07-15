@@ -15,14 +15,16 @@ const VIEW_LABELS: Record<ChatbotView, string> = {
 
 export function ChatbotHeader({ view, onChangeView, onOpenSidebar }: ChatbotHeaderProps) {
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b border-ink/10 bg-white/85 px-4 backdrop-blur sm:px-6 lg:px-8">
+    <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-3 border-b border-ink/10 bg-white/85 px-4 py-3 backdrop-blur sm:px-6 lg:px-8">
       <button
         type="button"
         aria-label="Open conversations"
         onClick={onOpenSidebar}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-ink/10 bg-white text-ink transition hover:border-tide/40 hover:bg-paper lg:hidden"
+        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-ink/10 bg-white text-ink transition hover:border-tide/40 hover:bg-paper lg:hidden"
       >
-        <span aria-hidden="true">≡</span>
+        <span aria-hidden="true" className="text-lg leading-none">
+          ☰
+        </span>
       </button>
 
       <div className="min-w-0 flex-1">
@@ -30,7 +32,7 @@ export function ChatbotHeader({ view, onChangeView, onOpenSidebar }: ChatbotHead
         <h1 className="truncate text-lg font-semibold text-ink">{VIEW_LABELS[view]}</h1>
       </div>
 
-      <div className="inline-flex rounded-full border border-ink/10 bg-paper p-1">
+      <div className="ml-auto inline-flex rounded-full border border-ink/10 bg-paper p-1">
         {(Object.keys(VIEW_LABELS) as ChatbotView[]).map((item) => (
           <button
             key={item}

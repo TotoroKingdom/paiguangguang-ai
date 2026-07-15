@@ -22,7 +22,7 @@ export function AppShell({ children }: AppShellProps) {
           isHome
             ? "w-full p-0"
             : isChatbot
-              ? "h-dvh w-full overflow-hidden p-0"
+              ? "h-dvh min-h-0 w-full overflow-hidden p-0"
               : "w-full px-4 py-6 sm:px-6 md:py-8 lg:px-8"
         }
       >

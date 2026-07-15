@@ -4,8 +4,29 @@
 
 :root {
   --font-sans: "Aptos", "Segoe UI", sans-serif;
-  --background: #f8f4ea;
-  --foreground: #151815;
+  --color-background: 248 244 234;
+  --color-paper: 248 244 234;
+  --color-surface: 255 255 255;
+  --color-ink: 21 24 21;
+  --color-moss: 102 115 92;
+  --color-clay: 182 95 59;
+  --color-brass: 195 154 61;
+  --color-tide: 45 111 115;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-background: 13 17 15;
+    --color-paper: 18 22 20;
+    --color-surface: 22 26 23;
+    --color-ink: 237 240 233;
+    --color-moss: 156 171 144;
+    --color-clay: 236 134 96;
+    --color-brass: 223 192 113;
+    --color-tide: 106 179 184;
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -14,17 +35,28 @@
 
 html {
   min-height: 100%;
-  background: var(--background);
+  background: rgb(var(--color-background));
+  color-scheme: light dark;
+  scroll-behavior: smooth;
 }
 
 body {
   min-height: 100vh;
   margin: 0;
-  color: var(--foreground);
+  color: rgb(var(--color-ink));
   background:
-    linear-gradient(135deg, rgba(195, 154, 61, 0.14), transparent 34%),
-    linear-gradient(225deg, rgba(45, 111, 115, 0.14), transparent 32%),
-    var(--background);
+    radial-gradient(circle at top left, rgba(195, 154, 61, 0.14), transparent 30%),
+    radial-gradient(circle at top right, rgba(45, 111, 115, 0.14), transparent 28%),
+    rgb(var(--color-background));
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background:
+      radial-gradient(circle at top left, rgba(223, 192, 113, 0.1), transparent 28%),
+      radial-gradient(circle at top right, rgba(106, 179, 184, 0.1), transparent 26%),
+      rgb(var(--color-background));
+  }
 }
 
 a {
@@ -32,7 +64,69 @@ a {
   text-decoration: none;
 }
 
+:focus-visible {
+  outline: 2px solid rgb(var(--color-tide));
+  outline-offset: 2px;
+}
+
+button,
+a,
+input,
+textarea,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chatbot-theme [class~="bg-white"],
+.chatbot-theme [class~="bg-white/75"],
+.chatbot-theme [class~="bg-white/80"],
+.chatbot-theme [class~="bg-white/85"],
+.chatbot-theme [class~="bg-white/90"],
+.chatbot-theme [class~="bg-white/95"],
+.chatbot-theme [class~="hover:bg-white"]:hover {
+  background-color: rgb(var(--color-surface) / 1);
+}
+
+.chatbot-theme [class~="bg-white/75"] {
+  background-color: rgb(var(--color-surface) / 0.75);
+}
+
+.chatbot-theme [class~="bg-white/80"] {
+  background-color: rgb(var(--color-surface) / 0.8);
+}
+
+.chatbot-theme [class~="bg-white/85"] {
+  background-color: rgb(var(--color-surface) / 0.85);
+}
+
+.chatbot-theme [class~="bg-white/90"] {
+  background-color: rgb(var(--color-surface) / 0.9);
+}
+
+.chatbot-theme [class~="bg-white/95"] {
+  background-color: rgb(var(--color-surface) / 0.95);
+}
+
+.chatbot-theme [class~="hover:bg-white"]:hover {
+  background-color: rgb(var(--color-surface) / 1);
+}
+
 ::selection {
-  color: #f8f4ea;
-  background: #2d6f73;
+  color: rgb(var(--color-paper));
+  background: rgb(var(--color-tide));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

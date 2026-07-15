@@ -102,7 +102,7 @@ export function ConversationSidebar({
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-2">
         {error ? (
           <div className="m-2 border border-clay/30 bg-clay/10 p-4 text-sm text-ink">
             <p className="font-semibold text-clay">Unable to load conversations</p>

@@ -138,7 +138,7 @@ export function MessageList({
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        className="min-h-0 flex-1 overscroll-contain overflow-y-auto px-4 py-4"
       >
         {loadMorePending ? (
           <div className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-ink/45">
