@@ -50,7 +50,7 @@ export function MemoryList({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+      <div className="min-h-0 flex-1 overscroll-contain overflow-y-auto p-2">
         {error ? (
           <div className="m-2 rounded-2xl border border-clay/30 bg-clay/10 p-4 text-sm text-ink">
             <p className="font-semibold text-clay">Unable to load memories</p>

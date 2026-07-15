@@ -12,12 +12,12 @@ const config: Config = {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui"]
       },
       colors: {
-        ink: "#151815",
-        paper: "#f8f4ea",
-        moss: "#66735c",
-        clay: "#b65f3b",
-        brass: "#c39a3d",
-        tide: "#2d6f73"
+        ink: "rgb(var(--color-ink) / <alpha-value>)",
+        paper: "rgb(var(--color-paper) / <alpha-value>)",
+        moss: "rgb(var(--color-moss) / <alpha-value>)",
+        clay: "rgb(var(--color-clay) / <alpha-value>)",
+        brass: "rgb(var(--color-brass) / <alpha-value>)",
+        tide: "rgb(var(--color-tide) / <alpha-value>)"
       }
     }
   },

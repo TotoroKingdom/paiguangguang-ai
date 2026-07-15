@@ -19,7 +19,7 @@ function ChatbotShellFrame({ children }: { children: ReactNode }) {
   return (
     <div
       data-testid="chatbot-shell"
-      className="chatbot-theme flex h-full min-h-0 overflow-hidden bg-paper text-ink"
+      className="chatbot-theme flex h-full min-h-0 overflow-hidden bg-paper text-ink pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
     >
       {children}
     </div>
