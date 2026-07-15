@@ -1117,121 +1117,124 @@ Create `chatbot-sidebar.tsx` with this public interface and structure:
 ```tsx
 "use client";
 
-import type { ReactNode } from "react";
+import type {ReactNode} from "react";
 import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import {AnimatePresence, motion, useReducedMotion} from "framer-motion";
 
 export type WorkspaceView = "chat" | "memories";
 
 type ChatbotSidebarProps = {
-  open: boolean;
-  collapsed: boolean;
-  activeView: WorkspaceView;
-  onClose: () => void;
-  onToggleCollapsed: () => void;
-  onChangeView: (view: WorkspaceView) => void;
-  onLogout: () => void;
-  children: ReactNode;
+    open: boolean;
+    collapsed: boolean;
+    activeView: WorkspaceView;
+    onClose: () => void;
+    onToggleCollapsed: () => void;
+    onChangeView: (view: WorkspaceView) => void;
+    onLogout: () => void;
+    children: ReactNode;
 };
 
 function SidebarContents({
-  collapsed,
-  activeView,
-  onToggleCollapsed,
-  onChangeView,
-  onLogout,
-  children,
-}: Omit<ChatbotSidebarProps, "open" | "onClose">) {
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--chat-sidebar)] text-[var(--chat-text)]">
-      <div className="flex h-14 items-center justify-between border-b border-[var(--chat-border)] px-3">
-        <Link href="/" aria-label="Back to home" className="rounded-lg px-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]">
-          {collapsed ? "←" : "AI Chat"}
-        </Link>
-        <button type="button" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={onToggleCollapsed}>
-          {collapsed ? "›" : "‹"}
-        </button>
-      </div>
-      {!collapsed ? <div className="min-h-0 flex-1">{children}</div> : <div className="flex-1" />}
-      <nav className="space-y-1 border-t border-[var(--chat-border)] p-2" aria-label="Chatbot workspace">
-        {(["chat", "memories"] as WorkspaceView[]).map((view) => (
-          <button
-            key={view}
-            type="button"
-            aria-pressed={activeView === view}
-            onClick={() => onChangeView(view)}
-            className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--chat-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]"
-          >
-            {collapsed ? view.slice(0, 1).toUpperCase() : view === "chat" ? "Conversations" : "Memories"}
-          </button>
-        ))}
-        <button type="button" onClick={onLogout} className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--chat-subtle)]">
-          {collapsed ? "×" : "Sign out"}
-        </button>
-      </nav>
-    </div>
-  );
+                             collapsed,
+                             activeView,
+                             onToggleCollapsed,
+                             onChangeView,
+                             onLogout,
+                             children,
+                         }: Omit<ChatbotSidebarProps, "open" | "onClose">) {
+    return (
+        <div className="flex h-full min-h-0 flex-col bg-[var(--chat-sidebar)] text-[var(--chat-text)]">
+            <div className="flex h-14 items-center justify-between border-b border-[var(--chat-border)] px-3">
+                <Link href="/" aria-label="Back to home"
+                      className="rounded-lg px-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]">
+                    {collapsed ? "←" : "AI Chat"}
+                </Link>
+                <button type="button" aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                        onClick={onToggleCollapsed}>
+                    {collapsed ? "›" : "‹"}
+                </button>
+            </div>
+            {!collapsed ? <div className="min-h-0 flex-1">{children}</div> : <div className="flex-1"/>}
+            <nav className="space-y-1 border-t border-[var(--chat-border)] p-2" aria-label="Chatbot workspace">
+                {(["chat", "memories"] as WorkspaceView[]).map((view) => (
+                    <button
+                        key={view}
+                        type="button"
+                        aria-pressed={activeView === view}
+                        onClick={() => onChangeView(view)}
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--chat-subtle)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--chat-accent)]"
+                    >
+                        {collapsed ? view.slice(0, 1).toUpperCase() : view === "chat" ? "Conversations" : "Memories"}
+                    </button>
+                ))}
+                <button type="button" onClick={onLogout}
+                        className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-[var(--chat-subtle)]">
+                    {collapsed ? "×" : "Sign out"}
+                </button>
+            </nav>
+        </div>
+    );
 }
 
 export function ChatbotSidebar(props: ChatbotSidebarProps) {
-  const reduceMotion = useReducedMotion();
-  const duration = reduceMotion ? 0 : 0.18;
+    const reduceMotion = useReducedMotion();
+    const duration = reduceMotion ? 0 : 0.18;
 
-  return (
-    <>
-      <motion.aside
-        className="hidden h-full shrink-0 overflow-hidden border-r border-[var(--chat-border)] lg:block"
-        animate={{ width: props.collapsed ? 64 : 280 }}
-        transition={{ duration }}
-      >
-        <SidebarContents
-          collapsed={props.collapsed}
-          activeView={props.activeView}
-          onToggleCollapsed={props.onToggleCollapsed}
-          onChangeView={props.onChangeView}
-          onLogout={props.onLogout}
-        >
-          {props.children}
-        </SidebarContents>
-      </motion.aside>
-      <AnimatePresence>
-        {props.open ? (
-          <>
-            <motion.button
-              type="button"
-              aria-label="Close sidebar"
-              className="fixed inset-0 z-40 bg-black/35 lg:hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration }}
-              onClick={props.onClose}
-            />
+    return (
+        <>
             <motion.aside
-              className="fixed inset-y-0 left-0 z-50 w-[min(86vw,320px)] border-r border-[var(--chat-border)] shadow-2xl md:w-72 lg:hidden"
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ duration }}
+                className="hidden h-full shrink-0 overflow-hidden border-r border-[var(--chat-border)] lg:block"
+                animate={{width: props.collapsed ? 64 : 280}}
+                transition={{duration}}
             >
-              <SidebarContents
-                collapsed={false}
-                activeView={props.activeView}
-                onToggleCollapsed={props.onToggleCollapsed}
-                onChangeView={(view) => {
-                  props.onChangeView(view);
-                  props.onClose();
-                }}
-                onLogout={props.onLogout}
-              >
-                {props.children}
-              </SidebarContents>
+                <SidebarContents
+                    collapsed={props.collapsed}
+                    activeView={props.activeView}
+                    onToggleCollapsed={props.onToggleCollapsed}
+                    onChangeView={props.onChangeView}
+                    onLogout={props.onLogout}
+                >
+                    {props.children}
+                </SidebarContents>
             </motion.aside>
-          </>
-        ) : null}
-      </AnimatePresence>
-    </>
-  );
+            <AnimatePresence>
+                {props.open ? (
+                    <>
+                        <motion.button
+                            type="button"
+                            aria-label="Close sidebar"
+                            className="fixed inset-0 z-40 bg-black/35 lg:hidden"
+                            initial={{opacity: 0}}
+                            animate={{opacity: 1}}
+                            exit={{opacity: 0}}
+                            transition={{duration}}
+                            onClick={props.onClose}
+                        />
+                        <motion.aside
+                            className="fixed inset-y-0 left-0 z-50 w-[min(86vw,320px)] border-r border-[var(--chat-border)] shadow-2xl md:w-72 lg:hidden"
+                            initial={{x: "-100%"}}
+                            animate={{x: 0}}
+                            exit={{x: "-100%"}}
+                            transition={{duration}}
+                        >
+                            <SidebarContents
+                                collapsed={false}
+                                activeView={props.activeView}
+                                onToggleCollapsed={props.onToggleCollapsed}
+                                onChangeView={(view) => {
+                                    props.onChangeView(view);
+                                    props.onClose();
+                                }}
+                                onLogout={props.onLogout}
+                            >
+                                {props.children}
+                            </SidebarContents>
+                        </motion.aside>
+                    </>
+                ) : null}
+            </AnimatePresence>
+        </>
+    );
 }
 ```
 
