@@ -1,0 +1,97 @@
+name: paiguangguang
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    networks:
+      - app_internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
+  backend:
+    image: "${BACKEND_IMAGE:?BACKEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}"
+    restart: unless-stopped
+    env_file:
+      - ./backend.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_PATH: /data/chroma
+      AUTH_LOGIN_PRIVATE_KEY_PATH: /run/secrets/auth_login_private_key
+    secrets:
+      - auth_login_private_key
+    volumes:
+      - chroma_data:/data/chroma
+    expose:
+      - "8000"
+    networks:
+      web:
+        aliases:
+          - paiguangguang-backend
+      app_internal: {}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=5)"
+      interval: 15s
+      timeout: 6s
+      retries: 12
+      start_period: 30s
+    logging: *default-logging
+
+  frontend:
+    image: "${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}"
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks:
+      web:
+        aliases:
+          - paiguangguang-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    logging: *default-logging
+
+networks:
+  web:
+    external: true
+    name: web
+  app_internal:
+    internal: true
+
+volumes:
+  redis_data:
+  chroma_data:
+
+secrets:
+  auth_login_private_key:
+    file: ./auth-login-private-key.pem
