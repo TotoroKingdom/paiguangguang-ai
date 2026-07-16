@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main  # 只有 push 到 main 分支会触发
+    paths:
+      - "claude-code-todo-demo/**"
+      - ".github/workflows/main.yml"
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -12,7 +16,7 @@ jobs:
     steps:
       # 1️⃣ 拉取最新代码
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # 2️⃣ 上传 todo-app.html 到服务器
       - name: Copy todo-app.html to server

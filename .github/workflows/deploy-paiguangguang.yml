@@ -1,0 +1,147 @@
+name: Deploy Paiguangguang
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "paiguangguang/**"
+      - ".github/workflows/deploy-paiguangguang.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paiguangguang-production
+  cancel-in-progress: false
+
+env:
+  FRONTEND_IMAGE: ghcr.io/totorokingdom/paiguangguang-frontend
+  BACKEND_IMAGE: ghcr.io/totorokingdom/paiguangguang-backend
+
+jobs:
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: paiguangguang/frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: paiguangguang/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        run: npm test
+      - name: Run lint
+        run: npm run lint
+      - name: Build frontend
+        env:
+          NEXT_PUBLIC_BACKEND_URL: ""
+          NEXT_PUBLIC_CHATBOT_ENABLED: "true"
+        run: npm run build
+
+  backend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: paiguangguang
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: paiguangguang/backend/requirements.txt
+      - name: Install dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Run backend tests
+        env:
+          CHROMA_PATH: ${{ runner.temp }}/paiguangguang-chroma
+        run: python -m pytest backend/tests -q
+
+  publish-images:
+    needs:
+      - frontend-check
+      - backend-check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./paiguangguang/frontend
+          file: ./paiguangguang/frontend/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_BACKEND_URL=
+            NEXT_PUBLIC_CHATBOT_ENABLED=true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+          cache-from: type=gha,scope=paiguangguang-frontend
+          cache-to: type=gha,mode=max,scope=paiguangguang-frontend
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./paiguangguang/backend
+          file: ./paiguangguang/backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:latest
+          cache-from: type=gha,scope=paiguangguang-backend
+          cache-to: type=gha,mode=max,scope=paiguangguang-backend
+
+  deploy:
+    needs: publish-images
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Upload deployment manifests
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh"
+          target: "/tmp/paiguangguang-${{ github.sha }}"
+          strip_components: 2
+      - name: Deploy immutable images
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          command_timeout: 15m
+          script: |
+            set -eu
+            release_dir="/tmp/paiguangguang-${{ github.sha }}"
+            app_dir="/home/my-website-ui/paiguangguang"
+            install -d -m 755 "$app_dir"
+            install -m 644 "$release_dir/docker-compose.yml" "$app_dir/docker-compose.yml"
+            install -m 755 "$release_dir/deploy.sh" "$app_dir/deploy.sh"
+            rm -rf "$release_dir"
+            "$app_dir/deploy.sh" "${{ github.sha }}"
