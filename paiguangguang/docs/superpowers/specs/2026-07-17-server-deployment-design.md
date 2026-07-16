@@ -11,6 +11,8 @@
 - 前端、后端和 Redis 由应用自己的 Docker Compose 管理。
 - 只有 Nginx 对宿主机暴露端口；前端、后端和 Redis 不直接暴露公网端口。
 - Chroma 和 Redis 数据需要在容器重建后保留。
+- GitHub Actions 在 `main` 分支更新时自动测试、构建并发布 GHCR 镜像。
+- 服务器只拉取已构建镜像，不在生产服务器现场编译源码。
 
 ## 2. 推荐架构
 
@@ -94,20 +96,58 @@ Redis 增加 `redis-cli ping` 健康检查。前后端增加 HTTP 健康检查�
 
 所有服务设置 `restart: unless-stopped`。Docker 日志使用 `json-file` 驱动，并设置文件大小和数量上限，避免长期运行占满磁盘。
 
-## 9. 发布流程
+## 9. GitHub Actions 与 GHCR 发布
+
+新增独立工作流 `.github/workflows/deploy-paiguangguang.yml`，保留现有 Todo 工作流不变。工作流在以下情况触发：
+
+- 推送到 `main` 分支。
+- 变更路径包含 `paiguangguang/**` 或工作流自身。
+- 允许通过 `workflow_dispatch` 手动重新发布。
+
+工作流分为三个阶段：
+
+1. **验证**：前端执行依赖安装、测试、Lint 和生产构建；后端安装生产与测试依赖并执行完整测试。任一验证失败都不得构建或部署镜像。
+2. **构建与推送**：使用 Docker Buildx 分别构建前端和后端镜像，推送到 GHCR。每个镜像使用完整 Git Commit SHA 作为不可变标签；`main` 最新成功构建可以额外更新 `latest` 标签，但部署只使用 SHA 标签。
+3. **服务器部署**：通过现有的 `SERVER_HOST`、`SERVER_USER` 和 `SERVER_SSH_KEY` 登录服务器，设置本次 `IMAGE_TAG`，拉取两个镜像并启动应用 Compose，然后经 Nginx 执行健康检查。
+
+工作流只需要 `contents: read` 和 `packages: write` 权限。镜像名称固定为：
+
+- `ghcr.io/<github-owner>/<github-repository>-frontend:<commit-sha>`
+- `ghcr.io/<github-owner>/<github-repository>-backend:<commit-sha>`
+
+服务器需要预先通过具有 `read:packages` 权限的只读凭据登录 GHCR。生产 Compose 使用 `IMAGE_TAG` 选择镜像，不包含 `build` 配置。
+
+为了避免并发发布互相覆盖，工作流使用固定的 production concurrency group，同一时间只允许一个部署任务运行。
+
+## 10. 自动回滚
+
+服务器在 `.deploy.env` 中保存当前成功部署的 `IMAGE_TAG`。部署新版本前读取并保存旧标签，然后执行以下流程：
+
+1. 写入新 Commit SHA。
+2. 拉取新镜像并重建前端、后端容器。
+3. 等待容器健康检查通过。
+4. 通过 `http://127.0.0.1:8080/` 和 `/api/v1/health` 验证 Nginx、前端和后端完整链路。
+5. 验证成功后保留新标签。
+6. 任一步骤失败时恢复旧标签、重新启动旧镜像，并让 GitHub Actions 任务失败。
+
+Redis 和 Chroma 使用稳定的 named volume，镜像回滚不回滚数据。包含不可逆数据库迁移的版本必须提供向后兼容迁移，不能依赖镜像回滚恢复数据库结构。
+
+## 11. 首次部署流程
 
 1. 将项目部署到 `/home/my-website-ui/paiguangguang`。
 2. 创建外部网络 `web`；已存在时跳过。
-3. 配置应用生产环境变量和 Neon 连接。
-4. 让 Nginx Compose 和应用 Compose 都加入 `web` 网络。
-5. 构建并启动应用 Compose。
-6. 重载或重建 Nginx 容器。
-7. 从服务器内部检查前端、后端和 Redis 健康状态。
-8. 从外部访问 `http://1.12.47.29:8080`，验证页面、登录、普通 API 和 Chatbot SSE。
+3. 将生产 Compose、`.deploy.env` 和后端运行环境变量放入应用目录。
+4. 配置 Neon 连接和登录私钥挂载。
+5. 让 Nginx Compose 和应用 Compose 都加入 `web` 网络。
+6. 在服务器上登录 GHCR，并确认可以拉取私有镜像。
+7. 配置并重载 Nginx。
+8. 在 GitHub 仓库中配置 `SERVER_HOST`、`SERVER_USER` 和 `SERVER_SSH_KEY`。
+9. 手动触发一次 GitHub Actions 工作流完成首次镜像发布和启动。
+10. 从外部访问 `http://1.12.47.29:8080`，验证页面、登录、普通 API 和 Chatbot SSE。
 
-发布失败时，保留 Neon 数据卷和两个 Docker named volume，回滚到上一个镜像版本并重新启动容器。
+发布失败时，不修改 Neon 数据，并保留 Redis、Chroma 两个 Docker named volume；应用回滚到上一个镜像版本并重新启动容器。
 
-## 10. 验收标准
+## 12. 验收标准
 
 - `http://1.12.47.29:8080` 能打开前端页面。
 - 浏览器所有 API 请求都发往同源 `/api/*`，不存在 `localhost` 或 `127.0.0.1` 请求。
@@ -117,3 +157,7 @@ Redis 增加 `redis-cli ping` 健康检查。前后端增加 HTTP 健康检查�
 - 后端成功连接 Neon，且没有读取 `TEST_DATABASE_URL`。
 - 重建 Redis 和后端容器后，Redis AOF 数据及 Chroma 索引仍存在。
 - Docker 日志大小受限，所有容器具有可观察的健康状态。
+- 只有前后端验证全部通过时才会推送和部署镜像。
+- 生产服务器运行的前端和后端镜像标签等于触发工作流的 Commit SHA。
+- 连续触发多个发布时不会并发修改生产环境。
+- 部署后健康检查失败会自动恢复上一成功镜像标签，并在 GitHub Actions 中显示失败。
