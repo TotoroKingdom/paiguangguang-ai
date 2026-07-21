@@ -1,0 +1,236 @@
+# Paiguangguang 服务器部署手册
+
+本手册对应当前测试入口 `http://1.12.47.29:8080`。应用镜像由 GitHub Actions 构建并发布到 GHCR，生产服务器只负责拉取镜像和启动容器。
+
+## 1. 服务器前置条件
+
+在服务器执行：
+
+```bash
+docker --version
+docker compose version
+curl --version
+```
+
+要求：
+
+- Docker Engine 正常运行。
+- 使用 Docker Compose v2，命令形式为 `docker compose`。
+- 服务器可以访问 `ghcr.io`、Neon、DeepSeek 和 DashScope。
+- 腾讯云安全组和 CentOS 防火墙允许 TCP 8080 入站。
+- `/home/nginx/docker-compose.yml` 中的 Nginx 服务名为 `nginx`。
+
+检查 Nginx 服务名：
+
+```bash
+cd /home/nginx
+docker compose config --services
+```
+
+如果输出中没有 `nginx`，需要先把 `deploy/nginx/docker-compose.web.yml` 中的服务名改成实际名称。
+
+## 2. 首次上传部署文件
+
+先在服务器创建目录：
+
+```bash
+install -d -m 755 /home/my-website-ui/paiguangguang
+install -d -m 755 /home/my-website-ui/paiguangguang-bootstrap
+docker network inspect web >/dev/null 2>&1 || docker network create web
+```
+
+然后在本地 Git 仓库根目录执行：
+
+```bash
+scp -r paiguangguang/deploy/* root@1.12.47.29:/home/my-website-ui/paiguangguang-bootstrap/
+scp paiguangguang/deploy/.deploy.env.example root@1.12.47.29:/home/my-website-ui/paiguangguang-bootstrap/
+scp paiguangguang/backend/auth-login-private-key.pem root@1.12.47.29:/home/my-website-ui/paiguangguang/auth-login-private-key.pem
+```
+
+如果本地还没有登录加密私钥，在 `paiguangguang/backend` 下执行：
+
+```bash
+python -m scripts.generate_login_key --output auth-login-private-key.pem
+```
+
+## 3. 初始化应用运行文件
+
+在服务器执行：
+
+```bash
+cd /home/my-website-ui/paiguangguang
+cp /home/my-website-ui/paiguangguang-bootstrap/docker-compose.yml docker-compose.yml
+cp /home/my-website-ui/paiguangguang-bootstrap/deploy.sh deploy.sh
+test -f .deploy.env || cp /home/my-website-ui/paiguangguang-bootstrap/.deploy.env.example .deploy.env
+test -f backend.env || cp /home/my-website-ui/paiguangguang-bootstrap/backend.env.example backend.env
+chmod 755 deploy.sh
+chmod 600 .deploy.env backend.env auth-login-private-key.pem
+```
+
+编辑 `/home/my-website-ui/paiguangguang/backend.env`，至少替换以下内容：
+
+- `DATABASE_URL`：Neon 的 `postgresql+psycopg` 连接串，必须包含 `sslmode=require`。
+- `JWT_SECRET_KEY`：长度不少于 32 字节的随机值。
+- `ADMIN_USER_EMAIL`、`ADMIN_USER_PASSWORD`。
+- `DEEPSEEK_API_KEY`。
+- `DASHSCOPE_API_KEY`。
+
+生产配置中禁止出现测试数据库地址：
+
+```bash
+! grep -q '^TEST_DATABASE_URL=' backend.env
+grep '^CORS_ALLOW_ORIGINS=http://1.12.47.29:8080$' backend.env
+grep '^DATABASE_URL=.*sslmode=require' backend.env
+```
+
+三个命令都应返回成功。
+
+## 4. 接入现有 Nginx
+
+复制站点配置：
+
+```bash
+cp /home/my-website-ui/paiguangguang-bootstrap/nginx/paiguangguang.conf /home/nginx/conf.d/paiguangguang.conf
+```
+
+校验组合后的 Nginx Compose 配置并启动：
+
+```bash
+cd /home/nginx
+docker compose \
+  -f docker-compose.yml \
+  -f /home/my-website-ui/paiguangguang-bootstrap/nginx/docker-compose.web.yml \
+  config --quiet
+
+docker compose \
+  -f docker-compose.yml \
+  -f /home/my-website-ui/paiguangguang-bootstrap/nginx/docker-compose.web.yml \
+  up -d
+
+docker compose exec nginx nginx -t
+docker compose exec nginx nginx -s reload
+```
+
+确认 Nginx 已发布 8080：
+
+```bash
+docker compose ps
+ss -lntp | grep ':8080'
+```
+
+以后重建 Nginx 时必须继续同时传入两个 Compose 文件。也可以将 override 中的 `ports` 和 `web` 网络配置合并进 `/home/nginx/docker-compose.yml`，合并后只需使用原 Compose 文件。
+
+## 5. 登录私有 GHCR
+
+为服务器准备一个只具有 `read:packages` 权限的 GitHub Token，然后在服务器执行：
+
+```bash
+export GHCR_READ_TOKEN='粘贴只读 Package Token'
+echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u TotoroKingdom --password-stdin
+unset GHCR_READ_TOKEN
+```
+
+登录信息保存在服务器 Docker 配置中，GitHub Actions 发布时不需要再次传输 GHCR Token。
+
+## 6. GitHub 仓库配置
+
+在 GitHub 仓库的 Actions Secrets 中配置：
+
+```text
+SERVER_HOST=1.12.47.29
+SERVER_USER=root
+SERVER_SSH_KEY=服务器 root 账户对应的完整多行 SSH 私钥
+```
+
+当前流程沿用 root 账户。建议限制该 SSH Key 的用途，并关闭服务器密码登录；后续可以改成具有 Docker 权限的独立部署账户。
+
+工作流文件：
+
+```text
+.github/workflows/deploy-paiguangguang.yml
+```
+
+它只在 `main` 分支中的 `paiguangguang/**` 或工作流自身发生变化时自动运行，也支持手动触发。
+
+## 7. 首次自动发布
+
+开发改动先提交到 `dev`。确认完成后，在本地 Git 根目录执行：
+
+```bash
+git checkout main
+git pull --ff-only origin main
+git merge --no-ff dev
+git push origin main
+```
+
+推送 `main` 后，GitHub Actions 会依次执行：
+
+1. 前端测试、Lint、生产构建。
+2. 后端完整测试。
+3. 构建前端和后端镜像。
+4. 使用完整 Commit SHA 推送到 GHCR。
+5. 上传 `docker-compose.yml` 和 `deploy.sh`。
+6. SSH 登录服务器执行健康检查部署。
+7. 新版本失败时恢复上一个 Commit SHA 镜像。
+
+首次部署没有上一版本可回滚，因此应在测试通过后再触发。
+
+## 8. 发布后验证
+
+在服务器执行：
+
+```bash
+cd /home/my-website-ui/paiguangguang
+docker compose --env-file .deploy.env -f docker-compose.yml ps
+curl -fsS http://127.0.0.1:8080/ >/dev/null
+curl -fsS http://127.0.0.1:8080/api/v1/health
+grep '^IMAGE_TAG=' .deploy.env
+docker compose --env-file .deploy.env -f docker-compose.yml images
+```
+
+在外部电脑执行：
+
+```bash
+curl -fsS http://1.12.47.29:8080/ >/dev/null
+curl -fsS http://1.12.47.29:8080/api/v1/health
+```
+
+浏览器打开 `http://1.12.47.29:8080`，验证登录、管理端、RAG 和 Chatbot。浏览器开发者工具中的 API 地址应全部为 `http://1.12.47.29:8080/api/...`，Chatbot 流式内容应逐步返回。
+
+## 9. 日志和常用操作
+
+```bash
+cd /home/my-website-ui/paiguangguang
+
+docker compose --env-file .deploy.env -f docker-compose.yml ps
+docker compose --env-file .deploy.env -f docker-compose.yml logs --tail=200 frontend backend redis
+docker compose --env-file .deploy.env -f docker-compose.yml logs -f backend
+docker compose --env-file .deploy.env -f docker-compose.yml restart backend
+```
+
+前端、后端和 Redis 均不映射宿主机端口。正常情况下，服务器只需要对公网开放 Nginx 的 8080。
+
+## 10. 手动回滚
+
+自动部署失败时，`deploy.sh` 会恢复 `.deploy.env` 中的上一成功 SHA。需要手动回滚时：
+
+```bash
+cd /home/my-website-ui/paiguangguang
+sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=上一成功版本的完整CommitSHA/' .deploy.env
+docker compose --env-file .deploy.env -f docker-compose.yml pull frontend backend
+docker compose --env-file .deploy.env -f docker-compose.yml up -d --remove-orphans --wait --wait-timeout 180
+curl -fsS http://127.0.0.1:8080/api/v1/health
+```
+
+镜像回滚不会回滚 Neon 数据或数据库迁移。包含不可逆迁移的版本必须先提供向后兼容方案。
+
+## 11. 数据卷和备份
+
+检查持久卷：
+
+```bash
+docker volume inspect paiguangguang_redis_data
+docker volume inspect paiguangguang_chroma_data
+```
+
+Redis AOF 和 Chroma 索引在容器重建后保留。进行破坏性维护前，需要同时备份 Neon、`paiguangguang_redis_data` 和 `paiguangguang_chroma_data`。恢复时应保证 Neon 数据与 Chroma 索引来自相近时间点；不一致时通过管理端重新索引文档。
