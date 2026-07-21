@@ -8,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.chatbot.models.memory import ChatbotMemory
+from app.chatbot.repositories import memory_repository as memory_repository_module
 from app.chatbot.repositories.conversation_repository import ConversationRepository
 from app.chatbot.repositories.memory_repository import MemoryRepository
 from app.db.models import Base, User
@@ -65,7 +66,7 @@ def test_create_dedupes_by_normalized_hash_and_keeps_owner_scope(tmp_path) -> No
     assert repo.get_owned(first.id, owner.id) is not None
 
 
-def test_list_owned_filters_active_candidate_and_expiry(tmp_path) -> None:
+def test_list_owned_filters_active_candidate_and_expiry(tmp_path, monkeypatch) -> None:
     session_factory = _build_session_factory(tmp_path)
     conversation_repo = ConversationRepository(session_factory)
     repo = MemoryRepository(session_factory)
@@ -76,6 +77,7 @@ def test_list_owned_filters_active_candidate_and_expiry(tmp_path) -> None:
 
     conversation_id = _create_conversation(conversation_repo, owner.id, "Thread")
     now = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(memory_repository_module, "_utcnow", lambda: now)
 
     active_future = repo.create(
         owner.id,
