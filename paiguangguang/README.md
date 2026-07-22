@@ -487,5 +487,5 @@ at `http://1.12.47.29:8080`, Neon provides PostgreSQL, and Redis plus Chroma use
 persistent Docker volumes.
 
 - Server setup and operations: [`deploy/README.md`](deploy/README.md)
-- Architecture design: [`docs/superpowers/specs/2026-07-17-server-deployment-design.md`](docs/superpowers/specs/2026-07-17-server-deployment-design.md)
-- Implementation plan: [`docs/superpowers/plans/2026-07-17-ghcr-single-server-deployment.md`](docs/superpowers/plans/2026-07-17-ghcr-single-server-deployment.md)
+- Architecture design: [`docs/superpowers/specs/2026-07-17-server-deployment-design.md`](archive/superpowers/specs/2026-07-17-server-deployment-design.md)
+- Implementation plan: [`docs/superpowers/plans/2026-07-17-ghcr-single-server-deployment.md`](archive/superpowers/plans/2026-07-17-ghcr-single-server-deployment.md)
