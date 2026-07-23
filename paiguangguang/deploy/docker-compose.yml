@@ -32,7 +32,8 @@ services:
       CHROMA_PATH: /data/chroma
       AUTH_LOGIN_PRIVATE_KEY_PATH: /run/secrets/auth_login_private_key
     secrets:
-      - auth_login_private_key
+      - source: auth_login_private_key
+        target: auth_login_private_key
     volumes:
       - chroma_data:/data/chroma
     expose:
