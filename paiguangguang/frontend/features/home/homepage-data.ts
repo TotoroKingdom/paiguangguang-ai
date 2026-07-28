@@ -217,10 +217,10 @@ export const projectCards: ProjectCard[] = [
         tags: ["RAG", "Retrieval", "Citation"]
     },
     {
-        name: "Browser Agent",
+        name: "飞书 Agent",
         href: "/agents/browser",
         status: "Agent Demo",
-        description: "展示规划、搜索和综合输出的浏览器研究流程。",
+        description: "整合飞书平台，自动写周报，自动审批，自动读取数据",
         tags: ["Planning", "Search", "Synthesis"]
     },
     {
