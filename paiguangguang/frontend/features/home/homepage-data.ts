@@ -245,7 +245,7 @@ export const projectCards: ProjectCard[] = [
         tags: ["Campus", "Service", "AI"]
     },
     {
-        name: "智慧办公",
+        name: "办公自动化",
         href: "/",
         status: "Scenario",
         description: "秒审秒批，解放双手",
