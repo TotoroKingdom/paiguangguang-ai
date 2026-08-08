@@ -32,7 +32,8 @@ services:
       CHROMA_PATH: /data/chroma
       AUTH_LOGIN_PRIVATE_KEY_PATH: /run/secrets/auth_login_private_key
     secrets:
-      - auth_login_private_key
+      - source: auth_login_private_key
+        target: auth_login_private_key
     volumes:
       - chroma_data:/data/chroma
     expose:
@@ -79,6 +80,27 @@ services:
       timeout: 6s
       retries: 12
       start_period: 20s
+    logging: *default-logging
+
+  todo:
+    image: nginx:1.30.4-alpine
+    restart: unless-stopped
+    ports:
+      - "8082:80"
+    volumes:
+      - /home/my-website-ui/todo-demo-ui/todo-app.html:/usr/share/nginx/html/index.html:ro
+    networks:
+      web:
+        aliases:
+          - paiguangguang-todo
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "wget -qO- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     logging: *default-logging
 
 networks:

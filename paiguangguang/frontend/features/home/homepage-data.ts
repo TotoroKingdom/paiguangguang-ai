@@ -203,7 +203,7 @@ export const techStack: TechStackItem[] = [
 
 export const projectCards: ProjectCard[] = [
     {
-        name: "Chat bot",
+        name: "Chat Bot",
         href: "/chat-bot",
         status: "Live",
         description: "暖心的聊天机器人",
@@ -217,10 +217,10 @@ export const projectCards: ProjectCard[] = [
         tags: ["RAG", "Retrieval", "Citation"]
     },
     {
-        name: "Browser Agent",
+        name: "飞书 Agent",
         href: "/agents/browser",
         status: "Agent Demo",
-        description: "展示规划、搜索和综合输出的浏览器研究流程。",
+        description: "整合飞书平台，自动写周报，自动审批，自动读取数据",
         tags: ["Planning", "Search", "Synthesis"]
     },
     {
@@ -234,21 +234,21 @@ export const projectCards: ProjectCard[] = [
         name: "智慧工业园",
         href: "/",
         status: "Scenario",
-        description: "面向园区设备、能耗、安防和运营数据的智能化管理平台。",
+        description: "企业知识库&&让AI为企业赋能",
         tags: ["IoT", "Energy", "Operations"]
     },
     {
         name: "智慧校园",
         href: "/",
         status: "Scenario",
-        description: "连接教学、教务、安防和服务场景，构建校园一体化智能应用。",
+        description: "儿童陪聊机器人&&个性化生成儿童培养计划",
         tags: ["Campus", "Service", "AI"]
     },
     {
-        name: "智慧营销",
+        name: "办公自动化Agent",
         href: "/",
         status: "Scenario",
-        description: "围绕客户洞察、内容生成和线索转化的 AI 营销工作台。",
+        description: "秒审秒批，解放双手",
         tags: ["Marketing", "Content", "Growth"]
     }
 ];
