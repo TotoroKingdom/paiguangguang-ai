@@ -128,7 +128,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh"
+          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh,paiguangguang/deploy/nginx"
           target: "/tmp/paiguangguang-${{ github.sha }}"
           strip_components: 2
       - name: Deploy immutable images
@@ -145,5 +145,6 @@ jobs:
             install -d -m 755 "$app_dir"
             install -m 644 "$release_dir/docker-compose.yml" "$app_dir/docker-compose.yml"
             install -m 755 "$release_dir/deploy.sh" "$app_dir/deploy.sh"
-            rm -rf "$release_dir"
             "$app_dir/deploy.sh" "${{ github.sha }}"
+            bash "$release_dir/nginx/deploy-nginx.sh" "$release_dir/nginx"
+            rm -rf "$release_dir"

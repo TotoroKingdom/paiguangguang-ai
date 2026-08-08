@@ -16,6 +16,7 @@ test -f "$DEPLOY_ENV"
 test -f "$COMPOSE_FILE"
 test -f "$APP_DIR/backend.env"
 test -f "$APP_DIR/auth-login-private-key.pem"
+test -f /home/my-website-ui/todo-demo-ui/todo-app.html
 
 previous_tag="$(sed -n 's/^IMAGE_TAG=//p' "$DEPLOY_ENV" | tail -n 1)"
 
@@ -41,7 +42,8 @@ wait_for_public_routes() {
   local attempt
   for attempt in $(seq 1 36); do
     if curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/ >/dev/null \
-      && curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/api/v1/health >/dev/null; then
+      && curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/api/v1/health >/dev/null \
+      && curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8082/ >/dev/null; then
       return 0
     fi
     sleep 5
@@ -53,7 +55,7 @@ rollback() {
   if [[ "$previous_tag" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Deployment failed; restoring $previous_tag" >&2
     write_tag "$previous_tag"
-    compose pull frontend backend
+    compose pull frontend backend todo
     compose up -d --remove-orphans --wait --wait-timeout 180
     wait_for_public_routes
   else
@@ -68,7 +70,7 @@ rollback() {
 
 write_tag "$NEW_TAG"
 
-if ! compose pull frontend backend; then
+if ! compose pull frontend backend todo; then
   rollback
 fi
 
