@@ -17,7 +17,6 @@
 
 ```bash
 test -f /home/my-website-ui/todo-demo-ui/todo-app.html
-test -f /home/nginx/docker-compose.yml
 test -f /home/nginx/nginx.conf
 test -f /home/nginx/certs/www.paiguangguang.xyz.pem
 test -f /home/nginx/certs/www.paiguangguang.xyz.key
@@ -164,8 +163,8 @@ curl -fsS http://127.0.0.1:8081/ >/dev/null
 curl -fsS http://127.0.0.1:8082/ >/dev/null
 
 cd /home/nginx
-docker compose -f docker-compose.yml -f docker-compose.web.yml ps
-docker compose -f docker-compose.yml -f docker-compose.web.yml exec nginx nginx -t
+docker compose -f docker-compose.web.yml ps
+docker compose -f docker-compose.web.yml exec nginx nginx -t
 ```
 
 外部网络：
@@ -207,11 +206,10 @@ git push origin main
 ls -lt /home/nginx/backups
 ```
 
-选择正确的备份时间戳后，恢复其中的 `docker-compose.web.yml`、`conf.d/paiguangguang.conf` 和 `conf.d/locations/*.conf`，再执行：
+选择正确的备份时间戳后，恢复其中的 `conf.d/paiguangguang.conf` 和 `conf.d/locations/*.conf`，再执行：
 
 ```bash
 cd /home/nginx
-docker compose -f docker-compose.yml -f docker-compose.web.yml up -d nginx
-docker compose -f docker-compose.yml -f docker-compose.web.yml exec nginx nginx -t
-docker compose -f docker-compose.yml -f docker-compose.web.yml exec nginx nginx -s reload
+docker compose -f docker-compose.web.yml up -d --force-recreate --wait --wait-timeout 60 nginx
+docker compose -f docker-compose.web.yml exec nginx nginx -t
 ```

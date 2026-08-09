@@ -18,16 +18,15 @@ curl --version
 - 使用 Docker Compose v2，命令形式为 `docker compose`。
 - 服务器可以访问配置的 TCR Registry、DeepSeek 和 DashScope，并且 `postgres17` 容器已经运行。
 - 腾讯云安全组和 CentOS 防火墙允许 TCP 8080 入站。
-- `/home/nginx/docker-compose.yml` 中的 Nginx 服务名为 `nginx`。
+- `/home/nginx` 中存在证书、`nginx.conf` 和 `conf.d` 目录。
 
-检查 Nginx 服务名：
+检查 Nginx 基础文件：
 
 ```bash
-cd /home/nginx
-docker compose config --services
+test -f /home/nginx/nginx.conf
+test -f /home/nginx/certs/www.paiguangguang.xyz.pem
+test -f /home/nginx/certs/www.paiguangguang.xyz.key
 ```
-
-如果输出中没有 `nginx`，需要先把 `deploy/nginx/docker-compose.web.yml` 中的服务名改成实际名称。
 
 ## 2. 首次上传部署文件
 
@@ -92,40 +91,32 @@ test "$(stat -c '%a' backend/prod.env)" = 600
 
 三个命令都应返回成功。
 
-## 4. 接入现有 Nginx
+## 4. 部署主 Nginx
 
-复制站点配置：
+使用独立的 Nginx Compose 配置部署：
 
 ```bash
-cp /home/my-website-ui/paiguangguang-bootstrap/nginx/paiguangguang.conf /home/nginx/conf.d/paiguangguang.conf
+bash /home/my-website-ui/paiguangguang-bootstrap/nginx/deploy-nginx.sh \
+  /home/my-website-ui/paiguangguang-bootstrap/nginx
 ```
 
-校验组合后的 Nginx Compose 配置并启动：
+部署脚本会写入 `/home/nginx/docker-compose.web.yml`。后续检查只使用该文件，不再与旧的 `/home/nginx/docker-compose.yml` 合并：
 
 ```bash
 cd /home/nginx
-docker compose \
-  -f docker-compose.yml \
-  -f /home/my-website-ui/paiguangguang-bootstrap/nginx/docker-compose.web.yml \
-  config --quiet
-
-docker compose \
-  -f docker-compose.yml \
-  -f /home/my-website-ui/paiguangguang-bootstrap/nginx/docker-compose.web.yml \
-  up -d
-
-docker compose exec nginx nginx -t
-docker compose exec nginx nginx -s reload
+docker compose -f docker-compose.web.yml config --quiet
+docker compose -f docker-compose.web.yml ps
+docker compose -f docker-compose.web.yml exec nginx nginx -t
 ```
 
 确认 Nginx 已发布 8080：
 
 ```bash
-docker compose ps
+docker compose -f docker-compose.web.yml ps
 ss -lntp | grep ':8080'
 ```
 
-以后重建 Nginx 时必须继续同时传入两个 Compose 文件。也可以将 override 中的 `ports` 和 `web` 网络配置合并进 `/home/nginx/docker-compose.yml`，合并后只需使用原 Compose 文件。
+旧的 `/home/nginx/docker-compose.yml` 仅作为历史文件保留，不得再用于启动生产 Nginx。
 
 ## 5. TCR 自动认证
 

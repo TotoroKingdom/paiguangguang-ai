@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 SOURCE_DIR="${1:-}"
 NGINX_DIR="/home/nginx"
-BASE_COMPOSE="$NGINX_DIR/docker-compose.yml"
 OVERRIDE_COMPOSE="$NGINX_DIR/docker-compose.web.yml"
 STAMP="$(date +%F-%H%M%S)"
 BACKUP_DIR="$NGINX_DIR/backups/$STAMP"
@@ -18,7 +17,6 @@ for required_file in \
   "$SOURCE_DIR/docker-compose.web.yml" \
   "$SOURCE_DIR/locations/draw.conf" \
   "$SOURCE_DIR/locations/todo.conf" \
-  "$BASE_COMPOSE" \
   "$NGINX_DIR/nginx.conf" \
   "/home/my-website-ui/todo-demo-ui/todo-app.html" \
   "$NGINX_DIR/certs/www.paiguangguang.xyz.pem" \
@@ -55,7 +53,6 @@ restore_file() {
 }
 
 for relative_path in \
-  docker-compose.web.yml \
   conf.d/paiguangguang.conf \
   conf.d/locations/draw.conf \
   conf.d/locations/todo.conf; do
@@ -69,30 +66,23 @@ install -m 644 "$SOURCE_DIR/locations/draw.conf" "$NGINX_DIR/conf.d/locations/dr
 install -m 644 "$SOURCE_DIR/locations/todo.conf" "$NGINX_DIR/conf.d/locations/todo.conf"
 
 compose() {
-  docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE" "$@"
+  docker compose -f "$OVERRIDE_COMPOSE" "$@"
 }
 
 restore_previous_configuration() {
   trap - ERR
   echo "Nginx deployment failed; restoring files from $BACKUP_DIR" >&2
   for relative_path in \
-    docker-compose.web.yml \
     conf.d/paiguangguang.conf \
     conf.d/locations/draw.conf \
     conf.d/locations/todo.conf; do
     restore_file "$relative_path"
   done
 
-  if [[ -f "$OVERRIDE_COMPOSE" ]]; then
-    restore_compose=(docker compose -f "$BASE_COMPOSE" -f "$OVERRIDE_COMPOSE")
-  else
-    restore_compose=(docker compose -f "$BASE_COMPOSE")
-  fi
-
-  if "${restore_compose[@]}" config --quiet; then
-    "${restore_compose[@]}" up -d nginx || true
-    if "${restore_compose[@]}" exec -T nginx nginx -t; then
-      "${restore_compose[@]}" exec -T nginx nginx -s reload || true
+  if compose config --quiet; then
+    compose up -d --force-recreate --wait --wait-timeout 60 nginx || true
+    if compose exec -T nginx nginx -t; then
+      compose exec -T nginx nginx -s reload || true
     fi
   fi
 }
@@ -100,12 +90,10 @@ restore_previous_configuration() {
 trap restore_previous_configuration ERR
 
 compose config --quiet
-compose run --rm --no-deps nginx nginx -V 2>&1 \
+compose up -d --force-recreate --wait --wait-timeout 60 nginx
+compose exec -T nginx nginx -V 2>&1 \
   | grep -q -- '--with-http_sub_module'
-compose run --rm --no-deps nginx nginx -t
-compose up -d nginx
 compose exec -T nginx nginx -t
-compose exec -T nginx nginx -s reload
 
 curl --fail --silent --show-error --max-time 20 \
   http://127.0.0.1:8081/ >/dev/null
