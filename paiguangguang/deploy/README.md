@@ -181,9 +181,10 @@ git push origin main
 2. 后端完整测试。
 3. 构建前端和后端镜像。
 4. 使用完整 Commit SHA 和 `latest` 标签推送到 TCR。
-5. 上传 `docker-compose.yml` 和 `deploy.sh`。
+5. 上传 `docker-compose.yml`、`deploy.sh` 和 `cleanup-images.sh`。
 6. SSH 登录服务器执行健康检查部署。
 7. 新版本失败时恢复上一组镜像仓库地址和 Commit SHA；首次从 GHCR 切换到 TCR 失败时也能恢复旧配置。
+8. 发布成功后保留当前版本和上一个成功版本，清理其余 TCR/GHCR 前后端镜像标签。
 
 首次部署没有上一版本可回滚，因此应在测试通过后再触发。
 
