@@ -77,6 +77,7 @@ def test_prod_env_uses_internal_postgres_without_test_database() -> None:
 def test_deployment_uses_tracked_prod_env() -> None:
     compose = (DEPLOY_DIR / "docker-compose.yml").read_text(encoding="utf-8")
     deploy_script = (DEPLOY_DIR / "deploy.sh").read_text(encoding="utf-8")
+    cleanup_script_path = DEPLOY_DIR / "cleanup-images.sh"
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert not (DEPLOY_DIR / "backend.env.example").exists()
@@ -85,6 +86,11 @@ def test_deployment_uses_tracked_prod_env() -> None:
     assert 'PROD_ENV="$APP_DIR/backend/prod.env"' in deploy_script
     assert "paiguangguang/backend/prod.env" in workflow
     assert '"$app_dir/backend/prod.env"' in workflow
+    assert cleanup_script_path.exists()
+    assert 'CLEANUP_SCRIPT="$APP_DIR/cleanup-images.sh"' in deploy_script
+    assert '"$CLEANUP_SCRIPT"' in deploy_script
+    assert "paiguangguang/deploy/cleanup-images.sh" in workflow
+    assert '"$release_dir/cleanup-images.sh" "$app_dir/cleanup-images.sh"' in workflow
 
 
 @pytest.mark.skip(reason="Project owner explicitly accepted the existing configured API keys for this project")

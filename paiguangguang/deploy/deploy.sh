@@ -5,6 +5,7 @@ APP_DIR="/home/my-website-ui/paiguangguang"
 DEPLOY_ENV="$APP_DIR/.deploy.env"
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
 PROD_ENV="$APP_DIR/backend/prod.env"
+CLEANUP_SCRIPT="$APP_DIR/cleanup-images.sh"
 DATABASE_CONTAINER="postgres17"
 DATABASE_NETWORK="paiguangguang_database"
 NEW_TAG="${1:-}"
@@ -38,6 +39,7 @@ cd "$APP_DIR"
 test -f "$DEPLOY_ENV"
 test -f "$COMPOSE_FILE"
 test -f "$PROD_ENV"
+test -x "$CLEANUP_SCRIPT"
 test -f "$APP_DIR/auth-login-private-key.pem"
 test -f /home/my-website-ui/todo-demo-ui/todo-app.html
 chmod 600 "$PROD_ENV"
@@ -159,6 +161,16 @@ fi
 
 if ! wait_for_public_routes; then
   rollback
+fi
+
+if ! "$CLEANUP_SCRIPT" \
+  "$NEW_TAG" \
+  "$NEW_FRONTEND_IMAGE" \
+  "$NEW_BACKEND_IMAGE" \
+  "$previous_tag" \
+  "$previous_frontend_image" \
+  "$previous_backend_image"; then
+  echo "Warning: application image cleanup failed; deployment remains active" >&2
 fi
 
 echo "Deployment succeeded: $NEW_TAG"
