@@ -83,9 +83,20 @@ Repository Secrets：
 SERVER_HOST=1.12.47.29
 SERVER_USER=root
 SERVER_SSH_KEY=<完整 SSH 私钥>
+TCR_USERNAME=<腾讯云账号 ID>
+TCR_PASSWORD=<TCR 个人版初始化密码>
 ```
 
-服务器还应已经登录 GHCR，并具备拉取私有镜像的 `read:packages` 权限。
+Repository Variables：
+
+```text
+TCR_REGISTRY=ccr.ccs.tencentyun.com
+TCR_NAMESPACE=<已经创建的命名空间>
+TCR_FRONTEND_REPOSITORY=<已经创建的前端仓库名>
+TCR_BACKEND_REPOSITORY=<已经创建的后端仓库名>
+```
+
+建议前后端仓库名分别为 `paiguangguang-frontend` 和 `paiguangguang-backend`。不需要手动登录服务器或执行 `docker pull`；工作流会在每次发版时自动登录 TCR。不要把 TCR 密码放入 Variables 或仓库文件。
 
 ## 合并前检查
 
@@ -136,7 +147,7 @@ git push origin main
 
 1. 执行前端测试、lint 和生产构建。
 2. 执行后端测试。
-3. 构建前后端镜像并推送到 GHCR。
+3. 构建前后端镜像并推送到腾讯云 TCR。
 4. 上传应用 Compose、部署脚本和 Nginx 配置。
 5. 使用完整 Commit SHA 部署应用镜像。
 6. 启动 Todo Nginx 容器并公开 8082。
@@ -182,7 +193,7 @@ curl -fsS https://www.paiguangguang.xyz/draw/manifest.webmanifest
 
 ## 回滚
 
-应用镜像自动部署失败时，`deploy.sh` 会恢复上一个成功的 Commit SHA。
+应用镜像自动部署失败时，`deploy.sh` 会恢复上一组镜像仓库地址和成功的 Commit SHA。
 
 如果发布成功后发现业务问题，优先在 Git 中 revert 本次合并提交并推送 `main`，让流水线重新发布：
 
