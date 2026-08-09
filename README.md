@@ -25,6 +25,7 @@ PostgreSQL · Redis · ChromaDB
 
 ## 🚀 Todo
 
+- [√] RAG链路
 - [ ] 分布式系统的查询链路
 - [ ] 分布式系统的更新链路
 - [ ] 记忆系统链路
