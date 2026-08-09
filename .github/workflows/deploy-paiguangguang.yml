@@ -5,7 +5,11 @@ on:
     branches:
       - main
     paths:
-      - "paiguangguang/**"
+      - "paiguangguang/frontend/**"
+      - "paiguangguang/backend/**"
+      - "paiguangguang/deploy/docker-compose.yml"
+      - "paiguangguang/deploy/deploy.sh"
+      - "paiguangguang/deploy/nginx/**"
       - ".github/workflows/deploy-paiguangguang.yml"
   workflow_dispatch:
 
@@ -15,10 +19,6 @@ permissions:
 concurrency:
   group: paiguangguang-production
   cancel-in-progress: false
-
-env:
-  FRONTEND_IMAGE: ghcr.io/totorokingdom/paiguangguang-frontend
-  BACKEND_IMAGE: ghcr.io/totorokingdom/paiguangguang-backend
 
 jobs:
   frontend-check:
@@ -43,11 +43,6 @@ jobs:
         run: npm test
       - name: Run lint
         run: npm run lint
-      - name: Build frontend
-        env:
-          NEXT_PUBLIC_BACKEND_URL: ""
-          NEXT_PUBLIC_CHATBOT_ENABLED: "true"
-        run: npm run build
 
   backend-check:
     runs-on: ubuntu-latest
@@ -75,6 +70,25 @@ jobs:
       - frontend-check
       - backend-check
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        include:
+          - service: frontend
+            context: ./paiguangguang/frontend
+            dockerfile: ./paiguangguang/frontend/Dockerfile
+            image: ghcr.io/totorokingdom/paiguangguang-frontend
+            cache_scope: paiguangguang-frontend
+            build_args: |
+              NEXT_PUBLIC_BACKEND_URL=
+              NEXT_PUBLIC_CHATBOT_ENABLED=true
+          - service: backend
+            context: ./paiguangguang/backend
+            dockerfile: ./paiguangguang/backend/Dockerfile
+            image: ghcr.io/totorokingdom/paiguangguang-backend
+            cache_scope: paiguangguang-backend
+            build_args: ""
     permissions:
       contents: read
       packages: write
@@ -89,31 +103,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push frontend
+      - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
-          context: ./paiguangguang/frontend
-          file: ./paiguangguang/frontend/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
-          build-args: |
-            NEXT_PUBLIC_BACKEND_URL=
-            NEXT_PUBLIC_CHATBOT_ENABLED=true
+          build-args: ${{ matrix.build_args }}
           tags: |
-            ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-            ${{ env.FRONTEND_IMAGE }}:latest
-          cache-from: type=gha,scope=paiguangguang-frontend
-          cache-to: type=gha,mode=max,scope=paiguangguang-frontend
-      - name: Build and push backend
-        uses: docker/build-push-action@v6
-        with:
-          context: ./paiguangguang/backend
-          file: ./paiguangguang/backend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
-            ${{ env.BACKEND_IMAGE }}:latest
-          cache-from: type=gha,scope=paiguangguang-backend
-          cache-to: type=gha,mode=max,scope=paiguangguang-backend
+            ${{ matrix.image }}:${{ github.sha }}
+            ${{ matrix.image }}:latest
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
 
   deploy:
     needs: publish-images
@@ -137,7 +138,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          command_timeout: 60m
+          command_timeout: 180m
           script: |
             set -eu
             release_dir="/tmp/paiguangguang-${{ github.sha }}"
