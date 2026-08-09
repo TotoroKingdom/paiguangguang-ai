@@ -28,7 +28,7 @@ class Settings:
     chatbot_summary_message_threshold: int = 20
     chatbot_summary_token_ratio: float = 0.60
     chatbot_summary_prompt_version: str = "summary-v1"
-    chatbot_summary_model: str = "deepseek-chat"
+    chatbot_summary_model: str = "deepseek-v4-flash"
     chatbot_summary_pending_stale_seconds: int = 300
     chatbot_memory_min_confidence: float = 0.75
     chatbot_long_term_memory_enabled: bool = False
@@ -48,10 +48,10 @@ class Settings:
     admin_user_display_name: str = "Admin"
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_api_key: str = ""
-    deepseek_chat_model: str = "deepseek-chat"
+    deepseek_chat_model: str = "deepseek-v4-flash"
     deepseek_timeout_seconds: float = 30.0
-    chatbot_default_model: str = "deepseek-chat"
-    chatbot_allowed_models: list[str] = field(default_factory=lambda: ["deepseek-chat"])
+    chatbot_default_model: str = "deepseek-v4-flash"
+    chatbot_allowed_models: list[str] = field(default_factory=lambda: ["deepseek-v4-flash"])
     chatbot_llm_timeout_seconds: float = 60.0
     chatbot_llm_max_attempts: int = 2
     chatbot_message_max_chars: int = 4000
@@ -96,7 +96,7 @@ def get_settings() -> Settings:
         chatbot_summary_message_threshold=int(os.getenv("CHATBOT_SUMMARY_MESSAGE_THRESHOLD", "20")),
         chatbot_summary_token_ratio=float(os.getenv("CHATBOT_SUMMARY_TOKEN_RATIO", "0.60")),
         chatbot_summary_prompt_version=os.getenv("CHATBOT_SUMMARY_PROMPT_VERSION", "summary-v1"),
-        chatbot_summary_model=os.getenv("CHATBOT_SUMMARY_MODEL", "deepseek-chat"),
+        chatbot_summary_model=os.getenv("CHATBOT_SUMMARY_MODEL", "deepseek-v4-flash"),
         chatbot_summary_pending_stale_seconds=int(os.getenv("CHATBOT_SUMMARY_PENDING_STALE_SECONDS", "300")),
         chatbot_memory_min_confidence=float(os.getenv("CHATBOT_MEMORY_MIN_CONFIDENCE", "0.75")),
         chatbot_long_term_memory_enabled=_parse_bool(os.getenv("CHATBOT_LONG_TERM_MEMORY_ENABLED"), default=False),
@@ -119,12 +119,12 @@ def get_settings() -> Settings:
         admin_user_display_name=os.getenv("ADMIN_USER_DISPLAY_NAME", "Admin"),
         deepseek_base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
         deepseek_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
-        deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-chat"),
+        deepseek_chat_model=os.getenv("DEEPSEEK_CHAT_MODEL", "deepseek-v4-flash"),
         deepseek_timeout_seconds=float(os.getenv("DEEPSEEK_TIMEOUT_SECONDS", "30")),
-        chatbot_default_model=os.getenv("CHATBOT_DEFAULT_MODEL", "deepseek-chat"),
+        chatbot_default_model=os.getenv("CHATBOT_DEFAULT_MODEL", "deepseek-v4-flash"),
         chatbot_allowed_models=[
             model.strip()
-            for model in os.getenv("CHATBOT_ALLOWED_MODELS", "deepseek-chat").split(",")
+            for model in os.getenv("CHATBOT_ALLOWED_MODELS", "deepseek-v4-flash").split(",")
             if model.strip()
         ],
         chatbot_llm_timeout_seconds=float(os.getenv("CHATBOT_LLM_TIMEOUT_SECONDS", "60")),

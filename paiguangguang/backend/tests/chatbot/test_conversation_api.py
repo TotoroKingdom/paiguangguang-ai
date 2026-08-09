@@ -99,7 +99,7 @@ def test_conversation_api_crud_owner_filter_and_router_registration(monkeypatch,
         first_body = first_create.json()["data"]
         assert first_body["title"] == "新对话标题"
         assert first_body["title_source"] == "manual"
-        assert first_body["model"] == "deepseek-chat"
+        assert first_body["model"] == "deepseek-v4-flash"
 
         second_create = client.post("/api/v1/chatbot/conversations", headers=owner_headers, json={})
         assert second_create.status_code == 201
@@ -127,7 +127,7 @@ def test_conversation_api_crud_owner_filter_and_router_registration(monkeypatch,
         update_response = client.patch(
             f"/api/v1/chatbot/conversations/{second_body['id']}",
             headers=owner_headers,
-            json={"title": "  更新后的标题  ", "model": "deepseek-chat"},
+            json={"title": "  更新后的标题  ", "model": "deepseek-v4-flash"},
         )
         assert update_response.status_code == 200
         assert update_response.json()["data"]["title"] == "更新后的标题"

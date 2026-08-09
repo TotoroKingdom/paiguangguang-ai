@@ -3,6 +3,20 @@ from __future__ import annotations
 from app.chatbot.llm.prompt_builder import PromptBuilder
 
 
+def test_prompt_builder_uses_current_default_model() -> None:
+    builder = PromptBuilder(
+        prompt_version="chatbot-v1",
+        system_prompt="You are a chatbot.",
+    )
+
+    request = builder.build_request(
+        request_id="req-default-model",
+        user_message="Hello",
+    )
+
+    assert request.model == "deepseek-v4-flash"
+
+
 def test_prompt_builder_builds_request_with_prompt_version_and_messages() -> None:
     builder = PromptBuilder(
         prompt_version="chatbot-v1",
