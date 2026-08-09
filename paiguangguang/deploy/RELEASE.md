@@ -37,19 +37,15 @@ ports:
   - "8081:80"
 ```
 
-本项目的生产 Compose 将接管 `8082`。如果 8082 当前由 Python、Node 或旧容器占用，应先停止旧服务，但不要删除 `todo-app.html`：
+主 Nginx Compose 将接管 `8082`，并直接挂载 `todo-app.html`。首次从旧结构升级时，应用部署脚本会通过 `--remove-orphans` 自动删除旧的 Todo Nginx 容器，不需要手动拉取镜像或停止该容器。
+
+发布前只需确认 `8082` 没有被项目之外的进程占用：
 
 ```bash
 docker ps --filter publish=8082
 ```
 
-确认对应旧容器后再执行：
-
-```bash
-docker stop <旧的-todo-容器名>
-```
-
-如果不是 Docker 服务，先通过下面命令确认 PID 和进程，再使用对应的服务管理方式停止：
+如果存在占用，先通过下面命令确认 PID 和进程，再使用对应的服务管理方式处理；不要删除 `todo-app.html`：
 
 ```bash
 ss -lntp | grep ':8082'
@@ -150,7 +146,7 @@ git push origin main
 3. 构建前后端镜像并推送到腾讯云 TCR。
 4. 上传应用 Compose、部署脚本和 Nginx 配置。
 5. 使用完整 Commit SHA 部署应用镜像。
-6. 启动 Todo Nginx 容器并公开 8082。
+6. 启动主 Nginx，由它直接提供 Todo 静态页面并公开 8082。
 7. 校验并加载 `/draw/`、`/todo/` Nginx 配置。
 8. Nginx 配置失败时恢复 `/home/nginx/backups/<时间戳>/` 中的上一版文件。
 
