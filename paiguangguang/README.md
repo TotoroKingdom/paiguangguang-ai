@@ -20,12 +20,12 @@ taskkill /PID 12345 /F
 
 # 发版命令
 git commit -m "ci: deploy images from Tencent TCR"
-git pull --rebase origin dev
+git pull
 git push origin dev
 
 git switch main
 git pull --ff-only origin main
-git merge --no-ff dev -m "merge: deploy via Tencent TCR"
+git merge --no-ff dev
 git push origin main
 git switch dev
 
