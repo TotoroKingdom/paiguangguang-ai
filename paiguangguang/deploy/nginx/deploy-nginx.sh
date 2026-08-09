@@ -20,6 +20,7 @@ for required_file in \
   "$SOURCE_DIR/locations/todo.conf" \
   "$BASE_COMPOSE" \
   "$NGINX_DIR/nginx.conf" \
+  "/home/my-website-ui/todo-demo-ui/todo-app.html" \
   "$NGINX_DIR/certs/www.paiguangguang.xyz.pem" \
   "$NGINX_DIR/certs/www.paiguangguang.xyz.key"; do
   test -f "$required_file"
@@ -105,8 +106,15 @@ compose run --rm --no-deps nginx nginx -t
 compose up -d nginx
 compose exec -T nginx nginx -t
 compose exec -T nginx nginx -s reload
-compose exec -T nginx wget -qO- http://host.docker.internal:8081/ >/dev/null
-compose exec -T nginx wget -qO- http://paiguangguang-todo/ >/dev/null
+
+curl --fail --silent --show-error --max-time 20 \
+  http://127.0.0.1:8081/ >/dev/null
+curl --fail --silent --show-error --max-time 20 \
+  http://127.0.0.1:8080/ >/dev/null
+curl --fail --silent --show-error --max-time 20 \
+  http://127.0.0.1:8080/api/v1/health >/dev/null
+curl --fail --silent --show-error --max-time 20 \
+  http://127.0.0.1:8082/ >/dev/null
 
 curl --fail --silent --show-error --max-time 20 \
   --resolve www.paiguangguang.xyz:443:127.0.0.1 \

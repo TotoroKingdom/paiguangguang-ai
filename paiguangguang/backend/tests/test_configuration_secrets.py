@@ -78,6 +78,10 @@ def test_deployment_uses_tracked_prod_env() -> None:
     compose = (DEPLOY_DIR / "docker-compose.yml").read_text(encoding="utf-8")
     deploy_script = (DEPLOY_DIR / "deploy.sh").read_text(encoding="utf-8")
     cleanup_script_path = DEPLOY_DIR / "cleanup-images.sh"
+    nginx_dir = DEPLOY_DIR / "nginx"
+    nginx_compose = (nginx_dir / "docker-compose.web.yml").read_text(encoding="utf-8")
+    nginx_deploy_script = (nginx_dir / "deploy-nginx.sh").read_text(encoding="utf-8")
+    todo_location = (nginx_dir / "locations" / "todo.conf").read_text(encoding="utf-8")
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     assert not (DEPLOY_DIR / "backend.env.example").exists()
@@ -91,6 +95,25 @@ def test_deployment_uses_tracked_prod_env() -> None:
     assert '"$CLEANUP_SCRIPT"' in deploy_script
     assert "paiguangguang/deploy/cleanup-images.sh" in workflow
     assert '"$release_dir/cleanup-images.sh" "$app_dir/cleanup-images.sh"' in workflow
+    assert "\n  todo:" not in compose
+    assert "paiguangguang-todo" not in compose
+    assert "wait_for_public_routes" not in deploy_script
+    assert "todo-demo-ui/todo-app.html" not in deploy_script
+    assert "image: nginx:1.30.4" in nginx_compose
+    assert "nginx:1.30.4-alpine" not in nginx_compose
+    assert '"8082:8082"' in nginx_compose
+    assert (
+        "/home/my-website-ui/todo-demo-ui/todo-app.html:"
+        "/usr/share/nginx/html/todo-app.html:ro"
+    ) in nginx_compose
+    assert "proxy_pass" not in todo_location
+    assert "try_files /todo-app.html =404;" in todo_location
+    assert "todo-demo-ui/todo-app.html" in nginx_deploy_script
+    assert "http://127.0.0.1:8082/" in nginx_deploy_script
+    assert "http://127.0.0.1:8080/api/v1/health" in nginx_deploy_script
+    app_deploy = '"$app_dir/deploy.sh" "${{ github.sha }}"'
+    nginx_deploy = 'bash "$release_dir/nginx/deploy-nginx.sh"'
+    assert workflow.index(app_deploy) < workflow.index(nginx_deploy)
 
 
 @pytest.mark.skip(reason="Project owner explicitly accepted the existing configured API keys for this project")

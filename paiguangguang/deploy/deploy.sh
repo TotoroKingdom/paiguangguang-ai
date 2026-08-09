@@ -41,7 +41,6 @@ test -f "$COMPOSE_FILE"
 test -f "$PROD_ENV"
 test -x "$CLEANUP_SCRIPT"
 test -f "$APP_DIR/auth-login-private-key.pem"
-test -f /home/my-website-ui/todo-demo-ui/todo-app.html
 chmod 600 "$PROD_ENV"
 
 prepare_database_network() {
@@ -118,19 +117,6 @@ pull_images() {
   return 1
 }
 
-wait_for_public_routes() {
-  local attempt
-  for attempt in $(seq 1 36); do
-    if curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/ >/dev/null \
-      && curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8080/api/v1/health >/dev/null \
-      && curl --fail --silent --show-error --max-time 10 http://127.0.0.1:8082/ >/dev/null; then
-      return 0
-    fi
-    sleep 5
-  done
-  return 1
-}
-
 rollback() {
   if [[ "$previous_tag" =~ ^[0-9a-f]{40}$ ]] \
     && validate_image_base "$previous_frontend_image" \
@@ -138,7 +124,6 @@ rollback() {
     echo "Deployment failed; restoring $previous_tag" >&2
     write_deploy_state "$previous_frontend_image" "$previous_backend_image" "$previous_tag"
     compose up -d --remove-orphans --wait --wait-timeout 180
-    wait_for_public_routes
   else
     echo "Deployment failed and no previous image tag is available" >&2
     write_deploy_state "$previous_frontend_image" "$previous_backend_image" "$previous_tag"
@@ -156,10 +141,6 @@ if ! pull_images; then
 fi
 
 if ! compose up -d --remove-orphans --wait --wait-timeout 180; then
-  rollback
-fi
-
-if ! wait_for_public_routes; then
   rollback
 fi
 
