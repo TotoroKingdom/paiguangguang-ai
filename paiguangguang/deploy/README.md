@@ -16,7 +16,7 @@ curl --version
 
 - Docker Engine 正常运行。
 - 使用 Docker Compose v2，命令形式为 `docker compose`。
-- 服务器可以访问配置的 TCR Registry、Neon、DeepSeek 和 DashScope。
+- 服务器可以访问配置的 TCR Registry、DeepSeek 和 DashScope，并且 `postgres17` 容器已经运行。
 - 腾讯云安全组和 CentOS 防火墙允许 TCP 8080 入站。
 - `/home/nginx/docker-compose.yml` 中的 Nginx 服务名为 `nginx`。
 
@@ -35,6 +35,7 @@ docker compose config --services
 
 ```bash
 install -d -m 755 /home/my-website-ui/paiguangguang
+install -d -m 700 /home/my-website-ui/paiguangguang/backend
 install -d -m 755 /home/my-website-ui/paiguangguang-bootstrap
 docker network inspect web >/dev/null 2>&1 || docker network create web
 ```
@@ -62,25 +63,31 @@ cd /home/my-website-ui/paiguangguang
 cp /home/my-website-ui/paiguangguang-bootstrap/docker-compose.yml docker-compose.yml
 cp /home/my-website-ui/paiguangguang-bootstrap/deploy.sh deploy.sh
 test -f .deploy.env || cp /home/my-website-ui/paiguangguang-bootstrap/.deploy.env.example .deploy.env
-test -f backend.env || cp /home/my-website-ui/paiguangguang-bootstrap/backend.env.example backend.env
 chmod 755 deploy.sh
-chmod 600 .deploy.env backend.env auth-login-private-key.pem
+chmod 600 .deploy.env auth-login-private-key.pem
 ```
 
-编辑 `/home/my-website-ui/paiguangguang/backend.env`，至少替换以下内容：
+GitHub Actions 每次发布都会把仓库中的 `backend/prod.env` 安装到：
 
-- `DATABASE_URL`：Neon 的 `postgresql+psycopg` 连接串，必须包含 `sslmode=require`。
-- `JWT_SECRET_KEY`：长度不少于 32 字节的随机值。
-- `ADMIN_USER_EMAIL`、`ADMIN_USER_PASSWORD`。
-- `DEEPSEEK_API_KEY`。
-- `DASHSCOPE_API_KEY`。
+```text
+/home/my-website-ui/paiguangguang/backend/prod.env
+```
+
+该文件权限为 `600`，生产数据库通过专用 Docker 网络连接同一台服务器上的 `postgres17`，不使用 PostgreSQL SSL：
+
+```text
+postgresql+psycopg://paiguangguang:postgres%40paiguangguang@postgres17:5432/knowledge_rag_agent
+```
+
+密码中的 `@` 在连接 URL 中必须写成 `%40`。`deploy.sh` 会自动创建 `paiguangguang_database` 网络，并把现有的 `postgres17` 容器接入该网络。
 
 生产配置中禁止出现测试数据库地址：
 
 ```bash
-! grep -q '^TEST_DATABASE_URL=' backend.env
-grep '^CORS_ALLOW_ORIGINS=http://1.12.47.29:8080$' backend.env
-grep '^DATABASE_URL=.*sslmode=require' backend.env
+test -f backend/prod.env
+! grep -q '^TEST_DATABASE_URL=' backend/prod.env
+grep '^DATABASE_URL=.*@postgres17:5432/knowledge_rag_agent$' backend/prod.env
+test "$(stat -c '%a' backend/prod.env)" = 600
 ```
 
 三个命令都应返回成功。
@@ -227,7 +234,7 @@ docker compose --env-file .deploy.env -f docker-compose.yml up -d --remove-orpha
 curl -fsS http://127.0.0.1:8080/api/v1/health
 ```
 
-镜像回滚不会回滚 Neon 数据或数据库迁移。包含不可逆迁移的版本必须先提供向后兼容方案。
+镜像回滚不会回滚 PostgreSQL 数据或数据库迁移。包含不可逆迁移的版本必须先提供向后兼容方案。
 
 ## 11. 数据卷和备份
 
@@ -238,4 +245,4 @@ docker volume inspect paiguangguang_redis_data
 docker volume inspect paiguangguang_chroma_data
 ```
 
-Redis AOF 和 Chroma 索引在容器重建后保留。进行破坏性维护前，需要同时备份 Neon、`paiguangguang_redis_data` 和 `paiguangguang_chroma_data`。恢复时应保证 Neon 数据与 Chroma 索引来自相近时间点；不一致时通过管理端重新索引文档。
+Redis AOF 和 Chroma 索引在容器重建后保留。进行破坏性维护前，需要同时备份 PostgreSQL、`paiguangguang_redis_data` 和 `paiguangguang_chroma_data`。恢复时应保证 PostgreSQL 数据与 Chroma 索引来自相近时间点；不一致时通过管理端重新索引文档。

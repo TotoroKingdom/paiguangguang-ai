@@ -53,7 +53,7 @@ def test_deepseek_client_sends_chat_completion_request() -> None:
     assert captured["method"] == "POST"
     assert captured["url"] == "https://api.deepseek.com/v1/chat/completions"
     assert captured["body"] == {
-        "model": "deepseek-chat",
+        "model": "deepseek-v4-flash",
         "messages": [{"role": "user", "content": "Hello"}],
         "stream": False,
         "temperature": 0.2,

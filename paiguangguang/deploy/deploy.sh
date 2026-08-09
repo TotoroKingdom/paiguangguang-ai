@@ -4,6 +4,9 @@ set -Eeuo pipefail
 APP_DIR="/home/my-website-ui/paiguangguang"
 DEPLOY_ENV="$APP_DIR/.deploy.env"
 COMPOSE_FILE="$APP_DIR/docker-compose.yml"
+PROD_ENV="$APP_DIR/backend/prod.env"
+DATABASE_CONTAINER="postgres17"
+DATABASE_NETWORK="paiguangguang_database"
 NEW_TAG="${1:-}"
 NEW_FRONTEND_IMAGE="${2:-}"
 NEW_BACKEND_IMAGE="${3:-}"
@@ -34,9 +37,29 @@ fi
 cd "$APP_DIR"
 test -f "$DEPLOY_ENV"
 test -f "$COMPOSE_FILE"
-test -f "$APP_DIR/backend.env"
+test -f "$PROD_ENV"
 test -f "$APP_DIR/auth-login-private-key.pem"
 test -f /home/my-website-ui/todo-demo-ui/todo-app.html
+chmod 600 "$PROD_ENV"
+
+prepare_database_network() {
+  local running
+  running="$(docker container inspect --format '{{.State.Running}}' "$DATABASE_CONTAINER" 2>/dev/null || true)"
+  if [[ "$running" != "true" ]]; then
+    echo "Database container $DATABASE_CONTAINER is missing or not running" >&2
+    exit 1
+  fi
+
+  if ! docker network inspect "$DATABASE_NETWORK" >/dev/null 2>&1; then
+    docker network create "$DATABASE_NETWORK" >/dev/null
+  fi
+
+  if ! docker container inspect \
+    --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+    "$DATABASE_CONTAINER" | grep -Fxq "$DATABASE_NETWORK"; then
+    docker network connect --alias "$DATABASE_CONTAINER" "$DATABASE_NETWORK" "$DATABASE_CONTAINER"
+  fi
+}
 
 read_deploy_value() {
   local key="$1"
@@ -75,6 +98,9 @@ write_deploy_state() {
 compose() {
   docker compose --env-file "$DEPLOY_ENV" -f "$COMPOSE_FILE" "$@"
 }
+
+prepare_database_network
+compose config --quiet
 
 pull_images() {
   local attempt
