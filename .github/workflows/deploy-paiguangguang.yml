@@ -9,6 +9,7 @@ on:
       - "paiguangguang/backend/**"
       - "paiguangguang/deploy/docker-compose.yml"
       - "paiguangguang/deploy/deploy.sh"
+      - "paiguangguang/deploy/cleanup-images.sh"
       - "paiguangguang/deploy/nginx/**"
       - ".github/workflows/deploy-paiguangguang.yml"
   workflow_dispatch:
@@ -142,7 +143,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh,paiguangguang/deploy/nginx"
+          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh,paiguangguang/deploy/cleanup-images.sh,paiguangguang/deploy/nginx,paiguangguang/backend/prod.env"
           target: "/tmp/paiguangguang-${{ github.sha }}"
           strip_components: 2
       - name: Deploy immutable images
@@ -174,8 +175,11 @@ jobs:
             release_dir="/tmp/paiguangguang-${{ github.sha }}"
             app_dir="/home/my-website-ui/paiguangguang"
             install -d -m 755 "$app_dir"
+            install -d -m 700 "$app_dir/backend"
             install -m 644 "$release_dir/docker-compose.yml" "$app_dir/docker-compose.yml"
             install -m 755 "$release_dir/deploy.sh" "$app_dir/deploy.sh"
+            install -m 755 "$release_dir/cleanup-images.sh" "$app_dir/cleanup-images.sh"
+            install -m 600 "$release_dir/prod.env" "$app_dir/backend/prod.env"
             "$app_dir/deploy.sh" "${{ github.sha }}" "$frontend_image" "$backend_image"
             bash "$release_dir/nginx/deploy-nginx.sh" "$release_dir/nginx"
             rm -rf "$release_dir"

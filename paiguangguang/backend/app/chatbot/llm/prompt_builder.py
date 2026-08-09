@@ -26,7 +26,7 @@ def format_untrusted_context(*, kind: str, source_ids: Sequence[str], content: s
 class PromptBuilder:
     prompt_version: str
     system_prompt: str
-    default_model: str = "deepseek-chat"
+    default_model: str = "deepseek-v4-flash"
 
     def build_messages(
         self,
