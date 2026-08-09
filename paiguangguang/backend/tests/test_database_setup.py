@@ -5,6 +5,8 @@ import sqlite3
 from alembic import command
 from sqlalchemy.orm import Session
 
+import app.db.alembic as alembic_module
+from app.core.config import Settings
 from app.core.config import get_settings
 from app.db.bootstrap import initialize_database
 from app.db.alembic import get_alembic_config
@@ -96,6 +98,31 @@ def test_alembic_upgrade_runs_against_test_database_url(monkeypatch, tmp_path) -
         ).fetchall()
 
     assert rows == [("alembic_version",)]
+
+
+def test_alembic_config_accepts_percent_encoded_database_password(monkeypatch) -> None:
+    database_url = (
+        "postgresql+psycopg://paiguangguang:postgres%40paiguangguang"
+        "@postgres17:5432/knowledge_rag_agent"
+    )
+    created_urls: list[str] = []
+    connection = object()
+
+    class FakeEngine:
+        def connect(self):
+            return connection
+
+    def fake_create_engine(url: str, **_kwargs):
+        created_urls.append(url)
+        return FakeEngine()
+
+    monkeypatch.setattr(alembic_module, "create_engine", fake_create_engine)
+
+    config = get_alembic_config(Settings(database_url=database_url))
+
+    assert config.get_main_option("sqlalchemy.url") == database_url
+    assert config.attributes["connection"] is connection
+    assert created_urls == [database_url]
 
 
 def test_initialize_database_runs_migrations_and_bootstraps_defaults(monkeypatch, tmp_path) -> None:
