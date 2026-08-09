@@ -1,21 +1,34 @@
 # Paiguangguang AI Agent Platform
 
 一个面向个人作品集展示的 AI Agent 应用平台。
-常用命令
+# 常用命令
 npx chromadb-admin --port 3434 --chromadb-url http://your-chromadb:8000
 
 chroma run --host localhost --port 8002 --path ./chroma
 
 python chroma_view.py
 
+# 本地测试命令
 uv run python -m uvicorn app.main:app --reload --env-file dev.env    
 
 npm run dev
 
-#清掉cdoex启动的进程
+# 清掉cdoex启动的进程
 netstat -ano | findstr :3000
 taskkill /PID 12345 /F
 ---
+
+# 发版命令
+git commit -m "ci: deploy images from Tencent TCR"
+git pull --rebase origin dev
+git push origin dev
+
+git switch main
+git pull --ff-only origin main
+git merge --no-ff dev -m "merge: deploy via Tencent TCR"
+git push origin main
+git switch dev
+
 
 ## 1. 项目定位
 
