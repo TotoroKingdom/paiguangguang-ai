@@ -55,7 +55,7 @@ rollback() {
   if [[ "$previous_tag" =~ ^[0-9a-f]{40}$ ]]; then
     echo "Deployment failed; restoring $previous_tag" >&2
     write_tag "$previous_tag"
-    compose pull frontend backend todo
+    compose pull frontend backend
     compose up -d --remove-orphans --wait --wait-timeout 180
     wait_for_public_routes
   else
@@ -70,7 +70,7 @@ rollback() {
 
 write_tag "$NEW_TAG"
 
-if ! compose pull frontend backend todo; then
+if ! compose pull frontend backend; then
   rollback
 fi
 
