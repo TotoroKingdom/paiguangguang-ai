@@ -101,6 +101,10 @@ def test_deployment_uses_tracked_prod_env() -> None:
     assert "todo-demo-ui/todo-app.html" not in deploy_script
     assert "image: nginx:1.30.4" in nginx_compose
     assert "nginx:1.30.4-alpine" not in nginx_compose
+    assert "name: nginx" in nginx_compose
+    assert "container_name: nginx" in nginx_compose
+    assert "restart: unless-stopped" in nginx_compose
+    assert "healthcheck:" in nginx_compose
     assert '"8082:8082"' in nginx_compose
     assert (
         "/home/my-website-ui/todo-demo-ui/todo-app.html:"
@@ -109,6 +113,10 @@ def test_deployment_uses_tracked_prod_env() -> None:
     assert "proxy_pass" not in todo_location
     assert "try_files /todo-app.html =404;" in todo_location
     assert "todo-demo-ui/todo-app.html" in nginx_deploy_script
+    assert "BASE_COMPOSE" not in nginx_deploy_script
+    assert "compose run" not in nginx_deploy_script
+    assert 'docker compose -f "$OVERRIDE_COMPOSE"' in nginx_deploy_script
+    assert "--force-recreate --wait --wait-timeout 60 nginx" in nginx_deploy_script
     assert "http://127.0.0.1:8082/" in nginx_deploy_script
     assert "http://127.0.0.1:8080/api/v1/health" in nginx_deploy_script
     app_deploy = '"$app_dir/deploy.sh" "${{ github.sha }}"'
