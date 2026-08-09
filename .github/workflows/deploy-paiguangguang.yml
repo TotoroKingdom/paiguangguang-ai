@@ -78,7 +78,7 @@ jobs:
           - service: frontend
             context: ./paiguangguang/frontend
             dockerfile: ./paiguangguang/frontend/Dockerfile
-            image: ghcr.io/totorokingdom/paiguangguang-frontend
+            repository: ${{ vars.TCR_FRONTEND_REPOSITORY }}
             cache_scope: paiguangguang-frontend
             build_args: |
               NEXT_PUBLIC_BACKEND_URL=
@@ -86,23 +86,36 @@ jobs:
           - service: backend
             context: ./paiguangguang/backend
             dockerfile: ./paiguangguang/backend/Dockerfile
-            image: ghcr.io/totorokingdom/paiguangguang-backend
+            repository: ${{ vars.TCR_BACKEND_REPOSITORY }}
             cache_scope: paiguangguang-backend
             build_args: ""
     permissions:
       contents: read
-      packages: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log in to GHCR
+      - name: Validate TCR configuration
+        env:
+          TCR_REGISTRY: ${{ vars.TCR_REGISTRY }}
+          TCR_NAMESPACE: ${{ vars.TCR_NAMESPACE }}
+          TCR_REPOSITORY: ${{ matrix.repository }}
+          TCR_USERNAME: ${{ secrets.TCR_USERNAME }}
+          TCR_PASSWORD: ${{ secrets.TCR_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$TCR_REGISTRY" || { echo "Repository variable TCR_REGISTRY is required" >&2; exit 1; }
+          test -n "$TCR_NAMESPACE" || { echo "Repository variable TCR_NAMESPACE is required" >&2; exit 1; }
+          test -n "$TCR_REPOSITORY" || { echo "TCR repository variable for ${{ matrix.service }} is required" >&2; exit 1; }
+          test -n "$TCR_USERNAME" || { echo "Repository secret TCR_USERNAME is required" >&2; exit 1; }
+          test -n "$TCR_PASSWORD" || { echo "Repository secret TCR_PASSWORD is required" >&2; exit 1; }
+      - name: Log in to Tencent TCR
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ vars.TCR_REGISTRY }}
+          username: ${{ secrets.TCR_USERNAME }}
+          password: ${{ secrets.TCR_PASSWORD }}
       - name: Build and push ${{ matrix.service }}
         uses: docker/build-push-action@v6
         with:
@@ -111,8 +124,8 @@ jobs:
           push: true
           build-args: ${{ matrix.build_args }}
           tags: |
-            ${{ matrix.image }}:${{ github.sha }}
-            ${{ matrix.image }}:latest
+            ${{ vars.TCR_REGISTRY }}/${{ vars.TCR_NAMESPACE }}/${{ matrix.repository }}:${{ github.sha }}
+            ${{ vars.TCR_REGISTRY }}/${{ vars.TCR_NAMESPACE }}/${{ matrix.repository }}:latest
           cache-from: type=gha,scope=${{ matrix.cache_scope }}
           cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
 
@@ -134,18 +147,35 @@ jobs:
           strip_components: 2
       - name: Deploy immutable images
         uses: appleboy/ssh-action@v1
+        env:
+          TCR_REGISTRY: ${{ vars.TCR_REGISTRY }}
+          TCR_NAMESPACE: ${{ vars.TCR_NAMESPACE }}
+          TCR_USERNAME: ${{ secrets.TCR_USERNAME }}
+          TCR_PASSWORD: ${{ secrets.TCR_PASSWORD }}
+          TCR_FRONTEND_REPOSITORY: ${{ vars.TCR_FRONTEND_REPOSITORY }}
+          TCR_BACKEND_REPOSITORY: ${{ vars.TCR_BACKEND_REPOSITORY }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           command_timeout: 180m
+          envs: TCR_REGISTRY,TCR_NAMESPACE,TCR_USERNAME,TCR_PASSWORD,TCR_FRONTEND_REPOSITORY,TCR_BACKEND_REPOSITORY
           script: |
             set -eu
+            : "${TCR_REGISTRY:?TCR_REGISTRY is required}"
+            : "${TCR_NAMESPACE:?TCR_NAMESPACE is required}"
+            : "${TCR_USERNAME:?TCR_USERNAME is required}"
+            : "${TCR_PASSWORD:?TCR_PASSWORD is required}"
+            : "${TCR_FRONTEND_REPOSITORY:?TCR_FRONTEND_REPOSITORY is required}"
+            : "${TCR_BACKEND_REPOSITORY:?TCR_BACKEND_REPOSITORY is required}"
+            printf '%s' "$TCR_PASSWORD" | docker login "$TCR_REGISTRY" --username "$TCR_USERNAME" --password-stdin
+            frontend_image="$TCR_REGISTRY/$TCR_NAMESPACE/$TCR_FRONTEND_REPOSITORY"
+            backend_image="$TCR_REGISTRY/$TCR_NAMESPACE/$TCR_BACKEND_REPOSITORY"
             release_dir="/tmp/paiguangguang-${{ github.sha }}"
             app_dir="/home/my-website-ui/paiguangguang"
             install -d -m 755 "$app_dir"
             install -m 644 "$release_dir/docker-compose.yml" "$app_dir/docker-compose.yml"
             install -m 755 "$release_dir/deploy.sh" "$app_dir/deploy.sh"
-            "$app_dir/deploy.sh" "${{ github.sha }}"
+            "$app_dir/deploy.sh" "${{ github.sha }}" "$frontend_image" "$backend_image"
             bash "$release_dir/nginx/deploy-nginx.sh" "$release_dir/nginx"
             rm -rf "$release_dir"

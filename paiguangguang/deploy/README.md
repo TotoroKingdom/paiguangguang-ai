@@ -1,6 +1,6 @@
 # Paiguangguang 服务器部署手册
 
-本手册对应当前测试入口 `http://1.12.47.29:8080`。应用镜像由 GitHub Actions 构建并发布到 GHCR，生产服务器只负责拉取镜像和启动容器。
+本手册对应当前测试入口 `http://1.12.47.29:8080`。应用镜像由 GitHub Actions 构建并发布到腾讯云 TCR，生产服务器由同一工作流自动登录 TCR、拉取镜像并启动容器。
 
 ## 1. 服务器前置条件
 
@@ -16,7 +16,7 @@ curl --version
 
 - Docker Engine 正常运行。
 - 使用 Docker Compose v2，命令形式为 `docker compose`。
-- 服务器可以访问 `ghcr.io`、Neon、DeepSeek 和 DashScope。
+- 服务器可以访问配置的 TCR Registry、Neon、DeepSeek 和 DashScope。
 - 腾讯云安全组和 CentOS 防火墙允许 TCP 8080 入站。
 - `/home/nginx/docker-compose.yml` 中的 Nginx 服务名为 `nginx`。
 
@@ -120,27 +120,32 @@ ss -lntp | grep ':8080'
 
 以后重建 Nginx 时必须继续同时传入两个 Compose 文件。也可以将 override 中的 `ports` 和 `web` 网络配置合并进 `/home/nginx/docker-compose.yml`，合并后只需使用原 Compose 文件。
 
-## 5. 登录私有 GHCR
+## 5. TCR 自动认证
 
-为服务器准备一个只具有 `read:packages` 权限的 GitHub Token，然后在服务器执行：
-
-```bash
-export GHCR_READ_TOKEN='粘贴只读 Package Token'
-echo "$GHCR_READ_TOKEN" | docker login ghcr.io -u TotoroKingdom --password-stdin
-unset GHCR_READ_TOKEN
-```
-
-登录信息保存在服务器 Docker 配置中，GitHub Actions 发布时不需要再次传输 GHCR Token。
+不需要在服务器手动执行 `docker pull` 或长期维护手工登录状态。每次发布时，GitHub Actions 都会通过 SSH 将 TCR 凭据作为受保护的环境变量传给服务器，并使用 `docker login --password-stdin` 自动登录。TCR 密码只配置在 GitHub Actions Secrets 中，不得写入 `.deploy.env`、Compose、脚本或提交记录。
 
 ## 6. GitHub 仓库配置
 
-在 GitHub 仓库的 Actions Secrets 中配置：
+在 GitHub 仓库的 Actions Repository Secrets 中配置：
 
 ```text
 SERVER_HOST=1.12.47.29
 SERVER_USER=root
 SERVER_SSH_KEY=服务器 root 账户对应的完整多行 SSH 私钥
+TCR_USERNAME=腾讯云账号 ID（个人版登录用户名）
+TCR_PASSWORD=TCR 个人版初始化密码
 ```
+
+在 Actions Repository Variables 中配置：
+
+```text
+TCR_REGISTRY=ccr.ccs.tencentyun.com
+TCR_NAMESPACE=已经创建的 TCR 命名空间
+TCR_FRONTEND_REPOSITORY=已经创建的前端镜像仓库名
+TCR_BACKEND_REPOSITORY=已经创建的后端镜像仓库名
+```
+
+个人版仓库名建议分别使用 `paiguangguang-frontend` 和 `paiguangguang-backend`。Variables 和 Secrets 必须配置在 Repository 级别；如果只配置在 `production` Environment 中，`publish-images` 作业将无法读取。
 
 当前流程沿用 root 账户。建议限制该 SSH Key 的用途，并关闭服务器密码登录；后续可以改成具有 Docker 权限的独立部署账户。
 
@@ -168,10 +173,10 @@ git push origin main
 1. 前端测试、Lint、生产构建。
 2. 后端完整测试。
 3. 构建前端和后端镜像。
-4. 使用完整 Commit SHA 推送到 GHCR。
+4. 使用完整 Commit SHA 和 `latest` 标签推送到 TCR。
 5. 上传 `docker-compose.yml` 和 `deploy.sh`。
 6. SSH 登录服务器执行健康检查部署。
-7. 新版本失败时恢复上一个 Commit SHA 镜像。
+7. 新版本失败时恢复上一组镜像仓库地址和 Commit SHA；首次从 GHCR 切换到 TCR 失败时也能恢复旧配置。
 
 首次部署没有上一版本可回滚，因此应在测试通过后再触发。
 
