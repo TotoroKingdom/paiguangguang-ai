@@ -12,6 +12,21 @@ ENV_FILE_PATHS = [
     BACKEND_DIR / "dev.env",
     BACKEND_DIR / "prod.env",
 ]
+DEPLOY_DIR = BACKEND_DIR.parent / "deploy"
+WORKFLOW_PATH = (
+    BACKEND_DIR.parent.parent / ".github" / "workflows" / "deploy-paiguangguang.yml"
+)
+CURRENT_DEEPSEEK_MODEL = "deepseek-v4-flash"
+DEVELOPMENT_DATABASE_URL = (
+    "postgresql+psycopg://localhost/knowledge_rag_agent?sslmode=require"
+)
+TEST_DATABASE_URL = (
+    "postgresql+psycopg://localhost/knowledge_rag_agent_test?sslmode=require"
+)
+PRODUCTION_DATABASE_URL = (
+    "postgresql+psycopg://paiguangguang:postgres%40paiguangguang"
+    "@postgres17:5432/knowledge_rag_agent"
+)
 CREDENTIAL_URL_RE = re.compile(r"(?i)\b[a-z][a-z0-9+.-]*://[^/\s:@]+:[^/\s@]+@")
 RAW_API_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9._-]+\b")
 
@@ -25,6 +40,51 @@ def _parse_env_file(path: Path) -> dict[str, str]:
         key, value = stripped.split("=", 1)
         values[key] = value
     return values
+
+
+def test_runtime_env_files_use_current_deepseek_model() -> None:
+    for path in ENV_FILE_PATHS:
+        values = _parse_env_file(path)
+        configured_model_keys = {
+            key: values[key]
+            for key in (
+                "DEEPSEEK_CHAT_MODEL",
+                "CHATBOT_DEFAULT_MODEL",
+                "CHATBOT_ALLOWED_MODELS",
+                "CHATBOT_SUMMARY_MODEL",
+            )
+            if key in values
+        }
+
+        assert configured_model_keys
+        assert set(configured_model_keys.values()) == {CURRENT_DEEPSEEK_MODEL}
+
+
+def test_dev_env_uses_local_ssl_database_urls() -> None:
+    values = _parse_env_file(BACKEND_DIR / "dev.env")
+
+    assert values["DATABASE_URL"] == DEVELOPMENT_DATABASE_URL
+    assert values["TEST_DATABASE_URL"] == TEST_DATABASE_URL
+
+
+def test_prod_env_uses_internal_postgres_without_test_database() -> None:
+    values = _parse_env_file(BACKEND_DIR / "prod.env")
+
+    assert values["DATABASE_URL"] == PRODUCTION_DATABASE_URL
+    assert "TEST_DATABASE_URL" not in values
+
+
+def test_deployment_uses_tracked_prod_env() -> None:
+    compose = (DEPLOY_DIR / "docker-compose.yml").read_text(encoding="utf-8")
+    deploy_script = (DEPLOY_DIR / "deploy.sh").read_text(encoding="utf-8")
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+
+    assert not (DEPLOY_DIR / "backend.env.example").exists()
+    assert "./backend/prod.env" in compose
+    assert "name: paiguangguang_database" in compose
+    assert 'PROD_ENV="$APP_DIR/backend/prod.env"' in deploy_script
+    assert "paiguangguang/backend/prod.env" in workflow
+    assert '"$app_dir/backend/prod.env"' in workflow
 
 
 @pytest.mark.skip(reason="Project owner explicitly accepted the existing configured API keys for this project")

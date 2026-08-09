@@ -26,7 +26,7 @@ services:
     image: "${BACKEND_IMAGE:?BACKEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}"
     restart: unless-stopped
     env_file:
-      - ./backend.env
+      - ./backend/prod.env
     environment:
       REDIS_URL: redis://redis:6379/0
       CHROMA_PATH: /data/chroma
@@ -43,6 +43,7 @@ services:
         aliases:
           - paiguangguang-backend
       app_internal: {}
+      database: {}
     depends_on:
       redis:
         condition: service_healthy
@@ -109,6 +110,9 @@ networks:
     name: web
   app_internal:
     internal: true
+  database:
+    external: true
+    name: paiguangguang_database
 
 volumes:
   redis_data:
