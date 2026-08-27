@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { Suspense } from "react";
-import { AuthProvider } from "@/components/auth-provider";
 import { AppShell } from "@/components/app-shell";
-import { RouteGuard } from "@/components/route-guard";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,13 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>
-          <Suspense fallback={null}>
-            <RouteGuard>
-              <AppShell>{children}</AppShell>
-            </RouteGuard>
-          </Suspense>
-        </AuthProvider>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

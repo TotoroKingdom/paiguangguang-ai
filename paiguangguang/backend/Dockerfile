@@ -4,16 +4,10 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 
-RUN groupadd --system app \
-    && useradd --system --gid app --home-dir /app app \
-    && mkdir -p /data/chroma \
-    && chown -R app:app /data
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-
 COPY --chown=app:app app ./app
-COPY --chown=app:app alembic ./alembic
-COPY --chown=app:app alembic.ini ./alembic.ini
 
 USER app
 EXPOSE 8000

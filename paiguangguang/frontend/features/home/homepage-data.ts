@@ -18,7 +18,6 @@ export type TechStackItem = {
 
 export type ProjectCard = {
     name: string;
-    href: string;
     status: string;
     description: string;
     tags: string[];
@@ -204,49 +203,42 @@ export const techStack: TechStackItem[] = [
 export const projectCards: ProjectCard[] = [
     {
         name: "Chat Bot",
-        href: "/chat-bot",
-        status: "Live",
+        status: "Case Study",
         description: "暖心的聊天机器人",
         tags: ["Chat", "Session", "AI"]
     },
     {
         name: "Knowledge Agent",
-        href: "/agents/knowledge",
-        status: "RAG Core",
+        status: "Case Study",
         description: "企业知识库问答、文档管理、检索调试与引用查看。",
         tags: ["RAG", "Retrieval", "Citation"]
     },
     {
         name: "飞书 Agent",
-        href: "/agents/browser",
-        status: "Agent Demo",
+        status: "Case Study",
         description: "整合飞书平台，自动写周报，自动审批，自动读取数据",
         tags: ["Planning", "Search", "Synthesis"]
     },
     {
         name: "Office Agent",
-        href: "/agents/office",
-        status: "Agent Demo",
+        status: "Case Study",
         description: "展示报告、摘要和结构化输出的办公自动化链路。",
         tags: ["Tools", "Report", "Workflow"]
     },
     {
         name: "智慧工业园",
-        href: "/",
         status: "Scenario",
         description: "企业知识库&&让AI为企业赋能",
         tags: ["IoT", "Energy", "Operations"]
     },
     {
         name: "智慧校园",
-        href: "/",
         status: "Scenario",
         description: "儿童陪聊机器人&&个性化生成儿童培养计划",
         tags: ["Campus", "Service", "AI"]
     },
     {
         name: "办公自动化Agent",
-        href: "/",
         status: "Scenario",
         description: "秒审秒批，解放双手",
         tags: ["Marketing", "Content", "Growth"]
@@ -271,25 +263,3 @@ export const roadmapStages: RoadmapStage[] = [
     }
 ];
 
-export const contactLinks: ContactLink[] = [
-    {
-        label: "知识库",
-        value: "Knowledge Agent",
-        href: "/agents/knowledge"
-    },
-    {
-        label: "浏览",
-        value: "Browser Agent",
-        href: "/agents/browser"
-    },
-    {
-        label: "办公",
-        value: "Office Agent",
-        href: "/agents/office"
-    },
-    {
-        label: "聊天",
-        value: "Chat bot",
-        href: "/"
-    }
-];
