@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "framer-motion";
 
 import { projectCards } from "./homepage-data";
@@ -17,12 +16,7 @@ const scenarioProjectCards = projectCards.slice(4);
 
 function ProjectTile({ project, index }: { project: (typeof projectCards)[number]; index: number }) {
   return (
-    <Link
-      key={project.name}
-      href={project.href}
-      aria-label={`${project.name} ${project.description}`}
-      className="group block w-full max-w-[280px] rounded-[26px] outline-none transition focus-visible:ring-2 focus-visible:ring-cyan-300/70 focus-visible:ring-offset-0"
-    >
+    <div className="group block w-full max-w-[280px] rounded-[26px]">
       <motion.article
         initial={{ opacity: 0, y: 18 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -37,7 +31,7 @@ function ProjectTile({ project, index }: { project: (typeof projectCards)[number
           <p className="mt-4 max-w-[16rem] text-sm leading-7 text-slate-300">{project.description}</p>
         </div>
       </motion.article>
-    </Link>
+    </div>
   );
 }
 

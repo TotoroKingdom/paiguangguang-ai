@@ -1,22 +1,12 @@
 [project]
 name = "paiguangguang"
 version = "0.1.0"
-description = "Add your description here"
+description = "Personal portfolio frontend with a minimal health-check service"
 requires-python = ">=3.12"
 dependencies = [
-    "alembic>=1.18.5",
-    "chromadb>=1.5.9",
-    "cryptography>=43,<46",
-    "fastapi>=0.139.0",
-    "PyJWT>=2.9,<3",
-    "passlib>=1.7.4",
-    "psycopg>=3.3.4",
-    "psycopg-binary>=3.3.4",
-    "psycopg2-binary>=2.9.12",
-    "pydantic>=2.13.4",
-    "python-multipart>=0.0.9",
-    "python-dotenv>=1.2.2",
-    "redis>=5,<6",
-    "uvicorn>=0.50.0",
-    "pypdf>=6.14.2",
+    "fastapi>=0.115,<0.117",
+    "uvicorn[standard]>=0.30,<0.32",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8.2,<9", "httpx>=0.27,<0.29"]

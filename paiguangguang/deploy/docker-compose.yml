@@ -25,17 +25,6 @@ services:
   backend:
     image: "${BACKEND_IMAGE:?BACKEND_IMAGE is required}:${IMAGE_TAG:?IMAGE_TAG is required}"
     restart: unless-stopped
-    env_file:
-      - ./backend/prod.env
-    environment:
-      REDIS_URL: redis://redis:6379/0
-      CHROMA_PATH: /data/chroma
-      AUTH_LOGIN_PRIVATE_KEY_PATH: /run/secrets/auth_login_private_key
-    secrets:
-      - source: auth_login_private_key
-        target: auth_login_private_key
-    volumes:
-      - chroma_data:/data/chroma
     expose:
       - "8000"
     networks:
@@ -43,7 +32,6 @@ services:
         aliases:
           - paiguangguang-backend
       app_internal: {}
-      database: {}
     depends_on:
       redis:
         condition: service_healthy
@@ -89,14 +77,5 @@ networks:
     name: web
   app_internal:
     internal: true
-  database:
-    external: true
-    name: paiguangguang_database
-
 volumes:
   redis_data:
-  chroma_data:
-
-secrets:
-  auth_login_private_key:
-    file: ./auth-login-private-key.pem
