@@ -628,26 +628,26 @@ export function RagFlowVisual({ingestionSteps, querySteps}: RagFlowVisualProps) 
             initial={{opacity: 0, scale: 0.97, y: 24}}
             animate={{opacity: 1, scale: 1, y: 0}}
             transition={{duration: 0.7, ease: "easeOut"}}
-            className="relative overflow-hidden rounded-[32px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.16),transparent_32%),radial-gradient(circle_at_right,rgba(217,70,239,0.16),transparent_36%),linear-gradient(180deg,rgba(15,23,42,0.95),rgba(2,6,23,0.98))] p-5 shadow-[0_30px_80px_rgba(2,6,23,0.45)]"
+            className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#101618] p-4 shadow-[0_28px_90px_rgba(0,0,0,0.24)] sm:p-6"
         >
             <div
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] bg-[size:24px_24px] opacity-20"/>
+                className="pointer-events-none absolute inset-0 page-grid opacity-35"/>
 
             <div className="relative space-y-7">
                 <div className="flex justify-center text-center">
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.4em] text-cyan-200/80">
-                            RAG Control Plane
+                            RAG CONTROL PLANE
                         </p>
 
-                        <h3 className="mt-2 text-2xl font-black text-white sm:text-3xl">
-                            RAG-链路
+                        <h3 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-white sm:text-3xl">
+                            可观测的 RAG 链路
                         </h3>
                     </div>
 
                 </div>
 
-                <section className="relative z-10 rounded-[28px] border border-white/10 bg-white/[0.035] p-5 sm:p-6">
+                <section className="relative z-10 rounded-2xl border border-white/10 bg-black/10 p-3 sm:p-5">
 
 
                     <div className="w-full overflow-x-auto pb-4">
