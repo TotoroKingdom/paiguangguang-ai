@@ -4,8 +4,8 @@ import { AppShell } from "@/components/app-shell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Pai Guangguang AI Portfolio",
-  description: "Interactive AI engineering portfolio system"
+  title: "TotoroKingdom · AI Systems",
+  description: "RAG engineering, agent workflow and full-stack AI application portfolio"
 };
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
   children: ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="zh-CN">
       <body>
         <AppShell>{children}</AppShell>
       </body>

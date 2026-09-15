@@ -6,36 +6,35 @@ import { roadmapStages } from "./homepage-data";
 
 export function HomepageRoadmap() {
   return (
-    <section id="roadmap" className="space-y-6">
-      <div className="mx-auto max-w-3xl text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.32em] text-cyan-200/80">Roadmap</p>
-        <h2 className="mt-3 text-3xl font-black text-white sm:text-4xl">职业规划</h2>
-      </div>
-      <div className="relative mx-auto max-w-5xl">
-        <div className="pointer-events-none absolute left-[12%] right-[12%] top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-cyan-300/10 via-cyan-200/60 to-fuchsia-300/10 lg:block" />
-        <div className="relative z-10 grid justify-center justify-items-center gap-6 lg:grid-cols-3">
-          {roadmapStages.map((stage, index) => (
-            <motion.article
-              key={stage.stage}
-              initial={{ opacity: 0, y: 18 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.45, delay: index * 0.06 }}
-              className="group relative w-full max-w-[320px] overflow-hidden rounded-[26px] border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-5 transition duration-500 hover:-translate-y-1 hover:scale-[1.01] hover:border-cyan-300/65 hover:shadow-[0_32px_90px_rgba(34,211,238,0.24)]"
-            >
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.04),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(236,72,153,0.04),transparent_32%),linear-gradient(135deg,rgba(56,189,248,0.05),rgba(217,70,239,0.05))] opacity-0 transition duration-500 group-hover:opacity-100" />
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.46),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(236,72,153,0.38),transparent_32%),linear-gradient(135deg,rgba(56,189,248,0.24),rgba(217,70,239,0.2))] opacity-0 blur-[1.5px] mix-blend-screen transition duration-500 group-hover:opacity-100" />
-              <div className="absolute right-0 top-0 h-24 w-24 rounded-full bg-cyan-400/10 blur-2xl" />
-              <div className="relative z-10">
-                <p className="text-sm font-semibold uppercase tracking-[0.4em] text-cyan-200/70">{stage.stage}</p>
-                <h3 className="mt-4 text-2xl font-semibold text-white">{stage.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-300">{stage.description}</p>
-                <div className="mt-6 h-px w-full bg-gradient-to-r from-cyan-300/60 via-fuchsia-300/50 to-transparent" />
-                {/*<div className="mt-4 text-xs uppercase tracking-[0.28em] text-slate-400">Hover-ready milestone</div>*/}
-              </div>
-            </motion.article>
-          ))}
+    <section id="roadmap" className="scroll-mt-10 space-y-8">
+      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-emerald-200/65">Roadmap / 03</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-white sm:text-4xl">下一步，继续把边界推远</h2>
         </div>
+        <p className="max-w-md text-sm leading-7 text-white/45 sm:text-right">每个阶段都不是头衔，而是一种更稳定地解决问题的方式。</p>
+      </div>
+
+      <div className="relative grid gap-3 lg:grid-cols-3">
+        <div className="pointer-events-none absolute left-[16%] right-[16%] top-8 hidden h-px bg-gradient-to-r from-emerald-200/10 via-emerald-200/50 to-sky-200/10 lg:block" />
+        {roadmapStages.map((stage, index) => (
+          <motion.article
+            key={stage.stage}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ duration: 0.45, delay: index * 0.06 }}
+            className="group relative rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition duration-500 hover:-translate-y-1 hover:border-emerald-100/30 hover:bg-white/[0.06] sm:p-6"
+          >
+            <div className="relative z-10 flex items-center justify-between">
+              <span className="grid h-6 w-6 place-items-center rounded-full border border-emerald-200/30 bg-[#0a0d0f] font-mono text-[10px] text-emerald-100">{stage.stage}</span>
+              <span className="text-[10px] uppercase tracking-[0.18em] text-white/25">next chapter</span>
+            </div>
+            <div className="mt-16 h-px w-10 bg-gradient-to-r from-emerald-200/70 to-sky-200/20 transition-all duration-500 group-hover:w-16" />
+            <h3 className="mt-4 text-xl font-medium tracking-[-0.02em] text-white">{stage.title}</h3>
+            <p className="mt-3 text-sm leading-6 text-white/45">{stage.description}</p>
+          </motion.article>
+        ))}
       </div>
     </section>
   );

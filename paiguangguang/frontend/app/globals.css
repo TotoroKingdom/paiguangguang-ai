@@ -3,30 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --font-sans: "Aptos", "Segoe UI", sans-serif;
-  --color-background: 248 244 234;
-  --color-paper: 248 244 234;
-  --color-surface: 255 255 255;
-  --color-ink: 21 24 21;
-  --color-moss: 102 115 92;
-  --color-clay: 182 95 59;
-  --color-brass: 195 154 61;
-  --color-tide: 45 111 115;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: 13 17 15;
-    --color-paper: 18 22 20;
-    --color-surface: 22 26 23;
-    --color-ink: 237 240 233;
-    --color-moss: 156 171 144;
-    --color-clay: 236 134 96;
-    --color-brass: 223 192 113;
-    --color-tide: 106 179 184;
-    color-scheme: dark;
-  }
+  --font-sans: "Inter", "SF Pro Display", "Segoe UI", sans-serif;
+  --color-background: 10 13 15;
+  --color-paper: 16 22 24;
+  --color-surface: 21 29 31;
+  --color-ink: 237 244 238;
+  --color-moss: 145 168 151;
+  --color-clay: 229 143 112;
+  --color-brass: 222 190 116;
+  --color-tide: 119 214 190;
+  color-scheme: dark;
 }
 
 * {
@@ -35,9 +21,9 @@
 
 html {
   min-height: 100%;
-  background: rgb(var(--color-background));
-  color-scheme: light dark;
   scroll-behavior: smooth;
+  background: rgb(var(--color-background));
+  color-scheme: dark;
 }
 
 body {
@@ -45,28 +31,16 @@ body {
   margin: 0;
   color: rgb(var(--color-ink));
   background:
-    radial-gradient(circle at top left, rgba(195, 154, 61, 0.14), transparent 30%),
-    radial-gradient(circle at top right, rgba(45, 111, 115, 0.14), transparent 28%),
+    radial-gradient(circle at 8% 0%, rgba(110, 231, 183, 0.08), transparent 25rem),
+    radial-gradient(circle at 92% 20%, rgba(125, 211, 252, 0.06), transparent 28rem),
     rgb(var(--color-background));
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    background:
-      radial-gradient(circle at top left, rgba(223, 192, 113, 0.1), transparent 28%),
-      radial-gradient(circle at top right, rgba(106, 179, 184, 0.1), transparent 26%),
-      rgb(var(--color-background));
-  }
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
 }
 
 a {
   color: inherit;
   text-decoration: none;
-}
-
-:focus-visible {
-  outline: 2px solid rgb(var(--color-tide));
-  outline-offset: 2px;
 }
 
 button,
@@ -77,87 +51,22 @@ select {
   -webkit-tap-highlight-color: transparent;
 }
 
-.chatbot-theme [class~="bg-white"],
-.chatbot-theme [class~="bg-white/75"],
-.chatbot-theme [class~="bg-white/80"],
-.chatbot-theme [class~="bg-white/85"],
-.chatbot-theme [class~="bg-white/90"],
-.chatbot-theme [class~="bg-white/95"],
-.chatbot-theme [class~="hover:bg-white"]:hover {
-  background-color: rgb(var(--color-surface) / 1);
-}
-
-.chatbot-theme [class~="bg-white/75"] {
-  background-color: rgb(var(--color-surface) / 0.75);
-}
-
-.chatbot-theme [class~="bg-white/80"] {
-  background-color: rgb(var(--color-surface) / 0.8);
-}
-
-.chatbot-theme [class~="bg-white/85"] {
-  background-color: rgb(var(--color-surface) / 0.85);
-}
-
-.chatbot-theme [class~="bg-white/90"] {
-  background-color: rgb(var(--color-surface) / 0.9);
-}
-
-.chatbot-theme [class~="bg-white/95"] {
-  background-color: rgb(var(--color-surface) / 0.95);
-}
-
-.chatbot-theme [class~="hover:bg-white"]:hover {
-  background-color: rgb(var(--color-surface) / 1);
-}
-
-.chatbot-theme {
-  --color-background: 246 248 251;
-  --color-paper: 255 255 255;
-  --color-surface: 255 255 255;
-  --color-ink: 18 24 35;
-  --color-moss: 92 107 124;
-  --color-clay: 174 84 59;
-  --color-brass: 185 150 64;
-  --color-tide: 67 96 255;
-  --chat-page: rgb(var(--color-background));
-  --chat-sidebar: rgb(243 245 248);
-  --chat-surface: rgb(var(--color-surface));
-  --chat-subtle: rgb(245 247 250);
-  --chat-text: rgb(var(--color-ink));
-  --chat-muted: rgb(107 114 128);
-  --chat-border: rgb(223 228 234);
-  --chat-accent: rgb(var(--color-tide));
-  --chat-danger: rgb(var(--color-clay));
-  --chat-code-bg: rgb(247 249 251);
-}
-
-@media (prefers-color-scheme: dark) {
-  .chatbot-theme {
-    --color-background: 10 14 22;
-    --color-paper: 15 20 30;
-    --color-surface: 20 27 39;
-    --color-ink: 236 241 248;
-    --color-moss: 154 170 190;
-    --color-clay: 239 135 102;
-    --color-brass: 227 197 113;
-    --color-tide: 112 136 255;
-    --chat-page: rgb(var(--color-background));
-    --chat-sidebar: rgb(15 20 30);
-    --chat-surface: rgb(var(--color-surface));
-    --chat-subtle: rgb(26 34 48);
-    --chat-text: rgb(var(--color-ink));
-    --chat-muted: rgb(164 173 186);
-    --chat-border: rgb(51 62 80);
-    --chat-accent: rgb(var(--color-tide));
-    --chat-danger: rgb(var(--color-clay));
-    --chat-code-bg: rgb(15 20 30);
-  }
+:focus-visible {
+  outline: 2px solid rgb(var(--color-tide));
+  outline-offset: 3px;
 }
 
 ::selection {
-  color: rgb(var(--color-paper));
-  background: rgb(var(--color-tide));
+  color: #0a0d0f;
+  background: rgb(167 243 208);
+}
+
+.page-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(to bottom, black, transparent 85%);
 }
 
 @keyframes chat-stream-cursor-blink {
@@ -193,8 +102,8 @@ select {
   *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 
   .chat-stream-cursor {
