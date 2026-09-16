@@ -65,8 +65,8 @@ function SunCore({ active, rotationOffset }: { active: boolean; rotationOffset: 
 
   const particles = useMemo(
     () =>
-      Array.from({ length: 28 }, (_, index) => {
-        const angle = (index / 28) * Math.PI * 2;
+      Array.from({ length: 22 }, (_, index) => {
+        const angle = (index / 22) * Math.PI * 2;
         const radius = 1.8 + (index % 4) * 0.15;
         return {
           key: index,
@@ -86,34 +86,34 @@ function SunCore({ active, rotationOffset }: { active: boolean; rotationOffset: 
       <group ref={ringRef} rotation={[0.45, 0, 0.18]}>
         <mesh>
           <torusGeometry args={[2.2, 0.024, 24, 180]} />
-          <meshStandardMaterial color="#7dd3fc" emissive="#38bdf8" emissiveIntensity={2.4} transparent opacity={0.65} />
+          <meshStandardMaterial color="#93c5fd" emissive="#2563eb" emissiveIntensity={0.9} transparent opacity={0.52} />
         </mesh>
         <mesh rotation={[0, 0.55, 0]}>
           <torusGeometry args={[1.7, 0.018, 24, 160]} />
-          <meshStandardMaterial color="#f472b6" emissive="#d946ef" emissiveIntensity={1.8} transparent opacity={0.55} />
+          <meshStandardMaterial color="#cbd5e1" emissive="#0ea5e9" emissiveIntensity={0.7} transparent opacity={0.42} />
         </mesh>
       </group>
 
       <mesh ref={haloRef} scale={2.45} rotation={[0, 0, -0.16]}>
         <sphereGeometry args={[1, 96, 96]} />
-        <meshBasicMaterial color="#60a5fa" transparent opacity={0.1} />
+        <meshBasicMaterial color="#60a5fa" transparent opacity={0.055} />
       </mesh>
 
       <mesh ref={coreRef} rotation={[0.08, 0.32, 0]}>
         <sphereGeometry args={[1, 112, 112]} />
         <meshStandardMaterial
-          color="#facc15"
-          emissive="#fb923c"
-          emissiveIntensity={2.55}
+          color="#dbeafe"
+          emissive="#2563eb"
+          emissiveIntensity={0.65}
           roughness={0.16}
-          metalness={0.06}
+          metalness={0.12}
         />
       </mesh>
 
       {particles.map((particle) => (
         <mesh key={particle.key} position={particle.position} scale={particle.scale}>
           <sphereGeometry args={[1, 20, 20]} />
-          <meshStandardMaterial color="#e0f2fe" emissive="#7dd3fc" emissiveIntensity={1.4} transparent opacity={0.9} />
+          <meshStandardMaterial color="#dbeafe" emissive="#60a5fa" emissiveIntensity={0.55} transparent opacity={0.78} />
         </mesh>
       ))}
     </group>
@@ -186,8 +186,8 @@ export function SunCanvas({ active = true }: { active?: boolean }) {
       <color attach="background" args={["#020617"]} />
       <fog attach="fog" args={["#020617", 7, 12]} />
       <ambientLight intensity={0.55} />
-      <pointLight position={[4, 4, 5]} intensity={28} color="#f59e0b" />
-      <pointLight position={[-4, -2, 3]} intensity={10} color="#38bdf8" />
+      <pointLight position={[4, 4, 5]} intensity={8} color="#60a5fa" />
+      <pointLight position={[-4, -2, 3]} intensity={4} color="#38bdf8" />
       <DemandFrameLoop active={active} />
       <SunCore active={active} rotationOffset={rotationOffset} />
     </Canvas>
