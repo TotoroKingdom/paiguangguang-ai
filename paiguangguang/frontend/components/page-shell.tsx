@@ -11,15 +11,15 @@ type PageShellProps = {
 export function PageShell({ eyebrow, title, description, status, children }: PageShellProps) {
   return (
     <div className="space-y-8">
-      <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-stretch">
-        <div className="space-y-4">
-          <p className="text-sm font-semibold uppercase tracking-wide text-clay">{eyebrow}</p>
-          <h1 className="max-w-3xl text-4xl font-semibold leading-tight text-ink md:text-5xl">{title}</h1>
-          <p className="max-w-2xl text-lg leading-8 text-ink/70">{description}</p>
+      <section className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:items-stretch">
+        <div className="section-intro">
+          <p className="eyebrow">{eyebrow}</p>
+          <h1 className="section-title text-4xl md:text-5xl">{title}</h1>
+          <p className="section-description max-w-2xl text-base">{description}</p>
         </div>
-        <aside className="border border-ink/10 bg-white/65 p-5 shadow-sm">
-          <p className="mb-4 text-sm font-semibold text-tide">{status}</p>
-          <div className="space-y-3 text-sm text-ink/75">{children}</div>
+        <aside className="surface surface--quiet p-5">
+          <p className="mb-4 text-sm font-semibold text-primary">{status}</p>
+          <div className="space-y-3 text-sm text-muted">{children}</div>
         </aside>
       </section>
     </div>
