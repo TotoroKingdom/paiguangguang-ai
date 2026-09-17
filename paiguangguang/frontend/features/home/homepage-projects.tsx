@@ -26,6 +26,12 @@ function ProjectCard({
         <span className="project-card__status">{project.status}</span>
       </div>
 
+      <div className={`project-card__visual project-card__visual--${(index % 6) + 1}`} aria-hidden="true">
+        <span className="project-card__visual-orbit" />
+        <span className="project-card__visual-core" />
+        <span className="project-card__visual-label">CASE / {String(index + 1).padStart(2, "0")}</span>
+      </div>
+
       <div className="project-card__body">
         <div className="project-card__rule" />
         <h3 className="project-card__title">{project.name}</h3>
@@ -37,6 +43,9 @@ function ProjectCard({
             </span>
           ))}
         </div>
+        <span className="project-card__action">
+          Explore case <span aria-hidden="true">↗</span>
+        </span>
       </div>
     </motion.article>
   );

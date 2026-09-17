@@ -19,7 +19,7 @@ const categoryLabels: Record<TechStackItem["category"], string> = {
 
 export function HomepageTechStack() {
   return (
-    <section id="tech-stack" className="scroll-mt-24 space-y-8">
+    <section id="tech-stack" className="home-section scroll-mt-24">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div className="section-intro">
           <p className="eyebrow">Stack / 2026</p>
@@ -30,8 +30,11 @@ export function HomepageTechStack() {
 
       <div className="surface stack-surface">
         <div className="stack-summary">
-          <span className="stack-summary__count">13 core tools</span>
-          <span className="stack-summary__copy">A focused stack for shipping AI applications.</span>
+          <div>
+            <span className="stack-summary__count">13 core tools</span>
+            <span className="stack-summary__copy"> / a focused stack for shipping AI applications</span>
+          </div>
+          <span className="stack-summary__signal">SYSTEM READY</span>
         </div>
 
         <div className="stack-list">
