@@ -1,2 +1,13 @@
 .worktrees/
-paiguangguang/backend/auth-login-private-key.pem
+backend/auth-login-private-key.pem
+
+# Local development and IDE artifacts
+.idea/
+.venv/
+.pytest_cache/
+__pycache__/
+*.pyc
+node_modules/
+.next/
+.superpowers/
+.claude/

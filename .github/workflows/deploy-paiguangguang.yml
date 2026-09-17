@@ -5,12 +5,12 @@ on:
     branches:
       - main
     paths:
-      - "paiguangguang/frontend/**"
-      - "paiguangguang/backend/**"
-      - "paiguangguang/deploy/docker-compose.yml"
-      - "paiguangguang/deploy/deploy.sh"
-      - "paiguangguang/deploy/cleanup-images.sh"
-      - "paiguangguang/deploy/nginx/**"
+      - "frontend/**"
+      - "backend/**"
+      - "deploy/docker-compose.yml"
+      - "deploy/deploy.sh"
+      - "deploy/cleanup-images.sh"
+      - "deploy/nginx/**"
       - ".github/workflows/deploy-paiguangguang.yml"
   workflow_dispatch:
 
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: paiguangguang/frontend
+        working-directory: frontend
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: paiguangguang/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Audit production dependencies
@@ -49,7 +49,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: paiguangguang
+        working-directory: .
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: paiguangguang/backend/requirements.txt
+          cache-dependency-path: backend/requirements.txt
       - name: Install dependencies
         run: python -m pip install -r backend/requirements.txt
       - name: Run backend tests
@@ -77,16 +77,16 @@ jobs:
       matrix:
         include:
           - service: frontend
-            context: ./paiguangguang/frontend
-            dockerfile: ./paiguangguang/frontend/Dockerfile
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
             repository: ${{ vars.TCR_FRONTEND_REPOSITORY }}
             cache_scope: paiguangguang-frontend
             build_args: |
               NEXT_PUBLIC_BACKEND_URL=
               NEXT_PUBLIC_CHATBOT_ENABLED=true
           - service: backend
-            context: ./paiguangguang/backend
-            dockerfile: ./paiguangguang/backend/Dockerfile
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
             repository: ${{ vars.TCR_BACKEND_REPOSITORY }}
             cache_scope: paiguangguang-backend
             build_args: ""
@@ -143,9 +143,9 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          source: "paiguangguang/deploy/docker-compose.yml,paiguangguang/deploy/deploy.sh,paiguangguang/deploy/cleanup-images.sh,paiguangguang/deploy/nginx,paiguangguang/backend/prod.env"
+          source: "deploy/docker-compose.yml,deploy/deploy.sh,deploy/cleanup-images.sh,deploy/nginx,backend/prod.env"
           target: "/tmp/paiguangguang-${{ github.sha }}"
-          strip_components: 2
+          strip_components: 1
       - name: Deploy immutable images
         uses: appleboy/ssh-action@v1
         env:
