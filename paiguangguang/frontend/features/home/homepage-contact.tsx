@@ -56,7 +56,7 @@ function LazySunCanvas() {
 
 export function HomepageContact() {
   return (
-    <section id="contact" className="scroll-mt-24 space-y-8 pb-2">
+    <section id="contact" className="home-section scroll-mt-24 pb-2">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div className="section-intro">
           <p className="eyebrow">Contact / 04</p>
@@ -79,7 +79,7 @@ export function HomepageContact() {
           </div>
 
           <div className="contact-card__actions">
-            <a href="mailto:totorokingdom@foxmail.com" className="btn btn-primary">
+            <a href="mailto:totorokingdom@foxmail.com" className="home-button home-button--solid">
               <MailIcon size={16} />
               发邮件
               <ArrowUpRightIcon size={15} />

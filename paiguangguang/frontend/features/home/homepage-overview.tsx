@@ -26,7 +26,7 @@ export function HomepageOverview() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.25 }}
             transition={{ duration: 0.35, delay: index * 0.04 }}
-            className="capability-item group"
+            className={`capability-item capability-item--${card.accent} group`}
           >
             <div className="capability-item__meta">
               <span>{meta.index}</span>
@@ -37,6 +37,9 @@ export function HomepageOverview() {
             </div>
             <h3 className="capability-item__title">{card.title}</h3>
             <p className="capability-item__description">{card.description}</p>
+            <span className="capability-item__arrow" aria-hidden="true">
+              ↗
+            </span>
           </motion.article>
         );
       })}
