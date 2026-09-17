@@ -1,47 +1,59 @@
-# ✦ Paiguangguang AI Platform
+# Paiguangguang AI
 
----
+这是一个个人技术名片与作品集展示站。首页呈现 AI、RAG（检索增强生成）、Agent（智能体）和全栈工程经历；这些内容是案例说明，不提供在线登录、管理、聊天、知识库或 Agent 业务功能。
 
-## 🌌 项目简介
+## 运行结构
 
-Paiguangguang 是一个用于探索 **RAG 工程、Agent 工作流与全栈 AI 应用开发** 的个人项目。平台以知识库与智能对话为核心，同时提供浏览器 Agent、Office Agent、后台管理和 RBAC 权限体系，完整覆盖从模型接入到产品交付的实践链路。
+- `frontend/`：Next.js 展示站。
+- `backend/`：最小 FastAPI 健康检查服务，仅提供 `GET /api/v1/health`。
+- `redis`：保留在 Docker Compose 拓扑中，当前不被应用业务消费。
+- `archive/`：已完成的业务系统设计与实施资料，仅作历史工程证据，不代表线上能力。
 
-## ✨ 核心能力
+## 本地开发
 
-- **知识库 Agent**：文档入库、混合检索、重排、上下文组装与来源引用
-- **智能 Chatbot**：流式对话、会话管理、长短期记忆与异常恢复
-- **工具型 Agent**：浏览器搜索、信息整合与办公自动化工作流
-- **平台化管理**：用户认证、角色权限、工作空间及文档生命周期管理
+前端：
 
-## 🧩 技术架构
-
-```text
-Next.js · TypeScript · Tailwind CSS
-                 ↓
-          FastAPI · DeepSeek
-                 ↓
-PostgreSQL · Redis · ChromaDB
+```bash
+cd frontend
+npm ci
+npm run dev
 ```
 
-## 🚀 Todo
+后端：
 
-- [√] RAG链路
-- [ ] 分布式系统的查询链路
-- [ ] 分布式系统的更新链路
-- [ ] 记忆系统链路
-- [ ] Muti-Agent编排链路
-
-## 📁 目录结构
-
-```text
-paiguangguang/
-├─ frontend/   # Next.js 前端与交互界面
-├─ backend/    # FastAPI、RAG、Agent 与权限服务
-├─ deploy/     # 部署配置
-└─ docs/       # 项目文档
+```bash
+uv sync --group dev
+uv run pytest backend/tests -q
+uv run uvicorn app.main:app --app-dir backend --reload
 ```
 
----
+访问 `http://localhost:8000/api/v1/health` 应返回：
 
-<div align="center">
-**让 AI 不只回答问题，更能理解上下文、调用工具并完成任务。**
+```json
+{"status":"ok"}
+```
+
+## Docker Compose
+
+```bash
+docker compose up --build
+```
+
+- 前端：`http://localhost:3000`
+- Health API：`http://localhost:8000/api/v1/health`
+- Redis：`localhost:6379`
+
+## 验证
+
+```bash
+cd frontend
+npm test
+npm run lint
+npm run build
+
+cd ..
+uv run pytest backend/tests -q
+docker compose config --quiet
+```
+
+生产发布和 Nginx 反向代理说明见 [deploy/README.md](deploy/README.md)。
