@@ -1,76 +1,65 @@
-"use client";
-
-import { motion } from "framer-motion";
+import type { ReactNode } from "react";
 
 import { projectCards } from "./homepage-data";
 
-function ProjectCard({
-  project,
-  index,
-  featured = false
-}: {
-  project: (typeof projectCards)[number];
-  index: number;
-  featured?: boolean;
-}) {
+function ProjectField({ label, children, accent = false }: { label: string; children: ReactNode; accent?: boolean }) {
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 10 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.35, delay: index * 0.035 }}
-      className={`project-card ${featured ? "project-card--featured" : ""}`}
-    >
-      <div className="project-card__top">
-        <span>{String(index + 1).padStart(2, "0")}</span>
-        <span className="project-card__status">{project.status}</span>
+    <div className={`brand-project-field ${accent ? "brand-project-field--accent" : ""}`}>
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
+function ProjectCard({ project, index }: { project: (typeof projectCards)[number]; index: number }) {
+  return (
+    <article className={`brand-project-card brand-project-card--${project.accent}`}>
+      <div className="brand-project-card__top">
+        <span className="brand-mono">0{index + 1}</span>
+        <span className="brand-project-card__focus">{project.focus}</span>
       </div>
 
-      <div className={`project-card__visual project-card__visual--${(index % 6) + 1}`} aria-hidden="true">
-        <span className="project-card__visual-orbit" />
-        <span className="project-card__visual-core" />
-        <span className="project-card__visual-label">CASE / {String(index + 1).padStart(2, "0")}</span>
-      </div>
+      <h3 className="brand-project-card__title">{project.name}</h3>
+      <p className="brand-project-card__context">{project.context}</p>
 
-      <div className="project-card__body">
-        <div className="project-card__rule" />
-        <h3 className="project-card__title">{project.name}</h3>
-        <p className="project-card__description">{project.description}</p>
-        <div className="project-card__tags">
-          {project.tags.map((tag) => (
-            <span key={tag} className="tag">
-              {tag}
-            </span>
-          ))}
-        </div>
-        <span className="project-card__action">
-          Explore case <span aria-hidden="true">↗</span>
-        </span>
-      </div>
-    </motion.article>
+      <dl className="brand-project-fields">
+        <ProjectField label="Problem">{project.problem}</ProjectField>
+        <ProjectField label="Architecture">
+          <div className="brand-project-architecture">
+            {project.architecture.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+        </ProjectField>
+        <ProjectField label="Contribution">{project.contribution}</ProjectField>
+        <ProjectField label="Outcome" accent>
+          {project.outcome}
+        </ProjectField>
+      </dl>
+
+      <span className="brand-project-card__action">
+        查看详情 <span aria-hidden="true">↗</span>
+      </span>
+    </article>
   );
 }
 
 export function HomepageProjects() {
   return (
-    <section id="projects" className="home-section scroll-mt-24">
-      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div className="section-intro">
-          <p className="eyebrow">Selected work / 02</p>
-          <h2 className="section-title">把想法交付成产品</h2>
+    <section id="projects" className="brand-section brand-projects scroll-mt-24">
+      <div className="brand-section-heading">
+        <p className="brand-eyebrow">Work</p>
+        <div>
+          <h2 className="brand-section-title">Projects framed as engineering evidence.</h2>
+          <p className="brand-section-description">
+            三个核心项目，记录我如何从问题出发，设计系统边界，并把模型能力交付到真实工作流里。
+          </p>
         </div>
-        <p className="section-description mt-0 max-w-md sm:text-right">从对话、知识库到企业自动化，关注每个系统真正被使用的瞬间。</p>
       </div>
 
-      <div className="project-grid project-grid--featured">
-        {projectCards.slice(0, 3).map((project, index) => (
-          <ProjectCard key={project.name} project={project} index={index} featured />
-        ))}
-      </div>
-
-      <div className="project-grid project-grid--secondary">
-        {projectCards.slice(3).map((project, index) => (
-          <ProjectCard key={project.name} project={project} index={index + 3} />
+      <div className="brand-project-grid">
+        {projectCards.map((project, index) => (
+          <ProjectCard key={project.name} project={project} index={index} />
         ))}
       </div>
     </section>

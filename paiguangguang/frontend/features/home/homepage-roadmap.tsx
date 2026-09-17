@@ -1,37 +1,28 @@
-"use client";
-
-import { motion } from "framer-motion";
-
-import { roadmapStages } from "./homepage-data";
+import { approachStages } from "./homepage-data";
 
 export function HomepageRoadmap() {
   return (
-    <section id="roadmap" className="home-section scroll-mt-24">
-      <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
-        <div className="section-intro">
-          <p className="eyebrow">Roadmap / 03</p>
-          <h2 className="section-title">下一步，继续把边界推远</h2>
+    <section id="approach" className="brand-section brand-approach scroll-mt-24">
+      <div className="brand-section-heading">
+        <p className="brand-eyebrow">Approach</p>
+        <div>
+          <h2 className="brand-section-title">Observe. Evaluate. Ship.</h2>
+          <p className="brand-section-description">
+            我关注的不只是模型能不能回答，而是系统是否可观察、可验证、可交付。
+          </p>
         </div>
-        <p className="section-description mt-0 max-w-md sm:text-right">每个阶段都不是头衔，而是一种更稳定地解决问题的方式。</p>
       </div>
 
-      <div className="roadmap-grid">
-        {roadmapStages.map((stage, index) => (
-          <motion.article
-            key={stage.stage}
-            initial={{ opacity: 0, y: 10 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, amount: 0.25 }}
-            transition={{ duration: 0.35, delay: index * 0.045 }}
-            className="roadmap-step"
-          >
-            <div className="roadmap-step__top">
-              <span className="roadmap-step__index">{stage.stage}</span>
-              <span className="roadmap-step__label">Next chapter</span>
+      <div className="brand-approach-track">
+        {approachStages.map((stage, index) => (
+          <div key={stage.stage} className="brand-approach-item">
+            <div className="brand-approach-item__top">
+              <span className="brand-mono">{stage.stage}</span>
+              {index < approachStages.length - 1 ? <span className="brand-approach-item__arrow" aria-hidden="true">→</span> : null}
             </div>
-            <h3 className="roadmap-step__title">{stage.title}</h3>
-            <p className="roadmap-step__description">{stage.description}</p>
-          </motion.article>
+            <h3>{stage.title}</h3>
+            <p>{stage.description}</p>
+          </div>
         ))}
       </div>
     </section>

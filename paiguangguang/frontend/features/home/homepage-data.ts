@@ -5,25 +5,31 @@ export type RagFlowStep = {
     kind: "ingestion" | "query" | "branch" | "system" | "ai" | "storage" | "response";
 };
 
-export type OverviewCard = {
-    title: string;
-    description: string;
-    accent: "green" | "purple" | "blue" | "pink";
+export type HomepageProject = {
+    name: string;
+    focus: string;
+    context: string;
+    problem: string;
+    architecture: string[];
+    contribution: string;
+    outcome: string;
+    accent: "purple" | "cyan" | "green";
 };
+
+export type Capability = {
+    name: string;
+    description: string;
+    items: string[];
+};
+
+type LegacyTechStackCategory = "frontend" | "backend" | "ai" | "storage" | "workflow" | "delivery" | "response";
 
 export type TechStackItem = {
     name: string;
-    category: "frontend" | "backend" | "ai" | "storage" | "workflow" | "delivery" | "response";
+    category: LegacyTechStackCategory;
 };
 
-export type ProjectCard = {
-    name: string;
-    status: string;
-    description: string;
-    tags: string[];
-};
-
-export type RoadmapStage = {
+export type ApproachStage = {
     stage: string;
     title: string;
     description: string;
@@ -161,105 +167,89 @@ export const ragQuerySteps: RagFlowStep[] = [
     }
 ];
 
-export const overviewCards: OverviewCard[] = [
+export const projectCards: HomepageProject[] = [
     {
-        title: "RAG Engineer",
-        description: "围绕入库、检索、rerank、上下文组装和引用链路构建工程能力。",
-        accent: "green"
-    },
-    {
-        title: "Agent Workflow",
-        description: "把计划、工具调用、状态流转和结果拆成可观察流程。",
+        name: "Knowledge System",
+        focus: "Retrieval infrastructure",
+        context: "把企业文档、FAQ 与制度资料整理成可以被 Agent 使用的知识基础设施。",
+        problem: "知识分散、权限边界不清，回答无法解释来源。",
+        architecture: ["Ingestion", "Hybrid retrieval", "Rerank", "Citation"],
+        contribution: "设计入库、权限过滤、召回精排与引用输出的完整链路。",
+        outcome: "让每次回答都能回到具体上下文，支持复核与评估。",
         accent: "purple"
     },
     {
-        title: "Full-stack AI",
-        description: "连接前端体验、API、权限、存储和模型服务。",
-        accent: "blue"
+        name: "Agent Workflow",
+        focus: "Executable orchestration",
+        context: "让模型从一次性生成，变成可以规划、调用工具并完成任务的工作流。",
+        problem: "长链路状态容易丢失，工具调用缺少边界，失败难以恢复。",
+        architecture: ["Planning", "Tool calling", "Memory", "Verification"],
+        contribution: "拆分状态、工具、记忆与验证节点，建立可观察的执行路径。",
+        outcome: "把 Agent 行为变成可调试、可恢复、可交付的系统流程。",
+        accent: "cyan"
     },
     {
-        title: "VibeCoding",
-        description: "用 AI 协作提速交付，同时保持工程边界与验证流程。",
-        accent: "pink"
+        name: "AI Office Automation",
+        focus: "AI product delivery",
+        context: "连接企业协作工具与业务 API，减少重复操作，让结果直接进入工作流。",
+        problem: "跨系统操作依赖人工，审批与结构化输出缺少审计线索。",
+        architecture: ["Intent", "Tool adapters", "Approval", "Observability"],
+        contribution: "实现工具适配、权限控制、结构化产出与可追踪交付界面。",
+        outcome: "将模型能力收束成稳定的自动化动作，而不是孤立的 Demo。",
+        accent: "green"
     }
 ];
 
+export const capabilities: Capability[] = [
+    {
+        name: "Knowledge Systems",
+        description: "让知识可检索、可控、可验证，并且始终保留来源。",
+        items: ["RAG", "Retrieval", "Rerank", "Evaluation", "Permission"]
+    },
+    {
+        name: "Agent Engineering",
+        description: "把模型决策拆成可观察的计划、工具与状态流转。",
+        items: ["Planning", "Tool Calling", "Memory", "Workflow"]
+    },
+    {
+        name: "AI Product Delivery",
+        description: "从界面到部署，把 AI 能力交付成可以被使用的产品。",
+        items: ["Frontend", "Backend", "Deployment", "Observability"]
+    }
+];
+
+// Kept for the existing standalone component; the homepage now presents capabilities as systems.
 export const techStack: TechStackItem[] = [
-    {name: "Java", category: "backend"},
-    {name: "FastAPI", category: "backend"},
-    {name: "Next.js", category: "frontend"},
-    {name: "LangGraph", category: "ai"},
-    {name: "RAG", category: "ai"},
-    {name: "LangChain", category: "ai"},
-    {name: "Milvus", category: "storage"},
-    {name: "Redis", category: "storage"},
-    {name: "MySQL", category: "storage"},
-    {name: "VibeCoding", category: "workflow"},
-    {name: "Git", category: "delivery"},
-    {name: "Docker", category: "delivery"},
-    {name: "Jenkins", category: "delivery"}
+    { name: "Java", category: "backend" },
+    { name: "FastAPI", category: "backend" },
+    { name: "Next.js", category: "frontend" },
+    { name: "LangGraph", category: "ai" },
+    { name: "RAG", category: "ai" },
+    { name: "LangChain", category: "ai" },
+    { name: "Milvus", category: "storage" },
+    { name: "Redis", category: "storage" },
+    { name: "MySQL", category: "storage" },
+    { name: "VibeCoding", category: "workflow" },
+    { name: "Git", category: "delivery" },
+    { name: "Docker", category: "delivery" },
+    { name: "Jenkins", category: "delivery" }
 ];
 
-export const projectCards: ProjectCard[] = [
+export const approachStages: ApproachStage[] = [
     {
-        name: "Chat Bot",
-        status: "Case Study",
-        description: "暖心的聊天机器人",
-        tags: ["Chat", "Session", "AI"]
+        stage: "Observe",
+        title: "可观察",
+        description: "先看清问题、数据流、状态与失败边界，再决定 Agent 应该如何行动。"
     },
     {
-        name: "Knowledge Agent",
-        status: "Case Study",
-        description: "企业知识库问答、文档管理、检索调试与引用查看。",
-        tags: ["RAG", "Retrieval", "Citation"]
+        stage: "Evaluate",
+        title: "可验证",
+        description: "用检索质量、工具结果、引用链路与真实任务反馈检查系统是否可靠。"
     },
     {
-        name: "飞书 Agent",
-        status: "Case Study",
-        description: "整合飞书平台，自动写周报，自动审批，自动读取数据",
-        tags: ["Planning", "Search", "Synthesis"]
-    },
-    {
-        name: "Office Agent",
-        status: "Case Study",
-        description: "展示报告、摘要和结构化输出的办公自动化链路。",
-        tags: ["Tools", "Report", "Workflow"]
-    },
-    {
-        name: "智慧工业园",
-        status: "Scenario",
-        description: "企业知识库&&让AI为企业赋能",
-        tags: ["IoT", "Energy", "Operations"]
-    },
-    {
-        name: "智慧校园",
-        status: "Scenario",
-        description: "儿童陪聊机器人&&个性化生成儿童培养计划",
-        tags: ["Campus", "Service", "AI"]
-    },
-    {
-        name: "办公自动化Agent",
-        status: "Scenario",
-        description: "秒审秒批，解放双手",
-        tags: ["Marketing", "Content", "Growth"]
-    }
-];
-
-export const roadmapStages: RoadmapStage[] = [
-    {
-        stage: "01",
-        title: "RAG System Builder",
-        description: "让知识从沉睡中醒来，让系统拥有可信的记忆。"
-    },
-    {
-        stage: "02",
-        title: "Agentic Application Engineer",
-        description: "让 AI 拥有行动的意志"
-    },
-    {
-        stage: "03",
-        title: "AI Application Architect",
-        description: "构建一座真正能够思考、协作并服务现实世界的智能建筑"
+        stage: "Ship",
+        title: "可交付",
+        description: "把经过验证的能力接入产品、部署与观测，让它在真实工作中持续产生价值。"
     }
 ];
 
