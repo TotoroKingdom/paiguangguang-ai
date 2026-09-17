@@ -1,0 +1,7 @@
+services:
+  app:
+    image: ${IMAGE_NAME}
+    container_name: paiguangguang-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
