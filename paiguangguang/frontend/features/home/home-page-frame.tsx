@@ -13,21 +13,21 @@ type HomePageFrameProps = {
 export function HomePageFrame({
   activePage,
   children,
-  footerLabel = "TG / AI SYSTEMS",
+  footerLabel = "TotoroKingdom / AI Agent Engineer",
   footerCopy = "Built with clarity, shipped with intent.",
   mainClassName = "home-main"
 }: HomePageFrameProps) {
   return (
     <div className="home-page">
-      <div className="pointer-events-none fixed inset-0 z-0 page-grid opacity-55" />
+      <div className="pointer-events-none fixed inset-0 z-0 brand-page-grid" />
 
-      <div className="relative z-10">
+      <div className="relative z-10 brand-page-layer">
         <SiteNavigation activePage={activePage} />
 
         <main className={mainClassName}>{children}</main>
 
-        <footer className="home-footer">
-          <span className="font-mono">{footerLabel}</span>
+        <footer className="brand-footer">
+          <span className="brand-footer__label">{footerLabel}</span>
           <span>{footerCopy}</span>
         </footer>
       </div>
