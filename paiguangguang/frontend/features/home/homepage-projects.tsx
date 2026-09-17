@@ -53,7 +53,7 @@ function ProjectCard({
 
 export function HomepageProjects() {
   return (
-    <section id="projects" className="scroll-mt-24 space-y-8">
+    <section id="projects" className="home-section scroll-mt-24">
       <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
         <div className="section-intro">
           <p className="eyebrow">Selected work / 02</p>
