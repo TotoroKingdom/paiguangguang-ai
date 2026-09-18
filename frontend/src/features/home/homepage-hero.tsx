@@ -24,30 +24,33 @@ export function HomepageHero() {
         >
           <p className="brand-eyebrow brand-hero__eyebrow">
             <span className="brand-eyebrow__dot" />
-            AI AGENT ENGINEER
+            TOTORKINGDOM / AI AGENT ENGINEER
           </p>
 
           <h1 className="brand-hero__title">
-            构建可检索、可执行、
+            把 AI 能力做成
             <br />
-            <span>可验证</span>的 AI Agent 系统。
+            <span>可靠的系统。</span>
           </h1>
 
-          <p className="brand-hero__description">RAG · Agent Workflow · Knowledge Infrastructure</p>
+          <p className="brand-hero__description">
+            我是 TotoroKingdom，专注于 RAG、Agent Workflow 与全栈 AI 产品工程。
+            从知识、推理到行动，让每一环都可追踪、可验证、可交付。
+          </p>
 
           <div className="brand-hero__actions">
             <a href="#projects" className="brand-button brand-button--primary">
-              View Projects
+              查看精选项目
               <ArrowUpRightIcon size={15} />
             </a>
             <a href="#systems" className="brand-button brand-button--secondary">
-              Explore Systems
+              我的系统方法
             </a>
           </div>
 
           <div className="brand-hero__signal" aria-label="核心工作方向">
             <span>Knowledge-first</span>
-            <span>Workflow-native</span>
+            <span>Execution-ready</span>
             <span>Production-minded</span>
           </div>
         </motion.div>
