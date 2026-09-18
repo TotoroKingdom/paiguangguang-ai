@@ -14,7 +14,7 @@ export function Homepage() {
         <div className="brand-section-heading">
           <p className="brand-eyebrow">Systems</p>
           <div>
-            <h2 className="brand-section-title">能力不是标签，是可以被验证的系统。</h2>
+          <h2 className="brand-section-title">能力不是关键词，而是经得起真实流程检验的系统。</h2>
             <p className="brand-section-description">
               我把知识、行动与交付拆成清晰的工程边界，让 AI 从模型能力变成可靠的产品能力。
             </p>

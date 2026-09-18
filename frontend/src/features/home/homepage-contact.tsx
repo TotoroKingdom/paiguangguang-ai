@@ -6,7 +6,7 @@ export function HomepageContact() {
       <div className="brand-contact__layout">
         <div>
           <p className="brand-eyebrow">Contact</p>
-          <h2 className="brand-contact__title">Build useful AI systems together.</h2>
+          <h2 className="brand-contact__title">一起把 AI，做成真正有用的产品。</h2>
         </div>
 
         <div className="brand-contact__side">
