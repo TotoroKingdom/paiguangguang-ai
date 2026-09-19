@@ -4,12 +4,10 @@ export function HomepageRoadmap() {
   return (
     <section id="approach" className="brand-section brand-approach scroll-mt-24">
       <div className="brand-section-heading">
-        <p className="brand-eyebrow">Approach</p>
+        <p className="brand-eyebrow">HOW I BUILD / 04</p>
         <div>
-          <h2 className="brand-section-title">Observe. Evaluate. Ship.</h2>
-          <p className="brand-section-description">
-            我关注的不只是模型能不能回答，而是系统是否可观察、可验证、可交付。
-          </p>
+          <h2 className="brand-section-title">From question to shipped system.</h2>
+          <p className="brand-section-description">Understand → Design → Build → Evaluate → Ship</p>
         </div>
       </div>
 
