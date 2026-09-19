@@ -5,8 +5,8 @@ export function HomepageContact() {
     <section id="contact" className="brand-section brand-contact scroll-mt-24">
       <div className="brand-contact__layout">
         <div>
-          <p className="brand-eyebrow">Contact</p>
-          <h2 className="brand-contact__title">Build useful AI systems together.</h2>
+          <p className="brand-eyebrow">CONTACT / 06</p>
+          <h2 className="brand-contact__title">一起把 AI，做成真正有用的产品。</h2>
         </div>
 
         <div className="brand-contact__side">

@@ -19,8 +19,6 @@ export function HomePageFrame({
 }: HomePageFrameProps) {
   return (
     <div className="home-page">
-      <div className="pointer-events-none fixed inset-0 z-0 brand-page-grid" />
-
       <div className="relative z-10 brand-page-layer">
         <SiteNavigation activePage={activePage} />
 
