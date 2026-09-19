@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import "./globals.css";
+import "./homepage.css";
 
 export const metadata: Metadata = {
   title: "TotoroKingdom · AI Systems",
