@@ -6,9 +6,6 @@
 
 这是我的个人技术主页与工程作品集仓库。
 
-这里不只是一个 Portfolio（作品集）页面，也是我对 AI 应用工程、Agent（智能体）、RAG（检索增强生成）、知识系统与软件工程实践的长期整理。
-
-**重点展示的不是“做过多少 Demo”，而是如何理解、设计并落地 AI 系统。**
 
 ---
 
@@ -59,15 +56,6 @@ LLM
 - 技术路线
 - 架构与工程实践
 
-它是一个**展示型站点**，不是 SaaS 产品。
-
-因此当前线上版本：
-
-- 不提供用户登录
-- 不提供管理后台
-- 不提供在线聊天
-- 不提供在线知识库
-- 不直接运行 Agent 业务系统
 
 页面中的 AI、RAG、Agent 内容主要用于展示真实工程方向和历史项目经验。
 
@@ -89,7 +77,6 @@ Evaluation
 Iteration
 ```
 
-它们是历史工程证据，而不是当前线上产品能力。
 
 ---
 
@@ -272,8 +259,6 @@ Production Deployment
 ## ✦ Engineering Philosophy
 
 > **How the system works, not just whether the demo works.**
-
-一个 AI 应用真正进入工程环境后，需要解决的不只是 Prompt（提示词）。
 
 ```text
 Model
