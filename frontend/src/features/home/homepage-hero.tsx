@@ -1,96 +1,33 @@
-"use client";
-
-import { motion } from "framer-motion";
-
-import { ArrowUpRightIcon } from "@/components/icons";
-
-const systemSteps = [
-  { label: "Knowledge", detail: "trusted sources", tone: "purple" },
-  { label: "Retrieve", detail: "relevant context", tone: "cyan" },
-  { label: "Reason", detail: "grounded decisions", tone: "purple" },
-  { label: "Action", detail: "tool-backed work", tone: "cyan" },
-  { label: "Citation", detail: "verifiable output", tone: "green" }
-] as const;
+import Image from "next/image";
 
 export function HomepageHero() {
   return (
-    <section id="hero" className="brand-hero scroll-mt-24">
+    <section id="hero" className="brand-hero">
       <div className="brand-hero__layout">
-        <motion.div
-          initial={{ opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: "easeOut" }}
-          className="brand-hero__copy"
-        >
-          <p className="brand-eyebrow brand-hero__eyebrow">
-            <span className="brand-eyebrow__dot" />
-            TOTORKINGDOM / AI AGENT ENGINEER
-          </p>
-
-          <h1 className="brand-hero__title">
-            把 AI 能力做成
-            <br />
-            <span>可靠的系统。</span>
-          </h1>
-
-          <p className="brand-hero__description">
-            我是 TotoroKingdom，专注于 RAG、Agent Workflow 与全栈 AI 产品工程。
-            从知识、推理到行动，让每一环都可追踪、可验证、可交付。
-          </p>
-
+        <div className="brand-hero__copy">
+          <p className="brand-hero__identity">AI APPLICATION ENGINEER <span>/</span> RAG · AGENTS · AI SYSTEMS</p>
+          <h1>I build AI systems<br />that actually <em>ship.</em></h1>
+          <p className="brand-hero__zh">把 AI 从 Demo 做成真正可交付的产品。</p>
+          <p className="brand-hero__description">从 Agent 工作台到模型配置与知识系统，我关注产品体验，也负责让背后的工程真正运转。</p>
           <div className="brand-hero__actions">
-            <a href="#projects" className="brand-button brand-button--primary">
-              查看精选项目
-              <ArrowUpRightIcon size={15} />
-            </a>
-            <a href="#systems" className="brand-button brand-button--secondary">
-              我的系统方法
-            </a>
+            <a href="#projects">View selected work <span aria-hidden="true">↗</span></a>
+            <a href="#about">About me <span aria-hidden="true">↗</span></a>
           </div>
-
-          <div className="brand-hero__signal" aria-label="核心工作方向">
-            <span>Knowledge-first</span>
-            <span>Execution-ready</span>
-            <span>Production-minded</span>
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, scale: 0.97, y: 14 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.08, ease: "easeOut" }}
-          className="brand-system-visual"
-          aria-label="Knowledge 到 Citation 的 AI Agent 系统流程"
-        >
-          <div className="brand-system-visual__grid" aria-hidden="true" />
-          <div className="brand-system-visual__header">
-            <span className="brand-mono">SYSTEM / KNOWLEDGE PIPELINE</span>
-            <span className="brand-system-visual__caption">traceable by design</span>
-          </div>
-
-          <div className="brand-system-flow">
-            {systemSteps.map((step, index) => (
-              <div key={step.label} className="brand-system-flow__item">
-                <span className="brand-system-flow__index">0{index + 1}</span>
-                <div className={`brand-system-flow__node brand-system-flow__node--${step.tone}`}>
-                  <span className="brand-system-flow__node-label">{step.label}</span>
-                  <span className="brand-system-flow__node-detail">{step.detail}</span>
-                </div>
-                {index < systemSteps.length - 1 ? (
-                  <div className="brand-system-flow__connector" aria-hidden="true">
-                    <span />
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-
-          <div className="brand-system-visual__footer">
-            <span>retrieval → reasoning → action</span>
-            <span>source-linked output</span>
-          </div>
-        </motion.div>
+        </div>
+        <div className="brand-hero__visual" aria-label="真实项目界面拼贴：Mini-Codex 和 DeepSeek Harness">
+          <div className="brand-hero__visual-index">FIG. 01 — SOFTWARE, IN USE</div>
+          <figure className="brand-hero__shot brand-hero__shot--main">
+            <Image src="/work/mini-codex.png" width={1603} height={978} alt="Mini-Codex 桌面 Agent 工作台真实界面" priority unoptimized />
+            <figcaption>01 / MINI-CODEX</figcaption>
+          </figure>
+          <figure className="brand-hero__shot brand-hero__shot--secondary">
+            <Image src="/work/deepseek-harness.png" width={1600} height={866} alt="DeepSeek Harness 模型配置真实界面" priority unoptimized />
+            <figcaption>02 / DEEPSEEK HARNESS</figcaption>
+          </figure>
+          <div className="brand-hero__visual-note">Selected interfaces from public project repositories.</div>
+        </div>
       </div>
+      <div className="brand-hero__bottom"><span>INDEPENDENT ENGINEERING PRACTICE</span><span>SCROLL TO EXPLORE ↓</span></div>
     </section>
   );
 }

@@ -237,19 +237,29 @@ export const techStack: TechStackItem[] = [
 
 export const approachStages: ApproachStage[] = [
     {
-        stage: "Observe",
-        title: "可观察",
-        description: "先看清问题、数据流、状态与失败边界，再决定 Agent 应该如何行动。"
+        stage: "01 / Understand",
+        title: "理解问题",
+        description: "确认任务、用户与真实约束。"
     },
     {
-        stage: "Evaluate",
-        title: "可验证",
-        description: "用检索质量、工具结果、引用链路与真实任务反馈检查系统是否可靠。"
+        stage: "02 / Design",
+        title: "设计边界",
+        description: "定义数据、工具、状态与失败路径。"
     },
     {
-        stage: "Ship",
-        title: "可交付",
-        description: "把经过验证的能力接入产品、部署与观测，让它在真实工作中持续产生价值。"
+        stage: "03 / Build",
+        title: "构建产品",
+        description: "让界面与系统一起工作。"
+    },
+    {
+        stage: "04 / Evaluate",
+        title: "验证效果",
+        description: "用真实任务和可追踪结果评估。"
+    },
+    {
+        stage: "05 / Ship",
+        title: "持续交付",
+        description: "部署、观测，然后继续迭代。"
     }
 ];
 

@@ -1,77 +1,51 @@
-import type { ReactNode } from "react";
+import Image from "next/image";
 
-import { projectCards } from "./homepage-data";
-
-function ProjectField({ label, children, accent = false }: { label: string; children: ReactNode; accent?: boolean }) {
-  return (
-    <div className={`brand-project-field ${accent ? "brand-project-field--accent" : ""}`}>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
-
-function ProjectCard({ project, index }: { project: (typeof projectCards)[number]; index: number }) {
-  return (
-    <article className={`brand-project-card brand-project-card--${project.accent} ${index === 0 ? "brand-project-card--featured" : ""}`}>
-      <div className="brand-project-card__top">
-        <span className="brand-mono">{index === 0 ? "FEATURED CASE / 01" : `SELECTED CASE / 0${index + 1}`}</span>
-        <span className="brand-project-card__focus">{project.focus}</span>
-      </div>
-
-      {index === 0 ? (
-        <div className="brand-project-card__preview" aria-label="Knowledge System architecture preview">
-          <div className="brand-project-card__preview-top"><span>KNOWLEDGE CONTROL PLANE</span><span>LIVE ARCHITECTURE</span></div>
-          <div className="brand-project-card__preview-flow">
-            <span>Sources</span><i /><span>Retrieve</span><i /><span>Rerank</span><i /><strong>Answer</strong>
-          </div>
-          <div className="brand-project-card__preview-footer"><span>permission-aware retrieval</span><span>citation attached</span></div>
-        </div>
-      ) : null}
-
-      <div className="brand-project-card__body">
-        <h3 className="brand-project-card__title">{project.name}</h3>
-        <p className="brand-project-card__context">{project.context}</p>
-
-        <dl className="brand-project-fields">
-          <ProjectField label="Challenge">{project.problem}</ProjectField>
-          <ProjectField label="System">
-            <div className="brand-project-architecture">
-              {project.architecture.map((item) => (
-                <span key={item}>{item}</span>
-              ))}
-            </div>
-          </ProjectField>
-          <ProjectField label="Role">{project.contribution}</ProjectField>
-          <ProjectField label="Result" accent>
-            {project.outcome}
-          </ProjectField>
-        </dl>
-
-        <span className="brand-project-card__action">
-          Engineering case study <span aria-hidden="true">↗</span>
-        </span>
-      </div>
-    </article>
-  );
-}
+const selectedWork = [
+  {
+    number: "01", name: "Mini-Codex", type: "AGENT WORKSPACE / DESKTOP APP",
+    description: "一个面向真实编码任务的 Agent 工作台：会话、项目与执行过程在同一界面中被组织起来。",
+    image: "/work/mini-codex.png", imageAlt: "Mini-Codex 桌面应用的真实工作界面", imageWidth: 1603, imageHeight: 978,
+    tags: ["Agent workflow", "Desktop UI", "Tool use"],
+    href: "https://github.com/TotoroKingdom/Mini-Codex", linkText: "View project"
+  },
+  {
+    number: "02", name: "DeepSeek Harness", type: "AGENT PLATFORM / WEB INTERFACE",
+    description: "围绕模型接入与 Agent 使用体验构建的 Harness。画面来自项目仓库中的模型配置页面。",
+    image: "/work/deepseek-harness.png", imageAlt: "DeepSeek Harness 模型配置界面的真实截图", imageWidth: 1600, imageHeight: 866,
+    tags: ["Model providers", "Agent platform", "Web UI"],
+    href: "https://github.com/TotoroKingdom/deepseek-harness", linkText: "View project"
+  },
+  {
+    number: "03", name: "RAG Control Plane", type: "KNOWLEDGE SYSTEM / SYSTEM EXPLAINER",
+    description: "把文档入库、混合召回、重排和引用的链路展开为可浏览的系统说明页。",
+    image: "/work/rag-control-plane.png", imageAlt: "本站 RAG Control Plane 页面真实截图", imageWidth: 1440, imageHeight: 900,
+    tags: ["RAG", "Retrieval", "Citation"],
+    href: "/rag", linkText: "Explore system"
+  }
+] as const;
 
 export function HomepageProjects() {
   return (
-    <section id="projects" className="brand-section brand-projects scroll-mt-24">
-      <div className="brand-section-heading">
-        <p className="brand-eyebrow">Work</p>
-        <div>
-          <h2 className="brand-section-title">从可用的 AI 能力，到可交付的产品系统。</h2>
-          <p className="brand-section-description">
-            重点案例先展示完整的系统思考；其余项目则从工程边界、关键决策和交付结果切入。
-          </p>
-        </div>
+    <section id="projects" className="brand-projects">
+      <div className="brand-projects__heading">
+        <p className="brand-eyebrow">SELECTED WORK <span> / 01—03</span></p>
+        <h2>Selected systems <em>I&apos;ve built.</em></h2>
+        <p>真实界面与可访问的项目，呈现产品如何被设计、实现和交付。</p>
       </div>
-
-      <div className="brand-project-grid">
-        {projectCards.map((project, index) => (
-          <ProjectCard key={project.name} project={project} index={index} />
+      <div className="brand-projects__list">
+        {selectedWork.map((project) => (
+          <article className="brand-project" key={project.number}>
+            <a className="brand-project__image" href={project.href} target={project.href.startsWith("http") ? "_blank" : undefined} rel={project.href.startsWith("http") ? "noreferrer" : undefined} aria-label={project.name + " — " + project.linkText}>
+              <Image src={project.image} width={project.imageWidth} height={project.imageHeight} alt={project.imageAlt} unoptimized />
+            </a>
+            <div className="brand-project__body">
+              <p className="brand-project__number">{project.number} / {project.type}</p>
+              <h3>{project.name}</h3>
+              <p className="brand-project__description">{project.description}</p>
+              <ul aria-label="项目方向">{project.tags.map((tag) => <li key={tag}>{tag}</li>)}</ul>
+              <a className="brand-project__link" href={project.href} target={project.href.startsWith("http") ? "_blank" : undefined} rel={project.href.startsWith("http") ? "noreferrer" : undefined}>{project.linkText} <span aria-hidden="true">↗</span></a>
+            </div>
+          </article>
         ))}
       </div>
     </section>

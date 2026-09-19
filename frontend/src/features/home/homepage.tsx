@@ -9,22 +9,16 @@ export function Homepage() {
   return (
     <HomePageFrame activePage="home">
       <HomepageHero />
-
-      <section id="systems" className="brand-section brand-systems scroll-mt-24">
-        <div className="brand-section-heading">
-          <p className="brand-eyebrow">Systems</p>
-          <div>
-          <h2 className="brand-section-title">能力不是关键词，而是经得起真实流程检验的系统。</h2>
-            <p className="brand-section-description">
-              我把知识、行动与交付拆成清晰的工程边界，让 AI 从模型能力变成可靠的产品能力。
-            </p>
-          </div>
-        </div>
+      <HomepageProjects />
+      <section id="systems" className="brand-section brand-systems">
+        <div className="brand-section-heading"><p className="brand-eyebrow">ENGINEERING FOCUS / 03</p><div><h2 className="brand-section-title">What I work on.</h2><p className="brand-section-description">围绕完整产品，而非孤立的技术关键词。</p></div></div>
         <HomepageOverview />
       </section>
-
-      <HomepageProjects />
       <HomepageRoadmap />
+      <section id="about" className="brand-section brand-about">
+        <p className="brand-eyebrow">ABOUT / 05</p>
+        <div><h2>Engineer by practice.<br /><em>Builder by instinct.</em></h2><p>我是 TotoroKingdom，专注 AI 应用、Agent 系统与全栈工程。喜欢把复杂能力整理成清晰、可使用的产品，也持续记录从原型走向交付的工程过程。</p></div>
+      </section>
       <HomepageContact />
     </HomePageFrame>
   );
