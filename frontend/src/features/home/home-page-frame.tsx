@@ -14,7 +14,7 @@ export function HomePageFrame({
   activePage,
   children,
   footerLabel = "TotoroKingdom / AI Agent Engineer",
-  footerCopy = "Built with clarity, shipped with intent.",
+  footerCopy = "让系统清晰，让交付可靠。",
   mainClassName = "home-main"
 }: HomePageFrameProps) {
   return (

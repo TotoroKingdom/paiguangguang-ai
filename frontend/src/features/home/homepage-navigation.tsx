@@ -1,3 +1,5 @@
+import { githubProfileHref, homepageNavigation } from "./homepage-data";
+
 type SiteNavigationProps = { activePage?: string };
 
 export function SiteNavigation({ activePage }: SiteNavigationProps) {
@@ -6,11 +8,11 @@ export function SiteNavigation({ activePage }: SiteNavigationProps) {
       <div className="brand-header__inner">
         <a href="/#hero" className="brand-header__logo" aria-label="TotoroKingdom 首页">TotoroKingdom<span className="brand-header__logo-dot">.</span></a>
         <nav className="brand-header__nav" aria-label="主导航">
-          <a href="/#projects" className={activePage === "home" ? "brand-header__work" : undefined}>Work</a>
-          <a href="/#about">About</a>
-          <a href="/rag">Notes</a>
+          {homepageNavigation.map((item) => (
+            <a key={item.href} href={item.href} className={activePage === "home" && item.href === "/#projects" ? "brand-header__work" : undefined}>{item.label}</a>
+          ))}
         </nav>
-        <a className="brand-header__external" href="https://github.com/TotoroKingdom" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        <a className="brand-header__external" href={githubProfileHref} target="_blank" rel="noopener noreferrer">GitHub <span aria-hidden="true">↗</span><span className="sr-only">（新标签页打开）</span></a>
       </div>
     </header>
   );
