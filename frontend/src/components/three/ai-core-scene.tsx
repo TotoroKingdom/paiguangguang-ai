@@ -94,13 +94,14 @@ function CoreModel({ active, reducedMotion, pointerRef, scrollRef }: CoreModelPr
       </mesh>
 
       <mesh ref={coreRef} rotation={[0.12, 0.22, 0]}>
-        <icosahedronGeometry args={[0.58, 1]} />
+        <icosahedronGeometry args={[0.58, 3]} />
         <meshStandardMaterial
           color="#edf2ff"
           emissive="#8b9be1"
           emissiveIntensity={0.1}
           roughness={0.3}
           metalness={0.08}
+          flatShading={false}
           transparent
           opacity={0.95}
         />
