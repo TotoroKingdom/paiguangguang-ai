@@ -2,20 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { Component, useEffect, useRef, useState, type CSSProperties, type ErrorInfo, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { aiCoreNodes, AI_CORE_VIEW_HEIGHT } from "./ai-core-data";
 import type { AICorePointer, AICoreSceneProps } from "./ai-core-scene";
 
 const AICoreScene = dynamic<AICoreSceneProps>(() => import("./ai-core-scene"), {
   ssr: false,
   loading: () => <AICoreFallback />,
 });
-
-const NODE_LABELS = [
-  { id: "llm", label: "LLM", style: { top: "8%", left: "48%", transform: "translateX(-50%)" } },
-  { id: "rag", label: "RAG", style: { top: "43%", left: "5%", transform: "translateY(-50%)" } },
-  { id: "tool", label: "TOOL", style: { top: "43%", right: "4%", transform: "translateY(-50%)" } },
-  { id: "memory", label: "MEMORY", style: { bottom: "18%", left: "20%" } },
-  { id: "agent", label: "AGENT", style: { bottom: "18%", right: "15%" } },
-] as const;
 
 const visuallyHiddenStyle: CSSProperties = {
   position: "absolute",
@@ -204,8 +197,14 @@ export function AICore({ className = "" }: AICoreProps) {
       ) : null}
 
       <div className="ai-core-node-labels" aria-hidden="true">
-        {NODE_LABELS.map((node) => (
-          <span key={node.id} className={`ai-core-label ai-core-label--${node.id}`} style={node.style}>
+        {aiCoreNodes.map((node) => (
+          <span key={node.id} className={`ai-core-label ai-core-label--${node.id}`} style={{
+            left: `calc(50% + ${node.position[0] / AI_CORE_VIEW_HEIGHT} * var(--ai-core-size))`,
+            top: `calc(50% - ${(node.position[1] + node.radius) / AI_CORE_VIEW_HEIGHT} * var(--ai-core-size) - 10px)`,
+            transform: "translate(-50%, -100%)",
+            color: node.labelColor,
+            borderColor: `${node.color}66`,
+          }}>
             {node.label}
           </span>
         ))}

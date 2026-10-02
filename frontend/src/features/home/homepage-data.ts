@@ -209,33 +209,48 @@ export const homepageIdentity: Identity = {
     title: "AI Agent Engineer",
     titleZh: "AI 智能体工程师",
     secondary: "全栈工程师",
-    headline: { lead: "把 AI 系统，", accent: "做成可交付的产品。" },
-    statement: "RAG（检索增强生成） · 智能体工作流 · AI 应用",
-    description: "围绕工具、记忆、知识与运行框架，让智能体从一次调用走向完整的任务执行。"
+    headline: { lead: "我在探索，", accent: "AI 如何走向智能体。" },
+    statement: "我不太相信AI会沿着一条确定的道路走向未来。",
+    description: "它更像水，遇到不同的环境，就会形成不同的形状。 与其预测未来最终会成为什么样，我更愿意亲自参与其中，塑造它的样子：做一些东西，观察它如何变化，也观察人在这种变化里该站在哪里。"
 };
 
 export const capabilities: Capability[] = [
     {
-        name: "智能体工程",
-        description: "把模型决策拆成可观察、有状态、可恢复的工作流。",
-        items: ["LangGraph 状态工作流", "工具调用与人工介入", "记忆与状态管理", "评估与故障恢复"]
+        name: "AI & Agent / AI 与智能体",
+        description: "探索模型、知识检索与智能体工作流的组合。",
+        items: ["LangGraph", "LangChain", "RAG / 检索增强生成", "Tool Calling / 工具调用", "Human-in-the-loop / 人工介入", "LLM API / 大模型接口 · DeepSeek"]
     },
     {
-        name: "RAG 与知识系统",
-        description: "构建带有来源追踪和访问边界的完整知识检索链路。",
-        items: ["文档入库与向量化", "混合召回与 RRF 融合", "Rerank 重排与上下文", "引用、权限与评估"]
+        name: "Backend / 后端",
+        description: "用服务、接口与数据模型组织应用逻辑。",
+        items: ["Java", "Python", "FastAPI", "SQLAlchemy", "Pydantic", "REST API / REST 接口"]
     },
     {
-        name: "后端与 AI 基础设施",
-        description: "用可靠的服务和基础设施承载 AI 应用的真实运行。",
-        items: ["Java 与 FastAPI 服务", "Redis 与 PostgreSQL 存储", "向量数据库", "Docker 部署与可观测性"]
+        name: "Frontend / 前端",
+        description: "连接 AI 系统与可理解、可交互的界面。",
+        items: ["Next.js", "TypeScript", "Tailwind CSS", "Framer Motion", "React", "Three.js"]
     },
     {
-        name: "AI 产品工程",
-        description: "把模型能力连接到体验、交互和可持续交付的产品中。",
-        items: ["Next.js 产品界面", "流式交互与智能体界面", "模型与服务商集成", "部署与产品交付"]
+        name: "Data & Delivery / 数据与部署",
+        description: "围绕存储、检索、部署与持续集成积累实践。",
+        items: ["PostgreSQL", "Redis", "ChromaDB / Vector DB / 向量数据库", "Docker", "Nginx", "Jenkins / GitHub Actions"]
     }
 ];
+
+export const homepageSections = {
+    about: { eyebrow: "01 / 关于" },
+    capabilities: { eyebrow: "02 / 能力", title: "我的技术栈", description: "围绕 AI 与智能体、后端、前端、数据与部署，记录我使用和学习的技术。" },
+    projects: { eyebrow: "03 / 作品", title: "我的作品", description: "已完成的项目实践：知识检索、持续对话与办公任务执行。" },
+    building: { eyebrow: "04 / 构建", title: "我正在构建的作品", description: "持续构建知识平台、企业数字员工与智能体运行框架，记录当前的工程进展。" },
+    exploring: { eyebrow: "05 / 探索", title: "我正在探索的项目", description: "我正在研究的外部开源项目与学习资料。它们由各自的组织或作者维护。" },
+    journey: { eyebrow: "06 / 规划", title: "我的职业生涯规划", description: "沿着后端、AI 应用、智能体工程到智能体架构的路线，持续积累系统设计与工程实践。" }
+};
+
+export const homepageContact = {
+    title: "保持联系",
+    description: "我会持续在这里记录正在构建和研究的 AI 系统。",
+    footerCopy: "持续构建，持续研究。"
+};
 
 export const completedProjects: CompletedProject[] = [
     {
@@ -389,9 +404,11 @@ export const careerStages: CareerStage[] = [
 
 export const homepageNavigation = [
     { label: "关于", href: "/#hero" },
+    { label: "能力", href: "/#capabilities" },
     { label: "作品", href: "/#projects" },
-    { label: "研究", href: "/#exploring" },
-    { label: "成长", href: "/#journey" }
+    { label: "构建", href: "/#building" },
+    { label: "探索", href: "/#exploring" },
+    { label: "规划", href: "/#journey" }
 ];
 
 export const githubProfileHref = "https://github.com/TotoroKingdom";
@@ -409,7 +426,7 @@ export const homepageContactLinks: ContactLink[] = [
     }
 ];
 
-// Kept for the existing standalone component; the homepage now presents capabilities as systems.
+// Kept for the existing standalone component; homepage technology groups are defined above.
 export const techStack: TechStackItem[] = [
     { name: "Java", category: "backend" },
     { name: "FastAPI", category: "backend" },

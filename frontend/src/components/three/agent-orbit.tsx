@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import type { Group } from "three";
+import { AI_CORE_ORBIT_RADIUS } from "./ai-core-data";
 
 export type AgentOrbitProps = {
   active: boolean;
@@ -20,18 +21,17 @@ export function AgentOrbit({ active, reducedMotion }: AgentOrbitProps) {
 
     const elapsed = state.clock.elapsedTime;
     orbitRef.current.rotation.z = elapsed * 0.035;
-    orbitRef.current.rotation.x = 0.5 + Math.sin(elapsed * 0.12) * 0.025;
   });
 
   return (
-    <group ref={orbitRef} rotation={[0.5, 0.12, -0.12]}>
+    <group ref={orbitRef} rotation={[0, 0, 0]}>
       <mesh>
-        <torusGeometry args={[1.54, 0.014, 8, 64]} />
-        <meshBasicMaterial color="#9aa9d1" transparent opacity={0.34} depthWrite={false} />
+        <torusGeometry args={[AI_CORE_ORBIT_RADIUS, 0.012, 12, 128]} />
+        <meshBasicMaterial color="#9baad3" transparent opacity={0.34} depthWrite={false} />
       </mesh>
-      <mesh rotation={[0.15, 0.62, 0.16]}>
-        <torusGeometry args={[1.31, 0.011, 8, 56]} />
-        <meshBasicMaterial color="#b5c0dd" transparent opacity={0.25} depthWrite={false} />
+      <mesh rotation={[0.22, 0.16, 0]}>
+        <torusGeometry args={[1.32, 0.01, 12, 128]} />
+        <meshBasicMaterial color="#b6a8d5" transparent opacity={0.25} depthWrite={false} />
       </mesh>
     </group>
   );

@@ -46,10 +46,12 @@ export function FloatingNode({ label, position, color = "#93a5d9", radius = 0.12
       }}
       onPointerOut={() => setHovered(false)}
     >
-      <sphereGeometry args={[radius, 12, 8]} />
+      <sphereGeometry args={[radius, 32, 24]} />
       <meshStandardMaterial
         color={color}
-        roughness={0.42}
+        roughness={0.32}
+        emissive={color}
+        emissiveIntensity={0.06}
         metalness={0.04}
         transparent
         opacity={0.9}
