@@ -1,28 +1,27 @@
-import { approachStages } from "./homepage-data";
+import { careerStages, homepageSections } from "./homepage-data";
 
 export function HomepageRoadmap() {
   return (
-    <section id="approach" className="brand-section brand-approach scroll-mt-24">
+    <section id="journey" className="brand-section brand-journey" aria-labelledby="journey-title">
       <div className="brand-section-heading">
-        <p className="brand-eyebrow">HOW I BUILD / 04</p>
         <div>
-          <h2 className="brand-section-title">From question to shipped system.</h2>
-          <p className="brand-section-description">Understand → Design → Build → Evaluate → Ship</p>
+          <h2 id="journey-title" className="brand-section-title">{homepageSections.journey.title}</h2>
+          <p className="brand-section-description">{homepageSections.journey.description}</p>
         </div>
       </div>
-
-      <div className="brand-approach-track">
-        {approachStages.map((stage, index) => (
-          <div key={stage.stage} className="brand-approach-item">
+      <ol className="brand-approach-track brand-journey-track" aria-label="工程能力成长路径">
+        {careerStages.map((stage, index) => (
+          <li key={stage.id} className={`brand-approach-item brand-journey-item brand-journey-item--${stage.state}`} aria-current={stage.state === "current" ? "step" : undefined}>
             <div className="brand-approach-item__top">
-              <span className="brand-mono">{stage.stage}</span>
-              {index < approachStages.length - 1 ? <span className="brand-approach-item__arrow" aria-hidden="true">→</span> : null}
+              <span className="brand-mono">0{index + 1} / {stage.state === "current" ? "当前阶段" : stage.state === "future" ? "成长目标" : "能力基础"}</span>
+              {index < careerStages.length - 1 && <span className="brand-approach-item__arrow" aria-hidden="true">→</span>}
             </div>
             <h3>{stage.title}</h3>
+            <p className="brand-journey-item__label">{stage.label}</p>
             <p>{stage.description}</p>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
     </section>
   );
 }

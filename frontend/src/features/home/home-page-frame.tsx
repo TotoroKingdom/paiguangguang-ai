@@ -14,15 +14,16 @@ export function HomePageFrame({
   activePage,
   children,
   footerLabel = "TotoroKingdom / AI Agent Engineer",
-  footerCopy = "Built with clarity, shipped with intent.",
+  footerCopy = "让系统清晰，让交付可靠。",
   mainClassName = "home-main"
 }: HomePageFrameProps) {
   return (
-    <div className="home-page">
+    <div className={`home-page${activePage === "home" ? " home-page--spatial" : ""}`}>
       <div className="relative z-10 brand-page-layer">
         <SiteNavigation activePage={activePage} />
 
-        <main className={mainClassName}>{children}</main>
+        {activePage === "home" && <a className="home-skip-link" href="#home-content">跳到主要内容</a>}
+        <main id={activePage === "home" ? "home-content" : undefined} className={mainClassName}>{children}</main>
 
         <footer className="brand-footer">
           <span className="brand-footer__label">{footerLabel}</span>
