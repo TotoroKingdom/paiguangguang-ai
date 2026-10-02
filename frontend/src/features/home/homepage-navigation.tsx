@@ -1,12 +1,12 @@
 type SiteNavigationProps = { activePage?: string };
 
-export function SiteNavigation(_props: SiteNavigationProps) {
+export function SiteNavigation({ activePage }: SiteNavigationProps) {
   return (
     <header className="brand-header">
       <div className="brand-header__inner">
         <a href="/#hero" className="brand-header__logo" aria-label="TotoroKingdom 首页">TotoroKingdom<span className="brand-header__logo-dot">.</span></a>
         <nav className="brand-header__nav" aria-label="主导航">
-          <a href="/#projects">Work</a>
+          <a href="/#projects" className={activePage === "home" ? "brand-header__work" : undefined}>Work</a>
           <a href="/#about">About</a>
           <a href="/rag">Notes</a>
         </nav>

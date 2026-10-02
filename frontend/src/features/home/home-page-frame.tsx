@@ -18,11 +18,12 @@ export function HomePageFrame({
   mainClassName = "home-main"
 }: HomePageFrameProps) {
   return (
-    <div className="home-page">
+    <div className={`home-page${activePage === "home" ? " home-page--spatial" : ""}`}>
       <div className="relative z-10 brand-page-layer">
         <SiteNavigation activePage={activePage} />
 
-        <main className={mainClassName}>{children}</main>
+        {activePage === "home" && <a className="home-skip-link" href="#home-content">跳到主要内容</a>}
+        <main id={activePage === "home" ? "home-content" : undefined} className={mainClassName}>{children}</main>
 
         <footer className="brand-footer">
           <span className="brand-footer__label">{footerLabel}</span>
