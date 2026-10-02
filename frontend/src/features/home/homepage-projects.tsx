@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { NeumorphicCard } from "@/components/ui/neumorphic-card";
 
 const selectedWork = [
   {
@@ -34,7 +35,7 @@ export function HomepageProjects() {
       </div>
       <div className="brand-projects__list">
         {selectedWork.map((project) => (
-          <article className="brand-project" key={project.number}>
+          <NeumorphicCard className="brand-project" key={project.number}>
             <a className="brand-project__image" href={project.href} target={project.href.startsWith("http") ? "_blank" : undefined} rel={project.href.startsWith("http") ? "noreferrer" : undefined} aria-label={project.name + " — " + project.linkText}>
               <Image src={project.image} width={project.imageWidth} height={project.imageHeight} alt={project.imageAlt} unoptimized />
             </a>
@@ -45,7 +46,7 @@ export function HomepageProjects() {
               <ul aria-label="项目方向">{project.tags.map((tag) => <li key={tag}>{tag}</li>)}</ul>
               <a className="brand-project__link" href={project.href} target={project.href.startsWith("http") ? "_blank" : undefined} rel={project.href.startsWith("http") ? "noreferrer" : undefined}>{project.linkText} <span aria-hidden="true">↗</span></a>
             </div>
-          </article>
+          </NeumorphicCard>
         ))}
       </div>
     </section>
