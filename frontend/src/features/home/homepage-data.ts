@@ -9,7 +9,6 @@ export type Identity = {
     title: string;
     titleZh: string;
     secondary: string;
-    headline: { lead: string; accent: string };
     statement: string;
     description: string;
 };
@@ -209,7 +208,6 @@ export const homepageIdentity: Identity = {
     title: "AI Agent Engineer",
     titleZh: "AI 智能体工程师",
     secondary: "全栈工程师",
-    headline: { lead: "我在探索，", accent: "AI 如何走向智能体。" },
     statement: "我不太相信AI会沿着一条确定的道路走向未来。",
     description: "它更像水，遇到不同的环境，就会形成不同的形状。 与其预测未来最终会成为什么样，我更愿意亲自参与其中，塑造它的样子：做一些东西，观察它如何变化，也观察人在这种变化里该站在哪里。"
 };

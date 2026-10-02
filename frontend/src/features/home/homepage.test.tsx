@@ -40,7 +40,7 @@ describe("Homepage", () => {
     for (const text of ["01 / 关于", "02 / 能力", "03 / 作品", "04 / 构建", "05 / 探索", "06 / 规划"]) {
       expect(screen.queryByText(text)).not.toBeInTheDocument();
     }
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("我在探索，AI 如何走向智能体。");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("我不太相信AI会沿着一条确定的道路走向未来。");
     expect(screen.queryByText(/可交付的产品|真正有用的产品|欢迎联系我/)).not.toBeInTheDocument();
 
     const capabilities = screen.getByRole("region", { name: "我的技术栈" });

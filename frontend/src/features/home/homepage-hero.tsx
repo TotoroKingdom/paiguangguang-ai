@@ -7,10 +7,9 @@ export function HomepageHero() {
     <section id="hero" className="brand-hero" aria-labelledby="identity-title">
       <div className="brand-hero__layout">
         <div className="brand-hero__copy">
-          <h1 id="identity-title">{homepageIdentity.headline.lead}<br /><em>{homepageIdentity.headline.accent}</em></h1>
-          <p className="brand-hero__zh">{homepageIdentity.statement}</p>
+          <h1 id="identity-title">{homepageIdentity.statement}</h1>
           <p className="brand-hero__description">{homepageIdentity.description}</p>
-          <p className="brand-hero__secondary">{homepageIdentity.secondary} · 从界面到服务，连接体验与工程。</p>
+          <p className="brand-hero__secondary">{homepageIdentity.secondary} · 从产品到工程，快速交付，快速迭代。</p>
           <div className="brand-hero__actions">
             <NeumorphicButton href="#projects">查看作品 <span aria-hidden="true">↓</span></NeumorphicButton>
             <NeumorphicButton href={githubProfileHref} target="_blank" rel="noopener noreferrer" variant="soft">GitHub <span aria-hidden="true">↗</span><span className="sr-only">（新标签页打开）</span></NeumorphicButton>
