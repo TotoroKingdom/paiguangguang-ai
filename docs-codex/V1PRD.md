@@ -1,949 +1,798 @@
-# V1 PRD — Homepage Content Restructure
+# V1 PRD：首页内容重构
 
-> Status: Draft  
-> Scope: Homepage information architecture & content restructuring only  
-> Branch: `dev`  
-> Target repository: `TotoroKingdom/paiguangguang-ai`
-
----
-
-## 1. Background
-
-The homepage visual direction has already been redesigned and accepted around a light neumorphic / spatial AI style with 3D elements.
-
-The next phase is **not another visual redesign**. The goal is to restructure the homepage content so that it communicates a clear personal narrative:
-
-> Who I am → What I can do → What I have built → What I am building → What I am studying → Where I am going.
-
-The homepage should function as a long-term personal showcase for future job opportunities, technical branding, and public project promotion.
-
-The target positioning is:
-
-**AI Agent Engineer → AI Agent Architect**
-
-The page should present engineering capability through systems, projects, and current technical exploration rather than through a traditional résumé layout.
+> 状态：已实现并完成前端验证
+> 范围：首页信息架构与内容重构
+> 验证：6 项受影响首页测试、TypeScript 类型检查、lint 代码规范检查；1440 / 768 / 390 / 320 像素布局、键盘焦点、减少动态效果及 /rag 返回导航
+> 分支：dev
+> 目标仓库：TotoroKingdom/paiguangguang-ai
 
 ---
 
-## 2. Product Goal
+## 1. 背景
 
-Rebuild the homepage content structure around six primary questions:
+首页当前已采用浅色新拟态（light neumorphism）、空间感布局和 3D AI 视觉。下一阶段不重新设计视觉，而是调整内容结构，让招聘方在短时间内看清候选人的身份、工程能力、已完成成果和成长方向。
 
-1. Who am I?
-2. What can I do?
-3. What have I built?
-4. What am I building now?
-5. What open-source systems am I studying?
-6. Where is my career heading?
+首页的主要定位是：
 
-The homepage should let a visitor understand the following within a short browsing session:
+**AI Agent Engineer（AI 智能体工程师）**
 
-- current professional identity;
-- core AI engineering capabilities;
-- completed project evidence;
-- active project direction;
-- current technical exploration;
-- long-term career trajectory.
+全栈能力作为辅助能力呈现，职业方向继续朝向：
+
+**AI Agent Architect（AI 智能体架构师）**
+
+首页通过系统、项目和技术研究展示工程能力，不做传统简历页面。
 
 ---
 
-## 3. Design Principles
+## 2. 产品目标
 
-### 3.1 Preserve the current visual system
+首页需要围绕以下六个问题组织内容：
 
-This phase must keep the currently accepted visual direction:
+1. 这个人是谁？
+2. 能构建什么系统？
+3. 已经完成了什么？
+4. 正在构建什么？
+5. 正在研究哪些开源系统？
+6. 职业方向如何发展？
 
-- light neumorphism;
-- spatial layout;
-- 3D AI elements;
-- soft motion;
-- minimal / premium AI-product feel.
+主要访问者，尤其是招聘方和招聘经理，应能在一次短暂浏览中理解：
 
-Do not return to:
-
-- dark cyberpunk;
-- hacker dashboard;
-- terminal-heavy UI;
-- strong neon glow;
-- dense technology-logo walls.
-
-### 3.2 Evidence over slogans
-
-The homepage should avoid generic claims such as:
-
-- “proficient in AI”;
-- “expert in LangChain”;
-- “90% Python”;
-- “full-stack 85%”.
-
-Capabilities should be demonstrated by concrete engineering problems and systems.
-
-### 3.3 Separate ownership states
-
-Projects must be visually and semantically separated into:
-
-- **BUILT** — completed systems built by me;
-- **BUILDING** — active systems currently being developed;
-- **EXPLORING** — external open-source systems I am studying.
-
-Visitors must not confuse open-source projects being studied with projects authored by me.
-
-### 3.4 Homepage is not a résumé
-
-Do not add:
-
-- education history;
-- long employment timelines;
-- skill progress bars;
-- large certificate walls;
-- GitHub contribution heatmaps;
-- long autobiographical paragraphs.
-
-The page should communicate an engineering trajectory, not reproduce a CV.
+- 当前职业身份和主攻方向；
+- 四项核心 AI 工程能力；
+- 三个已完成的工程项目；
+- 三个正在进行的项目；
+- 对 Agent（智能体）运行框架和相关开源系统的研究；
+- 从后端工程师成长为 AI 智能体架构师的路径。
 
 ---
 
-## 4. Target Audience
+## 3. 设计原则
 
-Primary audiences:
+### 3.1 保留现有视觉系统
 
-### 4.1 Recruiters / hiring managers
+本阶段必须保留当前已接受的视觉方向：
 
-They need to quickly understand:
+- 浅色新拟态；
+- 空间感布局；
+- 3D AI 元素；
+- 柔和动效；
+- 简洁、克制的 AI 产品气质。
 
-- current role positioning;
-- actual AI engineering capability;
-- project depth;
-- technical growth direction.
+不回退到以下风格：
 
-### 4.2 AI engineers / architects
+- 深色赛博朋克；
+- 黑客仪表盘；
+- 终端堆叠；
+- 强烈霓虹发光；
+- 密集的技术 Logo 墙。
 
-They should be able to see:
+### 3.2 用证据说明能力
 
-- system thinking;
-- engineering choices;
-- areas of technical exploration;
-- open-source interests.
+避免使用“精通 AI”“专家级 LangChain”“Python 90%”或“全栈 85%”等泛化口号和技能百分比。能力应通过具体的系统问题、工程链路和项目成果说明。
 
-### 4.3 Potential collaborators
+### 3.3 明确项目归属与状态
 
-They should understand:
+项目必须在视觉和语义上区分三种状态：
 
-- what kinds of systems are being built;
-- what areas are currently active;
-- where collaboration may be relevant.
+- **BUILT（已完成）**：已明确完成工程阶段的个人系统。完成表示工程工作已实现，不要求项目公开或部署。
+- **BUILDING（在建）**：当前仍在开发或持续完善的个人系统。
+- **EXPLORING（研究中）**：正在学习和分析的外部开源系统，不表示个人作者身份。
 
----
+BUILT 项目只使用已确认的成果描述，不使用未经确认的质量等级标签或同类质量承诺。
 
-## 5. Homepage Information Architecture
+### 3.4 中文优先
 
-The homepage should follow this narrative:
+首页标题、说明和项目价值描述以中文为主。必要的英文技术词保留英文，并在首次出现时附带中文解释，例如 Agent（智能体）、Harness（运行框架）、RAG（检索增强生成）。
 
-```text
-HERO
-  ↓
-01 / WHO I AM
-  ↓
-02 / WHAT I CAN DO
-  ↓
-03 / WHAT I'VE BUILT
-  ↓
-04 / WHAT I'M BUILDING
-  ↓
-05 / WHAT I'M EXPLORING
-  ↓
-06 / WHERE I'M GOING
-  ↓
-CONTACT / GITHUB
-```
+### 3.5 首页不是简历
 
-This order is intentional:
+不加入：
 
-> Identity → Capability → Evidence → Current Action → Technical Curiosity → Career Direction
+- 教育经历；
+- 完整工作履历时间线；
+- 技能进度条；
+- 大量证书；
+- GitHub 贡献热力图；
+- 长篇自传。
+
+首页表达工程能力和发展方向，不复刻简历。
 
 ---
 
-# 6. Section Requirements
+## 4. 目标用户
 
-## 6.1 Hero / Who I Am
+### 4.1 主要用户：招聘方和招聘经理
 
-### Goal
+他们需要快速了解：
 
-Answer immediately:
+- 候选人的当前定位；
+- 实际 AI 工程能力；
+- 项目完成情况和系统深度；
+- 当前投入方向与职业成长。
 
-- Who is this person?
-- What kind of engineer is he?
-- What kind of systems does he build?
+### 4.2 次要用户：AI 工程师、架构师和潜在合作者
 
-### Recommended content
+他们需要看到：
 
-Primary identity:
-
-**AI Agent Engineer**
-
-Secondary identity:
-
-**Full-stack Engineer**
-
-Core statement:
-
-> I build AI systems that actually ship.
-
-Supporting direction:
-
-- AI Agents
-- RAG / Knowledge Systems
-- AI Applications
-- Agent Harness / Runtime
-
-A short professional evolution line may be shown:
-
-```text
-Backend → AI Application → Agent Engineering → Agent Architecture
-```
-
-### Requirements
-
-- Keep the current 3D Hero visual.
-- Do not turn this section into a long “About Me”.
-- Do not repeat the same identity again later in the page.
-- CTA should primarily point to projects / work and GitHub.
+- 系统思维；
+- Agent、知识系统和后端工程的结合方式；
+- 正在研究的开源系统；
+- 可产生合作的技术方向。
 
 ---
 
-## 6.2 What I Can Do / Capabilities
+## 5. 首页信息架构
 
-### Goal
+首页按以下顺序组织：
 
-Explain engineering capability as systems, not a technology checklist.
+    HERO（首屏身份）
+      ↓
+    能力
+      ↓
+    作品 / BUILT（已完成）
+      ↓
+    作品 / BUILDING（在建）
+      ↓
+    研究 / EXPLORING（研究中的开源系统）
+      ↓
+    成长方向
+      ↓
+    联系
 
-### Capability Pillars
-
-#### A. Agent Engineering
-
-Capability themes:
-
-- LangGraph / stateful workflow;
-- planning and execution loops;
-- tool calling;
-- Human-in-the-loop;
-- memory;
-- state management;
-- verification / evaluation;
-- failure recovery.
-
-Expected message:
-
-> Can design and implement observable, stateful Agent workflows rather than only single-shot LLM calls.
+Hero（首屏）直接承担身份介绍，不再创建独立的 WHO I AM（关于我）区块，避免身份信息重复。作品导航先定位到 BUILT（已完成）区块，在建项目紧随其后。
 
 ---
 
-#### B. RAG & Knowledge Systems
+# 6. 区块要求
 
-Capability themes:
+## 6.1 Hero / 首屏身份
 
-- document ingestion;
-- chunking;
-- embedding;
-- hybrid retrieval;
-- RRF;
-- rerank;
-- context assembly;
-- citation;
-- permission filtering;
-- evaluation.
+### 目标
 
-Expected message:
+首屏应立即回答：
 
-> Can build a complete knowledge retrieval pipeline with traceable sources and controllable access boundaries.
+- 这个人是谁？
+- 主要是什么类型的工程师？
+- 正在构建哪类系统？
+
+### 内容
+
+主身份：
+
+**AI Agent Engineer（AI 智能体工程师）**
+
+辅助身份：
+
+**Full-stack Engineer（全栈工程师）**
+
+中文主说明：
+
+> 我专注于把 AI 能力做成可用的系统与产品。
+
+方向关键词：
+
+- AI Agent（AI 智能体）
+- RAG / Knowledge Systems（检索增强生成 / 知识系统）
+- AI Applications（AI 应用）
+- Agent Harness / Runtime（智能体运行框架 / 运行时）
+
+职业演进可简写为：
+
+    Backend Engineer（后端工程师）
+    → AI Application Engineer（AI 应用工程师）
+    → AI Agent Engineer（AI 智能体工程师）
+    → AI Agent Architect（AI 智能体架构师）
+
+### 要求
+
+- 保留当前 3D Hero 视觉和空间感布局；
+- 身份、职业方向和中文说明在 Hero 内完成；
+- 不在后续区块重复完整身份介绍；
+- CTA（行动按钮）优先指向“作品”和 GitHub；
+- 中文标题和说明优先，英文只作为身份或技术术语辅助。
+
+## 6.2 能力 / Capabilities
+
+### 目标
+
+用系统能力说明工程价值，而不是罗列技术清单。
+
+### 四项能力支柱
+
+#### A. Agent 工程 / Agent Engineering
+
+能力主题：
+
+- LangGraph（有状态工作流）；
+- 规划与执行循环；
+- Tool Calling（工具调用）；
+- Human-in-the-loop（人在回路）；
+- Memory（记忆）；
+- State Management（状态管理）；
+- Verification / Evaluation（验证与评估）；
+- Failure Recovery（失败恢复）。
+
+核心说明：
+
+> 能设计和实现可观察、有状态、可恢复的 Agent 工作流，而不只是调用一次模型。
+
+#### B. RAG 与知识系统 / RAG & Knowledge Systems
+
+能力主题：
+
+- 文档摄取；
+- 分块；
+- Embedding（向量嵌入）；
+- Hybrid Retrieval（混合检索）；
+- RRF（倒数排名融合）；
+- Rerank（重排序）；
+- 上下文组装；
+- 引用与来源追踪；
+- 权限过滤；
+- 评估。
+
+核心说明：
+
+> 能构建完整的知识检索链路，让来源可追踪、上下文可控制、访问边界可管理。
+
+#### C. 后端与 AI 基础设施 / Backend & AI Infrastructure
+
+能力主题：
+
+- Java 后端；
+- Python / FastAPI；
+- Redis；
+- PostgreSQL；
+- 向量数据库；
+- Docker；
+- CI/CD（持续集成与持续交付）；
+- 可观测性；
+- API 与服务设计。
+
+核心说明：
+
+> 能为 AI 系统提供可靠的应用、数据和基础设施基础。
+
+#### D. AI 产品工程 / AI Product Engineering
+
+能力主题：
+
+- Next.js；
+- AI UX（AI 用户体验）；
+- 流式交互；
+- Agent UI（智能体界面）；
+- 模型与供应商集成；
+- Vibe Coding 工作流；
+- 产品交付。
+
+核心说明：
+
+> 能把 AI 能力转化为可使用的产品，而不是停留在孤立的演示。
+
+### 要求
+
+- 不使用技能百分比；
+- 框架和工具只作为能力证据；
+- 每张能力卡保持简洁、可扫描；
+- 能力描述优先说明问题、系统和结果。
+
+## 6.3 作品 / BUILT（已完成）
+
+### 目标
+
+提供已确认工程能力的具体证据。
+
+以下三个项目均已达到明确的工程阶段，视为已完成项目。BUILT 只说明工程实现已完成，不表示项目必须公开、部署或对外提供服务。
+
+每张卡包含：
+
+- 项目名称；
+- 中文为主的一句话定位；
+- 解决的问题或用途；
+- 关键工程能力；
+- BUILT（已完成）状态；
+- 只有在存在真实入口时才提供链接。
+
+### 项目 1：RAG 系统
+
+定位：**KNOWLEDGE（知识）**
+
+标题：**RAG 系统**
+
+核心链路：
+
+    文档摄取
+    → 分块
+    → 向量嵌入
+    → 混合检索
+    → RRF
+    → 重排序
+    → 上下文组装
+    → 引用
+    → 评估
+
+能力证据：
+
+- 检索工程；
+- 上下文质量；
+- 来源可追踪；
+- 检索评估。
+
+链接：
+
+- 保留真实入口：/rag；
+- CTA：查看系统 →。
+
+### 项目 2：AI Chatbot（AI 聊天机器人）
+
+定位：**CONVERSATION（对话）**
+
+标题：**AI Chatbot（AI 聊天机器人）**
+
+能力主题：
+
+- 多会话管理；
+- 持久化历史；
+- 流式响应；
+- 短期记忆；
+- 长期记忆；
+- 语义记忆；
+- Checkpoint（检查点）；
+- Redis；
+- PostgreSQL；
+- LLM Gateway（大语言模型网关）与供应商抽象。
+
+能力证据：
+
+- 对话基础设施；
+- 记忆架构；
+- 数据持久化；
+- 可持续的聊天流程。
+
+链接：
+
+- 当前没有确认的公开或详情页入口时，只展示内容，不创建假链接。
+
+### 项目 3：Office Automation Agent（办公自动化智能体）
+
+定位：**ACTION（行动）**
+
+标题：**Office Automation Agent（办公自动化智能体）**
+
+能力主题：
+
+- Agent 工作流；
+- Tool Calling（工具调用）；
+- Human-in-the-loop（人在回路）；
+- 审批；
+- 业务 API 集成；
+- 结构化输出；
+- 审计记录。
+
+能力证据：
+
+- Agent 行动；
+- 企业流程；
+- 工具集成；
+- 受控执行。
+
+链接：
+
+- 当前没有确认的公开或详情页入口时，只展示内容，不创建假链接。
+
+### 已完成项目叙事
+
+三个项目共同表达一条系统能力链：
+
+    KNOWLEDGE（知识）       RAG 系统
+    CONVERSATION（对话）    AI Chatbot
+    ACTION（行动）          Office Automation Agent
+
+不使用未经确认的质量等级标签或部署承诺。
+
+## 6.4 作品 / BUILDING（在建）
+
+### 目标
+
+展示当前正在投入的技术方向。这些项目不是已完成作品，必须明确显示 BUILDING（在建）状态。
+
+### 项目 1：Knowledge Platform（知识平台）
+
+定位：**Knowledge Platform（知识平台）**
+
+关注方向：
+
+- 知识治理；
+- 知识对象；
+- ACL / 权限；
+- 治理规则；
+- Agent 治理；
+- 企业知识基础设施。
+
+说明：
+
+> 正在构建可被 Agent 安全使用的企业知识基础设施。
+
+### 项目 2：Enterprise Digital Employee（企业数字员工）
+
+定位：**Enterprise Digital Employee（企业数字员工）**
+
+关注方向：
+
+- Agent 运行时；
+- 企业工具；
+- 工作流编排；
+- Human-in-the-loop（人在回路）；
+- 企业系统集成；
+- 审批与审计；
+- 任务执行。
+
+说明：
+
+> 正在探索 Agent 如何在企业工作流中执行受控、可审计的工作。
+
+### 项目 3：ChatGPT Harness（ChatGPT 运行框架）
+
+定位：**ChatGPT Harness（ChatGPT 运行框架）**
+
+关注方向：
+
+- 模型运行框架；
+- Agent 运行时；
+- 工具协议；
+- 记忆；
+- 上下文工程；
+- 执行环境；
+- 开发者体验。
+
+说明：
+
+> 正在构建围绕模型、工具、上下文和 Agent 执行的可控运行框架。
+
+### 要求
+
+- 三个项目都显示 BUILDING（在建）；
+- 不把在建项目描述为完成成果；
+- 没有真实公开入口时只展示描述；
+- 不添加未经确认的质量等级或交付承诺；
+- 在建区紧跟 BUILT 区，作品导航默认先定位到 BUILT。
+
+## 6.5 研究 / EXPLORING（研究中的开源系统）
+
+### 目标
+
+展示当前正在学习和分析的外部开源系统，明确区分个人项目和外部项目。
+
+区块主标题：**研究中的开源系统**
+
+辅助说明：
+
+> 通过研究运行框架、工具执行、上下文、记忆和系统集成，持续理解 Agent 系统如何工作。
+
+### 研究项目与官方仓库
+
+| 研究对象 | 官方仓库 | 研究主题 |
+|---|---|---|
+| Codex | [openai/codex](https://github.com/openai/codex) | Agent Harness（智能体运行框架）、工具执行、上下文工程、开发者集成 |
+| DeepSeek Harness | [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness) | Agent 运行框架、工具执行、上下文与记忆、系统集成 |
+| Pi | [earendil-works/pi](https://github.com/earendil-works/pi) | 运行时、工具执行、上下文工程、Agent 集成 |
+| Hermes | [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent) | Agent 架构、工具、记忆和集成 |
+| OpenClaw | [openclaw/openclaw](https://github.com/openclaw/openclaw) | Agent 集成、工具执行、上下文与记忆 |
+| PyTorch 学习实践 | [mrdbourke/pytorch-deep-learning](https://github.com/mrdbourke/pytorch-deep-learning) | Daniel Bourke 的课程与深度学习实践 |
+
+DeepSeek Harness 指上表中的官方上游仓库，不是 DeepSeek 模型。旧的 TotoroKingdom/deepseek-harness 是该仓库的 fork（分叉），不作为研究卡片目标。
+
+旧的 Mini-Codex 卡片和个人 fork DeepSeek Harness 卡片均移除。研究区只表达“研究中”，不表达对外部仓库的作者身份。
+
+### 卡片与交互
+
+每张卡包含：
+
+- 项目名称；
+- 来源组织或作者；
+- 一句研究理由；
+- 2–4 个研究主题；
+- 外部链接标识。
+
+整张卡使用语义链接，点击后在新标签页打开对应官方仓库。研究仓库链接必须存在且使用上表中的官方地址；不猜测或替换为个人仓库。
+
+## 6.6 成长方向 / Career Journey
+
+### 目标
+
+展示能力演进，而不是完整履历时间线。
+
+### 路径
+
+    Backend Engineer（后端工程师）
+    可靠的应用与服务工程
+            ↓
+    AI Application Engineer（AI 应用工程师）
+    RAG · LLM · AI 产品
+            ↓
+    AI Agent Engineer（AI 智能体工程师）【当前】
+    工作流 · 工具 · 记忆 · 人在回路
+            ↓
+    AI Agent Architect（AI 智能体架构师）【目标】
+    Agent 运行时 · 知识基础设施
+    分布式 Agent 系统 · 评估 · 治理
+
+### 要求
+
+- 当前阶段突出显示：AI Agent Engineer（AI 智能体工程师）；
+- 目标阶段明确显示：AI Agent Architect（AI 智能体架构师）；
+- 不使用具体年份；
+- 不重复完整就业经历；
+- 重点说明能力如何从后端、AI 应用发展到 Agent 架构。
 
 ---
 
-#### C. Backend & AI Infrastructure
+# 7. 联系区
 
-Capability themes:
+底部保留简洁的联系 CTA。
 
-- Java backend;
-- Python / FastAPI;
-- Redis;
-- PostgreSQL;
-- vector databases;
-- Docker;
-- CI/CD;
-- observability;
-- API / service design.
+至少包含：
 
-Expected message:
+- GitHub；
+- Email（邮箱）。
 
-> Can provide reliable application and infrastructure foundations for AI systems.
+联系方式沿用现有 GitHub 和邮箱。简历、LinkedIn 等链接可以作为未来扩展，但不改变首页主叙事。
 
 ---
 
-#### D. AI Product Engineering
+# 8. 导航
 
-Capability themes:
+导航采用紧凑的中文名称：
 
-- Next.js;
-- AI UX;
-- streaming interaction;
-- Agent UI;
-- model / provider integration;
-- Vibe Coding workflows;
-- deployment;
-- product delivery.
+    关于
+    作品
+    研究
+    成长
+    GitHub ↗
 
-Expected message:
+锚点要求：
 
-> Can convert AI capabilities into usable and deployable products instead of isolated demos.
+- 关于：定位到 Hero 首屏身份；
+- 作品：定位到 BUILT（已完成）区，BUILDING（在建）区紧随其后；
+- 研究：定位到研究中的开源系统；
+- 成长：定位到职业成长路径；
+- GitHub：打开现有 GitHub 链接。
 
-### Requirements
-
-- Do not use skill percentages.
-- Frameworks and tools should appear as supporting evidence under a capability.
-- Keep descriptions concise and scannable.
+导航不显示“能力、已完成、在建”等过多顶级项目，避免视觉拥挤。共享导航在 /rag 页面也应能返回首页对应栏目。
 
 ---
 
-## 6.3 What I've Built / Completed Projects
+# 9. 内容模型
 
-### Goal
+首页内容应集中管理，避免在组件中重复硬编码。建议保留以下逻辑实体：
 
-Provide concrete proof of engineering capability.
+    Identity
+    Capability
+    CompletedProject
+    ActiveProject
+    ExplorationProject
+    CareerStage
 
-This section represents systems that have reached a meaningful end-to-end stage and can be explained as completed engineering work.
+接口要求：
 
-### Project 1 — RAG System
+- Identity 由 Hero 使用，不单独渲染重复的身份区；
+- CompletedProject 和 ActiveProject 的个人项目链接可选；
+- ExplorationProject 的官方仓库链接必填；
+- RAG 项目保留 /rag 链路；
+- AI Chatbot、Office Automation Agent 和在建项目没有真实入口时，不生成假链接或空详情页；
+- 状态字段应支持 BUILT、BUILDING、EXPLORING；
+- 内容集中管理，便于更新项目状态、研究链接和职业阶段。
 
-Positioning:
-
-**KNOWLEDGE**
-
-Suggested title:
-
-**Production-oriented RAG System**
-
-Core chain:
-
-```text
-Document Ingestion
-→ Chunking
-→ Embedding
-→ Hybrid Retrieval
-→ RRF
-→ Rerank
-→ Context Assembly
-→ Citation
-→ Evaluation
-```
-
-Primary capability evidence:
-
-- retrieval engineering;
-- context quality;
-- traceability;
-- evaluation.
-
-Preferred CTA:
-
-**Explore System →**
-
-If an internal RAG page already exists, this card should link to the internal project/system explanation page rather than only GitHub.
+本 PRD 不规定具体 TypeScript 类型字段，也不要求新增后端接口。
 
 ---
 
-### Project 2 — AI Chatbot
+# 10. 组件方向
 
-Positioning:
+现有首页结构可以在不重写整个前端架构的前提下演进。建议方向：
 
-**CONVERSATION**
+    homepage-hero.tsx
+    homepage-capabilities.tsx
+    homepage-built.tsx
+    homepage-building.tsx
+    homepage-exploring.tsx
+    homepage-journey.tsx
+    homepage-contact.tsx
 
-Suggested title:
+已有组件可按实际情况复用或重命名：
 
-**Production AI Chatbot**
+    HomepageOverview
+    → HomepageCapabilities
 
-Capability themes:
+    HomepageProjects
+    → HomepageBuilt
+       + HomepageBuilding
+       + HomepageExploring
 
-- multi-conversation management;
-- persistent history;
-- streaming response;
-- short-term memory;
-- long-term memory;
-- semantic memory;
-- checkpoint;
-- Redis;
-- PostgreSQL;
-- LLM gateway / provider abstraction.
+    HomepageRoadmap
+    → HomepageJourney
 
-Primary capability evidence:
-
-- conversational infrastructure;
-- memory architecture;
-- persistence;
-- production-style chat flow.
+不要新增独立的 homepage-identity.tsx 来重复 Hero 身份。具体组件拆分属于实现任务，不扩展本 PRD 的范围。
 
 ---
 
-### Project 3 — Office Automation Agent
+# 11. 非目标
 
-Positioning:
+本阶段不包括：
 
-**ACTION**
+- 重新设计已接受的新拟态视觉；
+- 替换当前 Hero 3D 系统；
+- 后端改动；
+- 认证改动；
+- API 重设计；
+- RAG 系统功能实现；
+- Agent 功能改动；
+- 详情页重设计；
+- 新增外部服务；
+- 新增 CMS；
+- 重写整个网站架构。
 
-Suggested title:
-
-**Office Automation Agent**
-
-Capability themes:
-
-- Agent workflow;
-- tool calling;
-- Human-in-the-loop;
-- approval;
-- business API integration;
-- structured output;
-- auditability.
-
-Primary capability evidence:
-
-- Agent action;
-- enterprise workflow;
-- tool integration;
-- controlled execution.
+后端和现有详情页保持不变；本轮只调整首页内容、结构、导航及其直接受影响的前端测试。
 
 ---
 
-### Completed Projects Narrative
+# 12. 响应式要求
 
-The three projects should be presented together as:
+新内容结构必须适配：
 
-```text
-KNOWLEDGE
-RAG System
+- 桌面端；
+- 平板端；
+- 移动端。
 
-CONVERSATION
-AI Chatbot
+移动端要求：
 
-ACTION
-Office Automation Agent
-```
-
-This creates a stronger system narrative than three unrelated project cards.
-
-### Requirements
-
-Each project should include:
-
-- project name;
-- one-line positioning;
-- short problem / purpose;
-- key engineering capabilities;
-- project status;
-- internal or external link when available.
-
-Do not overload project cards with implementation detail. Deeper architecture belongs on project detail pages.
+- 保持相同的语义顺序；
+- BUILT、BUILDING、EXPLORING 状态标签持续可见；
+- 外部开源卡片清楚标记外部链接；
+- 成长路径可从横向改为纵向；
+- 能力卡片可自然堆叠；
+- 任何重要内容不能只依赖 hover（悬停）交互。
 
 ---
 
-## 6.4 What I'm Building / Active Projects
+# 13. 无障碍要求
 
-### Goal
-
-Show current technical investment and direction.
-
-These are not “finished portfolio pieces”. They represent active engineering work.
-
-Each item must clearly display an **ACTIVE / BUILDING** state.
-
----
-
-### Active Project 1 — Knowledge Platform
-
-Suggested positioning:
-
-**Enterprise Knowledge Platform / Knowledge Governance**
-
-Possible focus areas:
-
-- knowledge governance;
-- knowledge objects;
-- ACL / permission;
-- governance rules;
-- Agent governance;
-- enterprise knowledge infrastructure.
-
-Expected message:
-
-> Building enterprise-grade knowledge infrastructure that can be consumed safely by Agents.
+- 外部链接必须可识别；
+- 可点击卡片必须使用语义链接并支持键盘访问；
+- 焦点状态保持可见；
+- 内容含义不能只依赖颜色；
+- 动效遵守 prefers-reduced-motion（减少动态效果）；
+- 标题层级有效；
+- 新标签页打开外部仓库时提供明确的外部链接语义。
 
 ---
 
-### Active Project 2 — Enterprise Digital Employee
+# 14. 成功标准
 
-Suggested positioning:
+访问者浏览首页后可以回答：
 
-**Enterprise Digital Employee**
+1. 这位工程师是谁？
+2. 他能构建什么系统？
+3. 他已经完成了什么？
+4. 他正在构建什么？
+5. 他正在研究哪些外部开源系统？
+6. 他正在朝什么职业方向发展？
 
-Possible focus areas:
+其他验收信号：
 
-- Agent runtime;
-- enterprise tools;
-- workflow orchestration;
-- Human-in-the-loop;
-- enterprise integration;
-- approval / audit;
-- task execution.
-
-Expected message:
-
-> Exploring how Agents can perform controlled, auditable work inside enterprise workflows.
-
----
-
-### Active Project 3 — ChatGPT Harness
-
-Suggested positioning:
-
-**ChatGPT Harness**
-
-Possible focus areas:
-
-- model harness;
-- Agent runtime;
-- tool protocol;
-- memory;
-- context engineering;
-- execution environment;
-- developer experience.
-
-Expected message:
-
-> Building a controllable Harness around models, tools, context and Agent execution.
+- BUILT、BUILDING、EXPLORING 三种状态视觉上明确区分；
+- 首页不呈现为传统简历模板；
+- 当前新拟态和 3D Hero 视觉仍可识别；
+- 技术内容简洁但可信；
+- 项目链接只指向已确认的真实入口；
+- 外部开源项目不会被误认为个人作品；
+- 中文为主，必要英文术语有中文解释；
+- 招聘方能快速读出 AI Agent Engineer 主身份、全栈辅助能力和已完成项目证据。
 
 ---
 
-### Requirements
+# 15. 验收清单
 
-- Clearly distinguish these projects from completed work.
-- Use “ACTIVE”, “BUILDING”, or similar visible state labels.
-- Avoid presenting unfinished projects as completed outcomes.
-- Project cards may link to GitHub or internal pages when available.
+## 信息架构
 
----
+- [x] Hero 首屏直接表达 AI Agent Engineer 主身份和中文说明。
+- [x] 不存在重复的独立 WHO I AM 身份区。
+- [x] 能力区包含四项能力支柱。
+- [x] BUILT 区包含 RAG、AI Chatbot、Office Automation Agent。
+- [x] BUILDING 区包含 Knowledge Platform、Enterprise Digital Employee、ChatGPT Harness。
+- [x] 研究区包含六个指定的外部开源系统。
+- [x] 成长路径以 AI Agent Architect 为目标。
+- [x] 联系区保留 GitHub 和邮箱。
 
-## 6.5 What I'm Exploring / Open Source I'm Studying
+## 归属与状态
 
-### Goal
+- [x] 三个已完成项目均标记 BUILT（已完成）。
+- [x] 三个在建项目均标记 BUILDING（在建）。
+- [x] 研究项目均明确是外部开源系统并标记 EXPLORING（研究中）。
+- [x] RAG 链接为 /rag。
+- [x] 没有真实入口的个人项目只展示内容，不出现假链接。
+- [x] 外部仓库使用官方链接并在新标签页打开。
+- [x] Mini-Codex 和个人 fork DeepSeek Harness 卡片已移除。
+- [x] 不使用未经确认的质量等级标签或交付承诺。
 
-Show technical curiosity and the systems currently being studied.
+## 内容质量
 
-This section must **not** imply authorship.
+- [x] 没有技能百分比条。
+- [x] 没有密集技术 Logo 墙。
+- [x] 没有长篇简历式自传。
+- [x] 能力以工程问题、系统和结果描述。
+- [x] 项目文案说明系统能力和用途，不夸大状态。
+- [x] PyTorch 项明确写为 Daniel Bourke 的课程与实践学习。
 
-Recommended title:
+## 导航、视觉与可访问性
 
-**What I'm Exploring**
-
-Supporting label:
-
-**Open Source I'm Studying**
-
-### Projects
-
-Initial set:
-
-- OpenAI Codex
-- DeepSeek
-- Pi
-- Hermes
-- OpenClaw
-- PyTorch / `pytorch-deep-learning`
-
-### Card Model
-
-Each card should contain:
-
-- project name;
-- source / organization;
-- one short reason for studying it;
-- 2–4 technical topics;
-- GitHub external-link indicator.
-
-Example:
-
-```text
-OpenAI Codex ↗
-
-Coding Agent / Harness
-
-Exploring:
-Agent Harness
-Tool Execution
-Context Engineering
-```
-
-### Interaction
-
-- Entire project card is clickable.
-- Click opens the corresponding official GitHub/open-source repository in a new tab.
-- External-link behavior must be visually clear.
-- External repositories should not be represented as personal projects.
-
-### Known link
-
-PyTorch learning project:
-
-`https://github.com/mrdbourke/pytorch-deep-learning`
-
-### Open requirement
-
-The canonical GitHub repository links for:
-
-- Codex;
-- DeepSeek;
-- Pi;
-- Hermes;
-- OpenClaw;
-
-must be confirmed before implementation if they are not already known from repository context.
-
-Do not guess ambiguous repository URLs.
+- [x] 导航只保留“关于、作品、研究、成长、GitHub”。
+- [x] 作品入口先到 BUILT，BUILDING 紧随其后。
+- [x] /rag 页面共享导航可返回首页栏目。
+- [x] 现有浅色新拟态设计语言保持不变。
+- [x] 现有 3D Hero 方向保持不变。
+- [x] 桌面、平板、移动端层级清晰。
+- [x] 键盘访问、焦点、标题层级和减少动态效果符合要求。
 
 ---
 
-## 6.6 Where I'm Going / Career Journey
+# 16. 已确认决定
 
-### Goal
+本节替代原开放问题，以下决定已在实施前确认：
 
-Show career direction as a capability evolution rather than a résumé timeline.
-
-### Recommended structure
-
-```text
-BACKEND ENGINEER
-Reliable application engineering
-        ↓
-AI APPLICATION ENGINEER
-RAG · LLM · AI Product
-        ↓
-AI AGENT ENGINEER
-Workflow · Tools · Memory · HITL
-        ↓
-AI AGENT ARCHITECT
-Agent Runtime · Knowledge Infrastructure
-Distributed Agent Systems
-Evaluation · Governance
-```
-
-### Current Position
-
-The current stage should be visually highlighted as:
-
-**AI Agent Engineer**
-
-The future target is:
-
-**AI Agent Architect**
-
-### Requirements
-
-- Do not use specific calendar years unless explicitly required later.
-- Do not duplicate the full employment history.
-- Focus on capability evolution.
-- The final stage should clearly communicate the architectural capabilities being pursued.
+1. **身份定位**：中文为主，主身份为 AI Agent Engineer（AI 智能体工程师）；Full-stack Engineer（全栈工程师）作为辅助能力。身份介绍全部合并到 Hero，不新增重复身份区。
+2. **首页顺序**：Hero → 能力 → BUILT → BUILDING → 研究 → 成长 → 联系。
+3. **已完成项目**：仅展示 RAG、AI Chatbot、Office Automation Agent。三项能力均已真实实现，BUILT 只表示工程阶段完成，不要求项目公开或部署。
+4. **已完成命名**：删除未经确认的质量等级命名或承诺，改为事实性的系统和能力描述。
+5. **在建项目**：展示 Knowledge Platform、Enterprise Digital Employee、ChatGPT Harness 三个描述性名称，并显著标记 BUILDING。
+6. **旧卡片处理**：移除 Mini-Codex 和个人 fork 的 DeepSeek Harness 卡片。DeepSeek Harness 研究卡片只使用官方上游仓库，且明确它不是 DeepSeek 模型。
+7. **链接策略**：RAG 保留 /rag；AI Chatbot、Office Automation Agent 和在建项目没有真实入口时只展示内容，不生成假链接或详情页。
+8. **研究仓库**：固定使用以下官方链接：
+   - [openai/codex](https://github.com/openai/codex)
+   - [deepseek-ai/deepseek-harness](https://github.com/deepseek-ai/deepseek-harness)
+   - [earendil-works/pi](https://github.com/earendil-works/pi)
+   - [NousResearch/hermes-agent](https://github.com/NousResearch/hermes-agent)
+   - [openclaw/openclaw](https://github.com/openclaw/openclaw)
+   - [mrdbourke/pytorch-deep-learning](https://github.com/mrdbourke/pytorch-deep-learning)
+9. **研究主题**：研究文案围绕运行框架、工具执行、上下文、记忆和集成；PyTorch 项明确为 Daniel Bourke 的课程与实践学习。
+10. **导航**：采用“关于、作品、研究、成长、GitHub”；作品定位到已完成区，在建区紧随其后。
+11. **职业路径**：Backend Engineer → AI Application Engineer → AI Agent Engineer（当前）→ AI Agent Architect（目标）。
+12. **范围**：保留现有浅色新拟态和 3D Hero；后端和详情页不改；维持一个前端实现任务；不新增 PRD 以外的文档。
 
 ---
 
-# 7. Contact Section
+# 17. 产品叙事
 
-Keep a concise final CTA.
+首页应当读起来像一条连续的工程成长故事：
 
-Minimum links:
+    我是一名 AI Agent Engineer（AI 智能体工程师）
+            ↓
+    我能构建知识、对话和行动系统
+            ↓
+    这些是我已经完成的三个工程项目
+            ↓
+    这些是我正在构建的企业知识、数字员工和运行框架
+            ↓
+    这些是影响我思考方式的开源系统
+            ↓
+    我正在成长为 AI Agent Architect（AI 智能体架构师）
 
-- GitHub
-- Email
-
-Optional future extension:
-
-- Resume / CV
-- LinkedIn or other professional profile
-
-The contact section should remain secondary to the engineering narrative.
-
----
-
-# 8. Navigation
-
-The homepage navigation should be aligned with the new information architecture.
-
-Recommended top-level anchors:
-
-- About
-- Capabilities
-- Built
-- Building
-- Exploring
-- Journey
-- GitHub
-
-The final exact number of visible nav items may be reduced for responsive simplicity.
-
-Possible compact navigation:
-
-```text
-About
-Work
-Exploring
-Journey
-GitHub ↗
-```
-
-Where “Work” can cover both BUILT and BUILDING.
-
-The navigation must not become visually dense.
+实现时以这条叙事为内容取舍标准：优先让招聘方看到身份、工程证据和成长方向，再提供技术研究细节。
 
 ---
 
-# 9. Content Model
+# 18. 执行模式
 
-Homepage content should be data-driven rather than hard-coded repeatedly inside individual components.
+本 V1 保持轻量，所有决定已在第 16 节确认。
 
-Recommended logical entities:
+不要为本次改动创建单独的 ARCHITECTURE、ROADMAP、SPEC、PLAN 或 TASKS 文档。实现作为一个前端重构任务完成，范围包括：
 
-```ts
-Identity
-Capability
-CompletedProject
-ActiveProject
-ExplorationProject
-CareerStage
-```
+1. 首页信息架构重组；
+2. 能力与集中内容数据更新；
+3. BUILT / BUILDING / EXPLORING 项目分组；
+4. 成长路径重构；
+5. 导航和内容链接更新；
+6. 因新结构直接产生的响应式与无障碍调整；
+7. 受影响的首页测试、TypeScript 类型检查和 lint 检查。
 
-This PRD does not prescribe the exact TypeScript implementation, but content should be maintainable from a centralized data structure where practical.
-
-This is especially important for:
-
-- project status changes;
-- adding new open-source exploration;
-- changing GitHub links;
-- updating career stages.
-
----
-
-# 10. Suggested Component Direction
-
-Existing homepage structure can evolve without rewriting the whole frontend architecture.
-
-Recommended direction:
-
-```text
-homepage-hero.tsx
-
-homepage-identity.tsx
-homepage-capabilities.tsx
-homepage-built.tsx
-homepage-building.tsx
-homepage-exploring.tsx
-homepage-journey.tsx
-homepage-contact.tsx
-```
-
-Existing components may be reused or renamed where sensible.
-
-Potential mapping:
-
-```text
-HomepageOverview
-→ HomepageCapabilities
-
-HomepageProjects
-→ HomepageBuilt
-   + HomepageBuilding
-   + HomepageExploring
-
-HomepageRoadmap
-→ HomepageJourney
-```
-
-The exact component split belongs in Architecture / Plan rather than this PRD.
-
----
-
-# 11. Non-Goals
-
-This phase does not include:
-
-- redesigning the accepted neumorphic visual language;
-- replacing the current Hero 3D system;
-- backend changes;
-- authentication changes;
-- API redesign;
-- RAG system implementation;
-- Agent functionality changes;
-- project-detail-page redesign unless required for navigation consistency;
-- adding new external services;
-- adding a CMS;
-- rewriting the entire website architecture.
-
----
-
-# 12. Responsive Requirements
-
-The new content structure must work across:
-
-- desktop;
-- tablet;
-- mobile.
-
-On mobile:
-
-- sections remain in the same semantic order;
-- project state labels remain visible;
-- open-source cards remain clearly external;
-- Career Journey may change from horizontal to vertical;
-- capability cards should stack cleanly;
-- no section may rely only on hover interaction.
-
----
-
-# 13. Accessibility Requirements
-
-- External links must be identifiable.
-- Interactive cards must be keyboard accessible.
-- Card click targets must use semantic links.
-- Focus states must remain visible.
-- Content meaning must not depend only on color.
-- Motion must continue respecting `prefers-reduced-motion`.
-- Heading hierarchy must remain valid.
-
----
-
-# 14. Success Criteria
-
-The restructure is successful when a visitor can answer all six questions after browsing the homepage:
-
-1. Who is the engineer?
-2. What systems can he build?
-3. What has he already built?
-4. What is he actively building?
-5. What open-source systems is he studying?
-6. What professional direction is he pursuing?
-
-Additional acceptance signals:
-
-- completed, active, and external projects are visually distinct;
-- the homepage does not look like a traditional résumé template;
-- the current visual design remains recognizable;
-- technical content is concise but credible;
-- project cards have clear navigation targets;
-- no external open-source project is presented as personal authorship.
-
----
-
-# 15. Acceptance Checklist
-
-## Information Architecture
-
-- [ ] Hero communicates current identity.
-- [ ] Capabilities section contains four capability pillars.
-- [ ] Completed work contains RAG, Chatbot, and Office Automation Agent.
-- [ ] Active work contains Knowledge Platform, Enterprise Digital Employee, and ChatGPT Harness.
-- [ ] Exploration section contains the defined external open-source systems.
-- [ ] Career Journey ends at AI Agent Architect.
-- [ ] Contact remains available at the bottom.
-
-## Ownership & Status
-
-- [ ] Completed work is labeled as completed / built.
-- [ ] Active work is labeled as active / building.
-- [ ] Exploration projects are explicitly external open-source projects.
-- [ ] External repository links open correctly.
-- [ ] No ambiguous authorship exists.
-
-## Content Quality
-
-- [ ] No skill percentage bars.
-- [ ] No excessive framework/logo wall.
-- [ ] No long résumé-style biography.
-- [ ] Capabilities are described as engineering outcomes.
-- [ ] Project descriptions focus on system capability and value.
-
-## Visual Consistency
-
-- [ ] Existing neumorphic design language is preserved.
-- [ ] Existing 3D Hero direction is preserved.
-- [ ] New sections reuse the current design system.
-- [ ] Mobile hierarchy remains readable.
-
----
-
-# 16. Open Questions / Decisions Before Development Task
-
-These items do not block the PRD. Resolve them inside the single implementation task only when they materially affect the page:
-
-1. **Project naming**
-   - Should “Knowledge Platform” be presented publicly as “Knowledge Platform”, “Knowledge Governance Platform”, or another final product name?
-   - Should “Enterprise Digital Employee” use a public-facing project name?
-
-2. **Project links**
-   - What are the target links for the AI Chatbot and Office Automation Agent?
-   - Which active projects have public GitHub repositories versus internal-only descriptions?
-
-3. **Exploration repositories**
-   - Confirm canonical GitHub links for Codex, DeepSeek, Pi, Hermes and OpenClaw.
-
-4. **Personal identity label**
-   - Preferred homepage primary title:
-     - “AI Agent Engineer”
-     - “AI Agent Engineer · Full-stack Engineer”
-     - or another wording.
-
-5. **Language strategy**
-   - Current site mixes English headings with Chinese descriptions.
-   - Recommendation: keep this bilingual pattern:
-     - short English structural labels;
-     - concise Chinese explanation;
-     - technical terms remain in English.
-
----
-
-# 17. Product Recommendation
-
-The strongest homepage narrative is not “six independent sections”.
-
-It should feel like one continuous engineering story:
-
-```text
-I am an AI Agent Engineer
-        ↓
-These are the systems I can build
-        ↓
-These are the systems I have already delivered
-        ↓
-These are the problems I am working on now
-        ↓
-These are the open-source systems shaping my thinking
-        ↓
-This is the architecture-level role I am growing toward
-```
-
-This narrative should guide the single implementation task and its content decisions.
-
-
----
-
-# 18. Execution Mode
-
-This V1 is intentionally lightweight.
-
-Do **not** create separate ARCHITECTURE, ROADMAP, SPEC, PLAN or TASKS documents for this change.
-
-Implementation should proceed as **one frontend refactor task** covering:
-
-1. Homepage information architecture restructuring.
-2. New capability/content sections.
-3. BUILT / BUILDING / EXPLORING project grouping.
-4. Career Journey restructuring.
-5. Navigation/content data updates.
-6. Responsive/accessibility adjustments caused by the new structure.
-7. Only directly affected frontend tests / type checks / lint checks.
-
-The accepted visual design system and Hero 3D direction are out of scope for redesign.
+现有视觉设计系统、Hero 3D 方向、后端、详情页和其他页面功能均不在本次重构范围内。
