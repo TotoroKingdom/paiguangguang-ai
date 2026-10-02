@@ -7,7 +7,6 @@ export function HomepageHero() {
     <section id="hero" className="brand-hero" aria-labelledby="identity-title">
       <div className="brand-hero__layout">
         <div className="brand-hero__copy">
-          <p className="brand-hero__identity">01 / {homepageIdentity.title} <span>·</span> {homepageIdentity.titleZh}</p>
           <h1 id="identity-title">{homepageIdentity.headline.lead}<br /><em>{homepageIdentity.headline.accent}</em></h1>
           <p className="brand-hero__zh">{homepageIdentity.statement}</p>
           <p className="brand-hero__description">{homepageIdentity.description}</p>

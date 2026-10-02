@@ -21,26 +21,39 @@ describe("Homepage", () => {
     const navigation = screen.getByRole("navigation", { name: "主导航" });
     const anchors = [
       ["关于", "/#hero"],
+      ["能力", "/#capabilities"],
       ["作品", "/#projects"],
-      ["研究", "/#exploring"],
-      ["成长", "/#journey"]
+      ["构建", "/#building"],
+      ["探索", "/#exploring"],
+      ["规划", "/#journey"]
     ] as const;
-    expect(within(navigation).getAllByRole("link")).toHaveLength(4);
+    expect(within(navigation).getAllByRole("link")).toHaveLength(6);
     for (const [name, href] of anchors) {
       expect(within(navigation).getByRole("link", { name })).toHaveAttribute("href", href);
+      expect(document.getElementById(href.split("#")[1])).toBeInTheDocument();
     }
-    expect(within(screen.getByRole("banner")).getByRole("link", { name: /GitHub/ })).toHaveAttribute(
+    expect(within(screen.getByRole("banner")).getByRole("link", { name: "联系我" })).toHaveAttribute(
       "href",
-      "https://github.com/TotoroKingdom"
+      "/#contact"
     );
 
-    const capabilities = screen.getByRole("region", { name: "我能构建什么" });
+    for (const text of ["01 / 关于", "02 / 能力", "03 / 作品", "04 / 构建", "05 / 探索", "06 / 规划"]) {
+      expect(screen.queryByText(text)).not.toBeInTheDocument();
+    }
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("我在探索，AI 如何走向智能体。");
+    expect(screen.queryByText(/可交付的产品|真正有用的产品|欢迎联系我/)).not.toBeInTheDocument();
+
+    const capabilities = screen.getByRole("region", { name: "我的技术栈" });
     expect(within(capabilities).getAllByRole("article")).toHaveLength(4);
-    for (const name of ["智能体工程", "RAG 与知识系统", "后端与 AI 基础设施", "AI 产品工程"]) {
+    for (const name of ["AI & Agent / AI 与智能体", "Backend / 后端", "Frontend / 前端", "Data & Delivery / 数据与部署"]) {
       expect(within(capabilities).getByRole("heading", { name })).toBeInTheDocument();
     }
 
-    const journey = screen.getByRole("region", { name: "从构建系统，到设计架构" });
+    for (const technology of ["LangGraph", "LangChain", "Python", "SQLAlchemy", "Pydantic", "React", "Three.js", "PostgreSQL", "Nginx", "Jenkins / GitHub Actions"]) {
+      expect(within(capabilities).getByText(technology)).toBeInTheDocument();
+    }
+
+    const journey = screen.getByRole("region", { name: "我的职业生涯规划" });
     const currentHeading = within(journey).getByRole("heading", { name: "AI 智能体工程师", level: 3 });
     const current = currentHeading.closest("li");
     expect(current).toBeInTheDocument();
@@ -50,7 +63,7 @@ describe("Homepage", () => {
     expect(future).toBeInTheDocument();
     expect(future).toHaveTextContent("成长目标");
 
-    const contact = screen.getByRole("region", { name: "一起把 AI，做成真正有用的产品。" });
+    const contact = screen.getByRole("region", { name: "保持联系" });
     expect(within(contact).getByRole("link", { name: /邮箱/ })).toHaveAttribute(
       "href",
       "mailto:totorokingdom@foxmail.com"

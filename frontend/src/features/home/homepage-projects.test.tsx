@@ -14,7 +14,7 @@ describe("HomepageProjects", () => {
   it("presents the three completed systems and links only the RAG explanation", () => {
     render(<HomepageProjects />);
 
-    const section = screen.getByRole("region", { name: "从知识，到对话，再到行动" });
+    const section = screen.getByRole("region", { name: "我的作品" });
     expect(section).toHaveAttribute("id", "projects");
     expect(within(section).getAllByRole("article")).toHaveLength(3);
     expect(within(section).getAllByText(/BUILT · 阶段已完成/)).toHaveLength(3);
@@ -38,7 +38,7 @@ describe("HomepageBuilding", () => {
   it("shows the three building projects without empty or placeholder links", () => {
     render(<HomepageBuilding />);
 
-    const section = screen.getByRole("region", { name: "我正在构建什么" });
+    const section = screen.getByRole("region", { name: "我正在构建的作品" });
     expect(section).toHaveAttribute("id", "building");
     expect(within(section).getAllByRole("article")).toHaveLength(3);
     expect(within(section).getAllByText(/BUILDING · 在建/)).toHaveLength(3);
@@ -56,7 +56,7 @@ describe("HomepageExploring", () => {
   it("uses one external semantic card link for each official research source", () => {
     render(<HomepageExploring />);
 
-    const section = screen.getByRole("region", { name: "哪些系统正在启发我" });
+    const section = screen.getByRole("region", { name: "我正在探索的项目" });
     expect(section).toHaveAttribute("id", "exploring");
     expect(within(section).getAllByRole("article")).toHaveLength(6);
     expect(within(section).getAllByText(/EXPLORING · 研究中/)).toHaveLength(6);

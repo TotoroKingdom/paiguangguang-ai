@@ -528,3 +528,26 @@
   .home-page--spatial .brand-journey-item--future { border-left-style: dashed; }
   .home-page--spatial .brand-approach-item__arrow { transform: rotate(90deg); }
 }
+
+/* Center section headings after the introductory hero. */
+.home-page--spatial .brand-section-heading { display: block; text-align: center; }
+.home-page--spatial .brand-projects__heading { text-align: center; }
+.home-page--spatial .brand-contact__layout { grid-template-columns: minmax(0, 1fr); gap: 26px; }
+.home-page--spatial .brand-contact__layout > div:first-child { text-align: center; }
+.home-page--spatial .brand-contact__title { max-width: none; }
+
+/* TASK-01: local refinements to the existing homepage surfaces. */
+.home-page--spatial .ai-core-stage { container-type: size; --ai-core-size: min(100cqw, 100cqh); }
+.home-page--spatial .ai-core-stage::before { width: min(78cqw, 78cqh); height: min(78cqw, 78cqh); top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.home-page--spatial .brand-capability__list li { padding: 6px 9px; border-radius: 8px; background: #e6eaf2; line-height: 1.5; }
+.home-page--spatial .brand-header__nav a { padding-inline: 12px; white-space: nowrap; }
+@media (min-width: 768px) and (max-width: 1050px) {
+  .home-page--spatial .brand-header__inner { gap: 12px; padding-inline: 18px; }
+  .home-page--spatial .brand-header__nav { gap: 2px; }
+  .home-page--spatial .brand-header__nav a { padding-inline: 8px; }
+}
+@media (max-width: 767px) {
+  .home-page--spatial .brand-header__nav { justify-content: space-between; min-width: 0; flex-wrap: wrap; }
+  .home-page--spatial .brand-header__nav a { padding: 9px 7px; }
+  .home-page--spatial .ai-core-label { padding: 6px 9px; font-size: 9px; }
+}

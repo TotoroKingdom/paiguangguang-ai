@@ -1,13 +1,12 @@
-import { careerStages } from "./homepage-data";
+import { careerStages, homepageSections } from "./homepage-data";
 
 export function HomepageRoadmap() {
   return (
     <section id="journey" className="brand-section brand-journey" aria-labelledby="journey-title">
       <div className="brand-section-heading">
-        <p className="brand-eyebrow">06 / 成长方向</p>
         <div>
-          <h2 id="journey-title" className="brand-section-title">从构建系统，到设计架构</h2>
-          <p className="brand-section-description">以工程能力的演进为主线，从可靠应用走向可治理、可评估的智能体系统。</p>
+          <h2 id="journey-title" className="brand-section-title">{homepageSections.journey.title}</h2>
+          <p className="brand-section-description">{homepageSections.journey.description}</p>
         </div>
       </div>
       <ol className="brand-approach-track brand-journey-track" aria-label="工程能力成长路径">

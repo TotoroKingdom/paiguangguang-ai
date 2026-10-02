@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import type { MutableRefObject } from "react";
 import type { Group, Mesh } from "three";
+import { aiCoreNodes, AI_CORE_CAMERA } from "./ai-core-data";
 import { AgentOrbit } from "./agent-orbit";
 import { FloatingNode } from "./floating-node";
 
@@ -22,6 +23,17 @@ export type AICoreSceneProps = {
   onReady?: () => void;
   onContextLost?: () => void;
 };
+
+// Fit the existing perspective camera to a square footprint at every breakpoint.
+function SceneFraming() {
+  const { camera, size, invalidate } = useThree();
+  useEffect(() => {
+    camera.position.z = AI_CORE_CAMERA.distance * Math.max(1, size.height / Math.max(1, size.width));
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, size.width, size.height, invalidate]);
+  return null;
+}
 
 function DemandFrameLoop({ active, reducedMotion }: Pick<AICoreSceneProps, "active" | "reducedMotion">) {
   const invalidate = useThree((state) => state.invalidate);
@@ -55,10 +67,10 @@ function CoreModel({ active, reducedMotion, pointerRef, scrollRef }: CoreModelPr
     const pointerX = reducedMotion ? 0 : pointerRef.current.x;
     const pointerY = reducedMotion ? 0 : pointerRef.current.y;
     const scrollOffset = reducedMotion ? 0 : Math.max(-0.35, Math.min(0.35, scrollRef.current / 1400));
-    const targetX = pointerY * -0.075 + scrollOffset * 0.025;
+    const targetX = pointerY * -0.035 + scrollOffset * 0.025;
     // Keep the outer group still in ambient mode so the HTML labels remain aligned.
     // The core and the two orbital paths provide the slow internal movement instead.
-    const targetY = pointerX * 0.11;
+    const targetY = pointerX * 0.045;
     const easing = Math.min(1, delta * 2.7);
 
     modelRef.current.rotation.x += (targetX - modelRef.current.rotation.x) * easing;
@@ -76,29 +88,29 @@ function CoreModel({ active, reducedMotion, pointerRef, scrollRef }: CoreModelPr
 
   return (
     <group ref={modelRef}>
-      <mesh scale={1.8}>
-        <sphereGeometry args={[1, 20, 14]} />
+      <mesh scale={1.48}>
+        <sphereGeometry args={[1, 40, 28]} />
         <meshBasicMaterial color="#b3c2e8" transparent opacity={0.045} depthWrite={false} />
       </mesh>
 
       <mesh ref={shellRef} scale={1.18}>
-        <sphereGeometry args={[1, 24, 16]} />
+        <sphereGeometry args={[1, 48, 32]} />
         <meshStandardMaterial
           color="#c8d4f0"
           roughness={0.22}
           metalness={0.03}
           transparent
-          opacity={0.19}
+          opacity={0.16}
           depthWrite={false}
         />
       </mesh>
 
       <mesh ref={coreRef} rotation={[0.12, 0.22, 0]}>
-        <icosahedronGeometry args={[0.58, 3]} />
+        <sphereGeometry args={[0.62, 48, 32]} />
         <meshStandardMaterial
           color="#edf2ff"
           emissive="#8b9be1"
-          emissiveIntensity={0.1}
+          emissiveIntensity={0.16}
           roughness={0.3}
           metalness={0.08}
           flatShading={false}
@@ -114,11 +126,9 @@ function CoreModel({ active, reducedMotion, pointerRef, scrollRef }: CoreModelPr
 
       <AgentOrbit active={active} reducedMotion={reducedMotion} />
 
-      <FloatingNode label="LLM" position={[0.08, 1.63, 0.08]} color="#a2b1dd" radius={0.13} reducedMotion={reducedMotion} />
-      <FloatingNode label="RAG" position={[-1.57, 0.33, 0.03]} color="#9eb5d9" reducedMotion={reducedMotion} />
-      <FloatingNode label="Tool" position={[1.57, 0.14, 0.04]} color="#a6b9d7" reducedMotion={reducedMotion} />
-      <FloatingNode label="Memory" position={[-1.06, -1.27, -0.18]} color="#b1a9d8" reducedMotion={reducedMotion} />
-      <FloatingNode label="Agent" position={[1.22, -1.15, 0.16]} color="#a7b5df" reducedMotion={reducedMotion} />
+      {aiCoreNodes.map((node) => (
+        <FloatingNode key={node.id} label={node.label} position={node.position} color={node.color} radius={node.radius} reducedMotion={reducedMotion} />
+      ))}
     </group>
   );
 }
@@ -129,7 +139,7 @@ export default function AICoreScene({ active, reducedMotion, pointerRef, scrollR
       className="ai-core-canvas"
       dpr={[1, 1.5]}
       frameloop="demand"
-      camera={{ position: [0, 0, 5.7], fov: 40 }}
+      camera={{ position: [0, 0, AI_CORE_CAMERA.distance], fov: AI_CORE_CAMERA.fov }}
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
       onCreated={({ gl }) => {
         gl.setClearColor(0x000000, 0);
@@ -143,6 +153,7 @@ export default function AICoreScene({ active, reducedMotion, pointerRef, scrollR
       <ambientLight intensity={1.55} color="#e9efff" />
       <directionalLight position={[3.5, 4, 5]} intensity={2.15} color="#ffffff" />
       <directionalLight position={[-3, -1, 2]} intensity={0.9} color="#b9c7ed" />
+      <SceneFraming />
       <DemandFrameLoop active={active} reducedMotion={reducedMotion} />
       <CoreModel active={active} reducedMotion={reducedMotion} pointerRef={pointerRef} scrollRef={scrollRef} />
     </Canvas>

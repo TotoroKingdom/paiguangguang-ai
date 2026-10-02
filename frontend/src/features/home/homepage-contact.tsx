@@ -1,5 +1,5 @@
 import { ArrowUpRightIcon, GithubIcon, MailIcon } from "@/components/icons";
-import { homepageContactLinks } from "./homepage-data";
+import { homepageContact, homepageContactLinks } from "./homepage-data";
 
 export function HomepageContact() {
   return (
@@ -7,11 +7,11 @@ export function HomepageContact() {
       <div className="brand-contact__layout">
         <div>
           <p className="brand-eyebrow">联系我</p>
-          <h2 id="contact-title" className="brand-contact__title">一起把 AI，做成真正有用的产品。</h2>
+          <h2 id="contact-title" className="brand-contact__title">{homepageContact.title}</h2>
         </div>
 
         <div className="brand-contact__side">
-          <p className="brand-contact__description">如果你正在构建需要知识、行动与可靠交付的 AI 产品，欢迎联系我。</p>
+          <p className="brand-contact__description">{homepageContact.description}</p>
           <div className="brand-contact__links">
             {homepageContactLinks.map((link) => {
               const external = link.href.startsWith("https://");
