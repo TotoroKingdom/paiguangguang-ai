@@ -1,3 +1,4 @@
+```mermaid
 flowchart TD
 
     A["PRD + ARCHITECTURE + ROADMAP"]
@@ -33,3 +34,4 @@ flowchart TD
     J --> K
     K --> L
     L --> M
+```
