@@ -41,8 +41,13 @@ export function HomepageProjects() {
   return (
     <section id="projects" className="brand-projects" aria-labelledby="built-title">
       <div className="brand-projects__heading">
-        <h2 id="built-title">{homepageSections.projects.title}</h2>
-        <p>{homepageSections.projects.description}</p>
+        <div className="brand-projects__heading-copy">
+          <h2 id="built-title">{homepageSections.projects.title}</h2>
+          <p>{homepageSections.projects.description}</p>
+        </div>
+        <div className="brand-section-visual" aria-hidden="true">
+          <span className="ai-scene-anchor" data-ai-scene-anchor="projects" />
+        </div>
       </div>
       <div className="brand-projects__list brand-projects__list--built">
         {completedProjects.map((project) => <ProjectCard key={project.id} project={project} />)}
@@ -55,9 +60,12 @@ export function HomepageBuilding() {
   return (
     <section id="building" className="brand-section brand-building" aria-labelledby="building-title">
       <div className="brand-section-heading">
-        <div>
+        <div className="brand-section-heading__copy">
           <h2 id="building-title" className="brand-section-title">{homepageSections.building.title}</h2>
           <p className="brand-section-description">{homepageSections.building.description}</p>
+        </div>
+        <div className="brand-section-visual" aria-hidden="true">
+          <span className="ai-scene-anchor" data-ai-scene-anchor="building" />
         </div>
       </div>
       <div className="brand-projects__list brand-projects__list--active">
@@ -71,9 +79,12 @@ export function HomepageExploring() {
   return (
     <section id="exploring" className="brand-section brand-exploring" aria-labelledby="exploring-title">
       <div className="brand-section-heading">
-        <div>
+        <div className="brand-section-heading__copy">
           <h2 id="exploring-title" className="brand-section-title">{homepageSections.exploring.title}</h2>
           <p className="brand-section-description">{homepageSections.exploring.description}</p>
+        </div>
+        <div className="brand-section-visual" aria-hidden="true">
+          <span className="ai-scene-anchor" data-ai-scene-anchor="exploring" />
         </div>
       </div>
       <div className="brand-exploration-grid">

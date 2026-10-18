@@ -1,38 +1,64 @@
 "use client";
 
-import { useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import type { Group } from "three";
-import { AI_CORE_ORBIT_RADIUS } from "./ai-core-data";
+import { forwardRef, useMemo } from "react";
+import type { LineSegments } from "three";
 
-export type AgentOrbitProps = {
-  active: boolean;
-  reducedMotion: boolean;
+export type OrbitRingProps = {
+  radius: number;
+  color: string;
+  opacity: number;
+  simplified?: boolean;
 };
 
-/** Two quiet orbital paths provide depth without turning the core into a neon wireframe. */
-export function AgentOrbit({ active, reducedMotion }: AgentOrbitProps) {
-  const orbitRef = useRef<Group>(null);
-
-  useFrame((state) => {
-    if (!active || reducedMotion || !orbitRef.current) {
-      return;
+/** A thin, tilted guide line. The parent group owns the plane orientation. */
+export function OrbitRing({ radius, color, opacity, simplified = false }: OrbitRingProps) {
+  const segments = simplified ? 64 : 128;
+  const points = useMemo(() => {
+    const buffer = new Float32Array(segments * 3);
+    for (let index = 0; index < segments; index += 1) {
+      const angle = (index / segments) * Math.PI * 2;
+      buffer[index * 3] = Math.cos(angle) * radius;
+      buffer[index * 3 + 1] = 0;
+      buffer[index * 3 + 2] = Math.sin(angle) * radius;
     }
-
-    const elapsed = state.clock.elapsedTime;
-    orbitRef.current.rotation.z = elapsed * 0.035;
-  });
+    return buffer;
+  }, [radius, segments]);
 
   return (
-    <group ref={orbitRef} rotation={[0, 0, 0]}>
-      <mesh>
-        <torusGeometry args={[AI_CORE_ORBIT_RADIUS, 0.012, 12, 128]} />
-        <meshBasicMaterial color="#9baad3" transparent opacity={0.34} depthWrite={false} />
-      </mesh>
-      <mesh rotation={[0.22, 0.16, 0]}>
-        <torusGeometry args={[1.32, 0.01, 12, 128]} />
-        <meshBasicMaterial color="#b6a8d5" transparent opacity={0.25} depthWrite={false} />
-      </mesh>
-    </group>
+    <lineLoop frustumCulled={false} renderOrder={2}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[points, 3]} />
+      </bufferGeometry>
+      <lineBasicMaterial
+        color={color}
+        transparent
+        opacity={opacity}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </lineLoop>
   );
 }
+
+export type ConnectionLineProps = {
+  color: string;
+};
+
+/** A restrained core-to-node link, used by the "Building" scene. */
+export const ConnectionLine = forwardRef<LineSegments, ConnectionLineProps>(function ConnectionLine({ color }, ref) {
+  const points = useMemo(() => new Float32Array(6), []);
+  return (
+    <lineSegments ref={ref} frustumCulled={false} renderOrder={3}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[points, 3]} />
+      </bufferGeometry>
+      <lineBasicMaterial
+        color={color}
+        transparent
+        opacity={0}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </lineSegments>
+  );
+});
