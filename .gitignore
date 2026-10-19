@@ -19,3 +19,14 @@ node_modules/
 frontend/playwright-report/
 frontend/test-results/
 frontend/*.tsbuildinfo
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.env
+*.env.*
+!*.env.example
+*.key
+*.p12
+*.pfx
