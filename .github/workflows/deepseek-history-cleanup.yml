@@ -1,0 +1,97 @@
+name: One-time DeepSeek history cleanup
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - .github/workflows/deepseek-history-cleanup.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deepseek-history-cleanup
+  cancel-in-progress: false
+
+jobs:
+  rewrite:
+    if: github.event.head_commit.message == 'chore: one-time DeepSeek history cleanup'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Install git-filter-repo
+        run: python -m pip install --disable-pip-version-check 'git-filter-repo>=2.47,<3'
+
+      - name: Mirror repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            clone --mirror "https://github.com/$GITHUB_REPOSITORY.git" repo.git
+
+      - name: Rewrite DeepSeek secrets from history
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd repo.git
+
+          old_dev="$(git rev-parse refs/heads/dev)"
+          old_main="$(git rev-parse refs/heads/main)"
+          printf '%s\n' "$old_dev" > /tmp/old-dev
+          printf '%s\n' "$old_main" > /tmp/old-main
+
+          : > /tmp/deepseek-keys
+          while IFS= read -r commit; do
+            git grep -h -I -E 'DEEPSEEK_API_KEY[[:space:]]*[:=][[:space:]]*sk-[A-Za-z0-9_-]+' "$commit" -- 2>/dev/null || true
+          done < <(git rev-list --all) \
+            | sed -nE 's/.*DEEPSEEK_API_KEY[[:space:]]*[:=][[:space:]]*(sk-[A-Za-z0-9_-]+).*/\1/p' \
+            | sort -u > /tmp/deepseek-keys
+
+          count="$(wc -l < /tmp/deepseek-keys | tr -d ' ')"
+          if [ "$count" -lt 1 ] || [ "$count" -gt 10 ]; then
+            echo "Unexpected historical DeepSeek key count: $count" >&2
+            exit 1
+          fi
+          echo "Found $count historical DeepSeek key(s); values will not be printed."
+
+          awk '{print "literal:" $0 "==>***REMOVED***"}' /tmp/deepseek-keys > /tmp/replacements.txt
+
+          git filter-repo \
+            --sensitive-data-removal \
+            --replace-text /tmp/replacements.txt \
+            --force
+
+          while IFS= read -r secret; do
+            while IFS= read -r commit; do
+              if git grep -I -q -F "$secret" "$commit" -- 2>/dev/null; then
+                echo "Verification failed: a removed DeepSeek key is still reachable." >&2
+                exit 1
+              fi
+            done < <(git rev-list --all)
+          done < /tmp/deepseek-keys
+
+          echo "Verification passed: historical DeepSeek key values are absent from rewritten refs."
+
+      - name: Force-push rewritten branches with lease
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd repo.git
+
+          old_dev="$(cat /tmp/old-dev)"
+          old_main="$(cat /tmp/old-main)"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+
+          git remote remove origin 2>/dev/null || true
+          git remote add origin "https://github.com/$GITHUB_REPOSITORY.git"
+
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --force-with-lease="refs/heads/dev:$old_dev" \
+            origin refs/heads/dev:refs/heads/dev
+
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" \
+            push --force-with-lease="refs/heads/main:$old_main" \
+            origin refs/heads/main:refs/heads/main
