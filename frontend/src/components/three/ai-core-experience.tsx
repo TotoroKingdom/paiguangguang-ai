@@ -35,6 +35,7 @@ import {
   type MeasuredSceneAnchor,
   type ScrollTimeline
 } from "./ai-core-scroll";
+import { deviceDprLimit } from "./ai-core-runtime";
 import {
   createInteractionState,
   createProjectionState,
@@ -287,7 +288,7 @@ export function AICoreExperience() {
   }, []);
 
   const simplified = coarsePointer || narrowViewport || lowPowerDevice;
-  const quality = simplified ? 1.25 : lowPowerDevice ? 1.35 : 1.5;
+  const quality = deviceDprLimit(coarsePointer || narrowViewport, lowPowerDevice);
 
   const [support, setSupport] = useState<SupportState>("pending");
   const [ready, setReady] = useState(false);

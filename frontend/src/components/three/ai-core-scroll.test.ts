@@ -95,3 +95,11 @@ describe("AI Core scroll timeline", () => {
     expect(between.fit).toBeLessThan(1.05);
   });
 });
+
+it("preserves a full retreat through timeline composition and sampling", () => {
+  const composed = applySceneCompositions(timeline, timeline.stops.map((stop) => ({
+    index: stop.index, anchorX: stop.anchorX, anchorY: stop.anchorY, fit: 0
+  })));
+  expect(composed.stops.every((stop) => stop.fit === 0)).toBe(true);
+  expect(sampleScrollTimeline(composed, composed.stops[1].scrollY + 20).fit).toBe(0);
+});

@@ -31,7 +31,7 @@ import {
   type AICoreNodeId,
   type AICoreScenePose
 } from "./ai-core-data";
-import { type ContentBlock } from "./ai-core-composition";
+import { modelCoverage, type ContentBlock } from "./ai-core-composition";
 import { ConnectionLine, OrbitRing } from "./agent-orbit";
 import { PlanetNode, type PlanetHandles } from "./floating-node";
 import {
@@ -42,6 +42,7 @@ import {
   sampleScrollTimeline,
   smoothstep01
 } from "./ai-core-scroll";
+import { isModelVisible } from "./ai-core-runtime";
 import type { AICoreSceneProps } from "./ai-core-types";
 
 const FRESNEL_VERTEX = `
@@ -296,7 +297,6 @@ function CoreSystem({
   const coreClock = useRef(0);
   const selfClock = useRef(0);
   const focusAmount = useRef(0);
-  const lastFade = useRef(-1);
   const travelFade = useRef(1);
   const coverageRef = useRef(0);
 
@@ -460,12 +460,7 @@ function CoreSystem({
     const travelDistance = 1 + (1 - travel) * 0.22;
     const sceneOpacity = fade * travel;
 
-    if (sceneOpacity < 0.005 && lastFade.current >= 0.005) {
-      rig.visible = false;
-    } else {
-      rig.visible = true;
-    }
-    lastFade.current = sceneOpacity;
+    rig.visible = isModelVisible(sceneOpacity);
 
     if (
       canvasOpacityRef.current &&
@@ -935,45 +930,6 @@ function rectsOverlap(
     a.bottom > b.top - padding &&
     a.top < b.bottom + padding
   );
-}
-
-/**
- * Fraction of the model's projected bounds that sits behind an opaque semantic
- * block. Overlapping blocks are merged by taking the largest single coverage,
- * which is stable and avoids summing nested copy containers twice.
- */
-function modelCoverage(
-  blocks: ContentBlock[],
-  scrollY: number,
-  centerX: number,
-  centerY: number,
-  radius: number
-): number {
-  if (radius <= 1 || blocks.length === 0) {
-    return 0;
-  }
-
-  const left = centerX - radius;
-  const right = centerX + radius;
-  const top = centerY - radius;
-  const bottom = centerY + radius;
-  const area = (radius * 2) * (radius * 2);
-  let coverage = 0;
-
-  for (const block of blocks) {
-    const blockTop = block.fixed ? block.top : block.top - scrollY;
-    const blockBottom = block.fixed ? block.bottom : block.bottom - scrollY;
-    if (block.right <= left || block.left >= right || blockBottom <= top || blockTop >= bottom) {
-      continue;
-    }
-    const overlapWidth = Math.min(right, block.right) - Math.max(left, block.left);
-    const overlapHeight = Math.min(bottom, blockBottom) - Math.max(top, blockTop);
-    if (overlapWidth > 0 && overlapHeight > 0) {
-      coverage = Math.max(coverage, (overlapWidth * overlapHeight) / area);
-    }
-  }
-
-  return Math.min(1, coverage);
 }
 
 function updateLabels({

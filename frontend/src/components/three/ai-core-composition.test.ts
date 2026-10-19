@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { aiCoreScenes } from "./ai-core-data";
 import {
   computeSceneComposition,
+  modelCoverage,
   estimateProjectedModelRadius,
   type ContentBlock
 } from "./ai-core-composition";
@@ -91,5 +92,73 @@ describe("AI Core screen-space composition", () => {
 
     expect(composition.blocked).toBe(true);
     expect(composition.fit).toBeLessThanOrEqual(0.68);
+  });
+});
+
+const compose = (blocks: ContentBlock[], width = 1000, height = 1000) => computeSceneComposition({
+  index: 0, anchorX: 0.5, anchorY: 0.5, scrollY: 0,
+  pose: aiCoreScenes[0], viewportWidth: width, viewportHeight: height, blocks
+});
+const block = (left: number, top: number, right: number, bottom: number): ContentBlock => ({
+  left, top, right, bottom, role: "card"
+});
+
+describe("safe circle boundaries", () => {
+  it.each([[600, 600, 800, 800], [200, 600, 400, 800], [600, 200, 800, 400], [200, 200, 400, 400]])(
+    "limits a diagonal rectangle at %s,%s", (left, top, right, bottom) => {
+      const result = compose([block(left, top, right, bottom)]);
+      expect(result.safeRadius).toBeCloseTo(Math.hypot(82, 82));
+      expect(result.fit * result.baseRadius).toBeLessThanOrEqual(result.safeRadius);
+    }
+  );
+  it("uses real clearance below the preferred minimum", () => {
+    const result = compose([], 120, 120);
+    expect(result.safeRadius).toBe(44);
+    expect(result.blocked).toBe(true);
+    expect(result.fit * result.baseRadius).toBeLessThanOrEqual(44);
+  });
+  it("shrinks below half scale in a narrow corridor", () => {
+    const result = compose([block(0, 0, 462, 1000), block(538, 0, 1000, 1000)]);
+    expect(result.safeRadius).toBe(20);
+    expect(result.fit).toBeLessThan(0.5);
+    expect(result.fit * result.baseRadius).toBeCloseTo(20);
+  });
+  it("fully retreats when no free space remains", () => {
+    const result = compose([block(0, 0, 1000, 1000)]);
+    expect(result.safeRadius).toBe(0);
+    expect(result.fit).toBe(0);
+  });
+  it("checks diagonal distance again at the shifted centre", () => {
+    const blocks = [block(0, 0, 300, 1000), block(650, 650, 850, 850)];
+    const result = compose(blocks);
+    const x = result.anchorX * 1000;
+    const y = result.anchorY * 1000;
+    expect(result.safeRadius).toBeLessThanOrEqual(Math.hypot(Math.max(632 - x, 0), Math.max(632 - y, 0)));
+    expect(Math.abs(x - 500)).toBeLessThanOrEqual(55);
+  });
+});
+
+describe("model coverage union", () => {
+  const coverage = (blocks: ContentBlock[], scroll = 0, radius = 10) => modelCoverage(blocks, scroll, 0, 0, radius);
+  it("adds disjoint obstacles", () => {
+    expect(coverage([block(-10, -10, -5, 10), block(5, -10, 10, 10)])).toBe(0.5);
+  });
+  it("counts overlapping and nested obstacles only once", () => {
+    expect(coverage([block(-10, -10, 5, 10), block(-5, -10, 10, 10), block(-2, -2, 2, 2)])).toBe(1);
+  });
+  it("merges touching edges without gaps or double counting", () => {
+    expect(coverage([block(-10, -10, 0, 0), block(0, -10, 10, 0)])).toBe(0.5);
+  });
+  it("clips to the model bounds and ignores edge-only contact", () => {
+    expect(coverage([block(-30, -30, 0, 30), block(10, -10, 20, 10)])).toBe(0.5);
+  });
+  it("converts document coordinates while preserving fixed blocks", () => {
+    expect(coverage([block(-10, 90, 0, 110), { ...block(0, -10, 10, 10), fixed: true }], 100)).toBe(1);
+  });
+  it("handles empty obstacles, degenerate rectangles and tiny models", () => {
+    expect(coverage([])).toBe(0);
+    expect(coverage([block(0, 0, 0, 10)])).toBe(0);
+    expect(coverage([block(-10, -10, 10, 10)], 0, 1)).toBe(0);
+    expect(coverage([block(-10, -10, 10, 10)], 0, 0)).toBe(0);
   });
 });

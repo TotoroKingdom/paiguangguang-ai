@@ -160,7 +160,7 @@ export function applySceneCompositions(
         ...stop,
         anchorX: clamp(composition.anchorX, 0, 1),
         anchorY: clamp(composition.anchorY, 0, 1),
-        fit: clamp(composition.fit, 0.5, 1.2)
+        fit: clamp(composition.fit, 0, 1.2)
       };
     })
   };

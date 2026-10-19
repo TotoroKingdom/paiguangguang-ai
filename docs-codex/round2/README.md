@@ -21,8 +21,9 @@ same viewport, same scroll offsets for before/after pairs.
 - `after-dev/verify-*.png` — re-verification on the dev server, 1440×900
 - `after-dev/vp-1280-*.png`, `after-dev/vp-1920-*.png` — responsive spot checks
 - `after-dev/fade-*.png` — intermediate frames of the fade window
-- `after-dev/` also holds the material / label lab frames used while tuning
-  (`lab-*`, `p-*`, `crop-*`, `t0*`, `trans-*`). They are not part of the result.
+- Removed debug-only material / label lab frames from `after-dev/`
+  (`lab-*`, `p-*`, `crop-*`, `t0*`, `trans-*`). Final verification, responsive,
+  fade captures and unclassified captures are retained.
 
 ## Acceptance map
 
