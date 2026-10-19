@@ -15,6 +15,16 @@ export type SceneStop = {
   scrollY: number;
   anchorX: number;
   anchorY: number;
+  /** Screen-space fit derived from the section's measured safe area. */
+  fit: number;
+};
+
+/** A measured safe-area composition for one scene landmark. */
+export type SceneComposition = {
+  index: number;
+  anchorX: number;
+  anchorY: number;
+  fit: number;
 };
 
 export type ScrollTimeline = {
@@ -33,6 +43,7 @@ export type ScrollSample = {
   progress: number;
   anchorX: number;
   anchorY: number;
+  fit: number;
   sceneIndex: number;
 };
 
@@ -73,7 +84,8 @@ export function buildScrollTimeline(input: ScrollTimelineInput): ScrollTimeline 
         index,
         scrollY: 0,
         anchorX,
-        anchorY: clamp(anchor.centerY / Math.max(1, viewportHeight), 0.18, 0.82)
+        anchorY: clamp(anchor.centerY / Math.max(1, viewportHeight), 0.18, 0.82),
+        fit: 1
       };
     }
 
@@ -81,7 +93,8 @@ export function buildScrollTimeline(input: ScrollTimelineInput): ScrollTimeline 
       index,
       scrollY: clamp(anchor.centerY - viewportHeight * targetY, 0, maxScroll),
       anchorX,
-      anchorY: targetY
+      anchorY: targetY,
+      fit: 1
     };
   });
 
@@ -127,6 +140,32 @@ export function buildScrollTimeline(input: ScrollTimelineInput): ScrollTimeline 
   };
 }
 
+export function applySceneCompositions(
+  timeline: ScrollTimeline,
+  compositions: SceneComposition[]
+): ScrollTimeline {
+  if (compositions.length === 0) {
+    return timeline;
+  }
+
+  const byIndex = new Map(compositions.map((composition) => [composition.index, composition]));
+  return {
+    ...timeline,
+    stops: timeline.stops.map((stop) => {
+      const composition = byIndex.get(stop.index);
+      if (!composition) {
+        return stop;
+      }
+      return {
+        ...stop,
+        anchorX: clamp(composition.anchorX, 0, 1),
+        anchorY: clamp(composition.anchorY, 0, 1),
+        fit: clamp(composition.fit, 0.5, 1.2)
+      };
+    })
+  };
+}
+
 export function findSceneIndex(timeline: ScrollTimeline, scrollY: number): number {
   const stops = timeline.stops;
   if (stops.length === 0) {
@@ -152,7 +191,7 @@ export function sampleScrollTimeline(
 ): ScrollSample {
   const stops = timeline.stops;
   if (stops.length === 0) {
-    return { from: 0, to: 0, t: 0, progress: 0, anchorX: 0.5, anchorY: 0.5, sceneIndex: 0 };
+    return { from: 0, to: 0, t: 0, progress: 0, anchorX: 0.5, anchorY: 0.5, fit: 1, sceneIndex: 0 };
   }
 
   if (reducedMotion) {
@@ -165,6 +204,7 @@ export function sampleScrollTimeline(
       progress: index,
       anchorX: stop.anchorX,
       anchorY: stop.anchorY,
+      fit: stop.fit,
       sceneIndex: index
     };
   }
@@ -177,6 +217,7 @@ export function sampleScrollTimeline(
       progress: 0,
       anchorX: stops[0].anchorX,
       anchorY: stops[0].anchorY,
+      fit: stops[0].fit,
       sceneIndex: 0
     };
   }
@@ -190,6 +231,7 @@ export function sampleScrollTimeline(
       progress: lastIndex,
       anchorX: stops[lastIndex].anchorX,
       anchorY: stops[lastIndex].anchorY,
+      fit: stops[lastIndex].fit,
       sceneIndex: lastIndex
     };
   }
@@ -207,6 +249,7 @@ export function sampleScrollTimeline(
         progress: index + t,
         anchorX: from.anchorX + (to.anchorX - from.anchorX) * t,
         anchorY: from.anchorY + (to.anchorY - from.anchorY) * t,
+        fit: from.fit + (to.fit - from.fit) * t,
         sceneIndex: t < 0.5 ? index : index + 1
       };
     }
@@ -220,6 +263,7 @@ export function sampleScrollTimeline(
     progress: lastIndex,
     anchorX: stops[lastIndex].anchorX,
     anchorY: stops[lastIndex].anchorY,
+    fit: stops[lastIndex].fit,
     sceneIndex: lastIndex
   };
 }
@@ -266,5 +310,8 @@ export function interpolatePoseInto(
   target.connections = lerp(from.connections, to.connections, t);
   target.halo = lerp(from.halo, to.halo, t);
   target.energy = lerp(from.energy, to.energy, t);
+  target.lookX = lerp(from.lookX, to.lookX, t);
+  target.lookY = lerp(from.lookY, to.lookY, t);
+  target.roll = lerp(from.roll, to.roll, t);
   return target;
 }

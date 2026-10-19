@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { aiCoreScenes } from "./ai-core-data";
 import {
+  applySceneCompositions,
   buildScrollTimeline,
   createPoseBuffer,
   fadeForScroll,
@@ -73,5 +74,24 @@ describe("AI Core scroll timeline", () => {
     expect(buffer.distance).toBeLessThan(aiCoreScenes[3].distance);
     expect(buffer.separation).toBeGreaterThan(0);
     expect(buffer.rotation).toHaveLength(3);
+  });
+
+  it("applies measured safe-area compositions and interpolates their fit", () => {
+    const composed = applySceneCompositions(timeline, [
+      { index: 1, anchorX: 0.76, anchorY: 0.42, fit: 0.9 },
+      { index: 2, anchorX: 0.2, anchorY: 0.41, fit: 1.05 }
+    ]);
+
+    expect(composed.stops[1].anchorX).toBe(0.76);
+    expect(composed.stops[1].anchorY).toBe(0.42);
+    expect(composed.stops[1].fit).toBe(0.9);
+    expect(composed.stops[0].fit).toBe(1);
+
+    const between = sampleScrollTimeline(
+      composed,
+      (composed.stops[1].scrollY + composed.stops[2].scrollY) / 2
+    );
+    expect(between.fit).toBeGreaterThan(0.9);
+    expect(between.fit).toBeLessThan(1.05);
   });
 });

@@ -18,9 +18,16 @@ import {
   AI_CORE_SCENE_IDS,
   aiCoreNodeIndex,
   aiCoreNodes,
+  aiCoreScenes,
   type AICoreNodeId
 } from "./ai-core-data";
 import {
+  computeSceneComposition,
+  type ContentBlock,
+  type ContentRole
+} from "./ai-core-composition";
+import {
+  applySceneCompositions,
   buildScrollTimeline,
   clamp,
   fadeForScroll,
@@ -66,6 +73,23 @@ const OCCLUSION_SELECTOR = [
   ".brand-contact",
   ".ai-core-caption",
   ".brand-hero__bottom"
+].join(",");
+
+// Containers used for composition, not label collision. A block represents the
+// real screen estate of a copy column, card, nav rail or caption.
+const CONTENT_BLOCK_SELECTOR = [
+  ".brand-header__inner",
+  ".brand-footer",
+  ".brand-hero__copy",
+  ".brand-hero__bottom",
+  ".brand-section-heading__copy",
+  ".brand-projects__heading-copy",
+  ".brand-capability",
+  ".brand-project",
+  ".brand-exploration",
+  ".brand-approach-item",
+  ".brand-contact",
+  ".ai-core-caption"
 ].join(",");
 
 // A drag may start on empty visual space, but never on copy, links, cards or controls.
@@ -181,6 +205,47 @@ function collectOcclusionRects(page: HTMLElement, scrollY: number): OcclusionRec
   return rects;
 }
 
+function collectContentBlocks(page: HTMLElement, scrollY: number): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  page.querySelectorAll<HTMLElement>(CONTENT_BLOCK_SELECTOR).forEach((element) => {
+    if (element.closest("[data-ai-core-ui]")) {
+      return;
+    }
+    const rect = element.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) {
+      return;
+    }
+
+    const inHeader = Boolean(element.closest(".brand-header"));
+    let role: ContentRole = "copy";
+    if (inHeader) {
+      role = "nav";
+    } else if (element.classList.contains("brand-footer")) {
+      role = "footer";
+    } else if (element.classList.contains("ai-core-caption")) {
+      role = "caption";
+    } else if (
+      element.classList.contains("brand-capability") ||
+      element.classList.contains("brand-project") ||
+      element.classList.contains("brand-exploration") ||
+      element.classList.contains("brand-approach-item") ||
+      element.classList.contains("brand-contact")
+    ) {
+      role = "card";
+    }
+
+    blocks.push({
+      left: rect.left,
+      top: inHeader ? rect.top : rect.top + scrollY,
+      right: rect.right,
+      bottom: inHeader ? rect.bottom : rect.bottom + scrollY,
+      role,
+      fixed: inHeader || undefined
+    });
+  });
+  return blocks;
+}
+
 type SceneErrorBoundaryProps = {
   children: ReactNode;
   fallback: ReactNode;
@@ -241,6 +306,7 @@ export function AICoreExperience() {
   const labelRefs = useRef<Partial<Record<AICoreNodeId, HTMLButtonElement | null>>>({});
   const labelSizesRef = useRef<Partial<Record<AICoreNodeId, LabelSize>>>({});
   const occlusionRef = useRef<OcclusionRect[]>([]);
+  const contentBlocksRef = useRef<ContentBlock[]>([]);
   const canvasSlotRef = useRef<HTMLDivElement>(null);
   const haloRef = useRef<HTMLDivElement>(null);
   const bridgeRef = useRef<AICoreSceneBridge | null>(null);
@@ -306,15 +372,34 @@ export function AICoreExperience() {
 
     const journey = document.getElementById("journey");
     const journeyBottom = journey ? journey.getBoundingClientRect().bottom + scrollY : documentHeight;
-    const timeline = buildScrollTimeline({
+    const baseTimeline = buildScrollTimeline({
       viewportWidth,
       viewportHeight,
       maxScroll,
       anchors,
-      fadeStart: Math.min(maxScroll, journeyBottom - viewportHeight * 0.1),
-      fadeEnd: Math.min(maxScroll, journeyBottom + viewportHeight * 0.45),
+      // Let the core make a deliberate exit across the final section instead of
+      // snapping off at max scroll when the footer sits below the viewport.
+      fadeStart: Math.min(maxScroll, journeyBottom - viewportHeight * 0.9),
+      fadeEnd: Math.min(maxScroll, journeyBottom - viewportHeight * 0.1),
       reducedMotion: prefersReducedMotion
     });
+
+    const blocks = collectContentBlocks(page, scrollY);
+    contentBlocksRef.current = blocks;
+
+    const compositions = baseTimeline.stops.map((stop) =>
+      computeSceneComposition({
+        index: stop.index,
+        anchorX: stop.anchorX,
+        anchorY: stop.anchorY,
+        scrollY: stop.scrollY,
+        pose: aiCoreScenes[stop.index],
+        blocks,
+        viewportWidth,
+        viewportHeight
+      })
+    );
+    const timeline = applySceneCompositions(baseTimeline, compositions);
 
     timelineRef.current = timeline;
 
@@ -738,6 +823,7 @@ export function AICoreExperience() {
                 labelRefs={labelRefs}
                 labelSizesRef={labelSizesRef}
                 occlusionRef={occlusionRef}
+                contentBlocksRef={contentBlocksRef}
                 canvasOpacityRef={canvasSlotRef}
                 haloRef={haloRef}
                 onBridge={handleBridge}
@@ -787,6 +873,7 @@ export function AICoreExperience() {
                   }}
                   onClick={() => selectNode(node.id)}
                 >
+                  <span className="ai-core-label__leader" aria-hidden="true" />
                   <span className="ai-core-label__inner">
                     <span className="ai-core-label__dot" aria-hidden="true" />
                     <span>{node.label}</span>

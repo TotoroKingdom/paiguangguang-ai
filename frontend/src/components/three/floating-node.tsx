@@ -139,13 +139,16 @@ export function PlanetNode({ node, simplified = false, onReady, onRemove }: Plan
           ref={materialRef}
           map={texture ?? undefined}
           color={node.color}
-          roughness={0.44}
-          metalness={0.06}
-          clearcoat={0.46}
-          clearcoatRoughness={0.34}
-          envMapIntensity={0.88}
+          roughness={0.32}
+          metalness={0.02}
+          clearcoat={0.55}
+          clearcoatRoughness={0.24}
+          envMapIntensity={1.08}
+          sheen={0.24}
+          sheenRoughness={0.5}
+          sheenColor={node.glow}
           emissive={node.color}
-          emissiveIntensity={0.022}
+          emissiveIntensity={0.018}
         />
       </mesh>
 
@@ -155,11 +158,12 @@ export function PlanetNode({ node, simplified = false, onReady, onRemove }: Plan
           <meshPhysicalMaterial
             ref={ringMaterialRef}
             color={node.glow}
-            roughness={0.3}
-            metalness={0.18}
+            roughness={0.26}
+            metalness={0.12}
             transparent
-            opacity={0.58}
+            opacity={0.62}
             depthWrite={false}
+            envMapIntensity={1.1}
           />
         </mesh>
       ) : null}

@@ -1,5 +1,6 @@
 import type { MutableRefObject, RefObject } from "react";
 import type { AICoreNodeId } from "./ai-core-data";
+import type { ContentBlock } from "./ai-core-composition";
 import type { ScrollTimeline } from "./ai-core-scroll";
 
 export type AICoreInteractionStatus = "idle" | "hover" | "dragging" | "focused" | "scrolling";
@@ -78,6 +79,7 @@ export type AICoreSceneProps = {
   labelRefs: MutableRefObject<Partial<Record<AICoreNodeId, HTMLButtonElement | null>>>;
   labelSizesRef: MutableRefObject<Partial<Record<AICoreNodeId, LabelSize>>>;
   occlusionRef: MutableRefObject<OcclusionRect[]>;
+  contentBlocksRef: MutableRefObject<ContentBlock[]>;
   canvasOpacityRef: RefObject<HTMLElement>;
   haloRef: RefObject<HTMLElement>;
   onBridge?: (bridge: AICoreSceneBridge | null) => void;

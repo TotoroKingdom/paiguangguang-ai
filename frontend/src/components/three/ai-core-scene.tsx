@@ -5,14 +5,15 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   ACESFilmicToneMapping,
   AdditiveBlending,
+  BufferAttribute,
   CanvasTexture,
   Color,
   EquirectangularReflectionMapping,
   MeshPhysicalMaterial,
   PMREMGenerator,
+  SphereGeometry,
   SRGBColorSpace,
   Vector3,
-  type BufferAttribute,
   type Group,
   type LineBasicMaterial,
   type LineSegments,
@@ -26,9 +27,11 @@ import {
   AI_CORE_FOV,
   aiCoreNodes,
   aiCoreScenes,
+  aiCoreTransitions,
   type AICoreNodeId,
   type AICoreScenePose
 } from "./ai-core-data";
+import { type ContentBlock } from "./ai-core-composition";
 import { ConnectionLine, OrbitRing } from "./agent-orbit";
 import { PlanetNode, type PlanetHandles } from "./floating-node";
 import {
@@ -36,7 +39,8 @@ import {
   createPoseBuffer,
   fadeForScroll,
   interpolatePoseInto,
-  sampleScrollTimeline
+  sampleScrollTimeline,
+  smoothstep01
 } from "./ai-core-scroll";
 import type { AICoreSceneProps } from "./ai-core-types";
 
@@ -108,26 +112,60 @@ function createStudioTexture(): CanvasTexture | null {
     return null;
   }
 
+  // A dark studio cyclorama with a few large, shaped softboxes. The bright
+  // surround is deliberately restrained so the shadow side of the pearl can
+  // actually go dark and the box reflections stay legible.
   const base = context.createLinearGradient(0, 0, 0, height);
-  base.addColorStop(0, "#fafbff");
-  base.addColorStop(0.42, "#dde3f0");
-  base.addColorStop(0.76, "#aeb9ce");
-  base.addColorStop(1, "#68748c");
+  base.addColorStop(0, "#232b3a");
+  base.addColorStop(0.3, "#202734");
+  base.addColorStop(0.56, "#171d27");
+  base.addColorStop(0.78, "#0e1219");
+  base.addColorStop(1, "#07090d");
   context.fillStyle = base;
   context.fillRect(0, 0, width, height);
 
-  const spot = (x: number, y: number, radius: number, inner: string) => {
-    const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
-    gradient.addColorStop(0, inner);
-    gradient.addColorStop(1, "rgba(255,255,255,0)");
-    context.fillStyle = gradient;
-    context.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+  const horizon = context.createLinearGradient(0, height * 0.34, 0, height * 0.7);
+  horizon.addColorStop(0, "rgba(255,255,255,0)");
+  horizon.addColorStop(0.5, "rgba(196,214,244,0.12)");
+  horizon.addColorStop(1, "rgba(255,255,255,0)");
+  context.fillStyle = horizon;
+  context.fillRect(0, height * 0.34, width, height * 0.36);
+
+  const shape = (
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    color: string,
+    blur: number,
+    rotation = 0
+  ) => {
+    context.save();
+    context.translate(x, y);
+    context.rotate(rotation);
+    context.filter = `blur(${blur}px)`;
+    context.fillStyle = color;
+    context.fillRect(-w / 2, -h / 2, w, h);
+    context.restore();
   };
 
-  spot(250, 128, 260, "rgba(255,252,248,0.92)");
-  spot(760, 104, 230, "rgba(226,234,255,0.78)");
-  spot(520, 396, 280, "rgba(86,100,130,0.36)");
-  spot(960, 300, 190, "rgba(176,192,224,0.42)");
+  // Large warm key softbox, upper left.
+  shape(292, 112, 390, 186, "rgba(255,252,246,1)", 10, -0.07);
+  // Cool fill strip, upper right.
+  shape(746, 104, 138, 272, "rgba(226,238,255,0.96)", 8, 0.05);
+  // Narrow highlight bar: creates the crisp vertical reflection on the shell.
+  shape(548, 86, 52, 330, "rgba(255,255,255,0.92)", 5);
+  // Small rim box and a tight catchlight for the clearcoat.
+  shape(910, 292, 104, 76, "rgba(255,255,255,0.72)", 6, -0.12);
+  shape(612, 148, 86, 86, "rgba(255,255,255,0.95)", 4, 0.1);
+
+  // Deep floor sweep keeps the lower hemisphere from flattening out.
+  const floor = context.createRadialGradient(236, 478, 20, 236, 478, 430);
+  floor.addColorStop(0, "rgba(21,26,36,0.6)");
+  floor.addColorStop(0.62, "rgba(25,31,43,0.2)");
+  floor.addColorStop(1, "rgba(25,31,43,0)");
+  context.fillStyle = floor;
+  context.fillRect(0, 220, 700, 292);
 
   const texture = new CanvasTexture(canvas);
   texture.mapping = EquirectangularReflectionMapping;
@@ -143,20 +181,23 @@ function createStudioTexture(): CanvasTexture | null {
  */
 function createCoreMaterial(): MeshPhysicalMaterial {
   return new MeshPhysicalMaterial({
-    color: 0xd2daea,
-    roughness: 0.31,
-    metalness: 0.05,
-    clearcoat: 1,
-    clearcoatRoughness: 0.18,
-    envMapIntensity: 0.82,
-    iridescence: 0.35,
-    iridescenceIOR: 1.3,
-    iridescenceThicknessRange: [120, 520],
-    sheen: 0.4,
-    sheenRoughness: 0.58,
-    sheenColor: new Color("#d3daf6"),
-    emissive: new Color("#5d6cab"),
-    emissiveIntensity: 0.025
+    color: 0xffffff,
+    vertexColors: true,
+    roughness: 0.145,
+    metalness: 0,
+    clearcoat: 0.92,
+    clearcoatRoughness: 0.04,
+    envMapIntensity: 1.6,
+    iridescence: 0.16,
+    iridescenceIOR: 1.36,
+    iridescenceThicknessRange: [150, 480],
+    sheen: 0.24,
+    sheenRoughness: 0.42,
+    sheenColor: new Color("#e9edff"),
+    specularIntensity: 1.22,
+    specularColor: new Color("#ffffff"),
+    emissive: new Color("#43548a"),
+    emissiveIntensity: 0.004
   });
 }
 
@@ -174,7 +215,7 @@ function StudioEnvironment({ simplified }: { simplified: boolean }) {
     generator.compileEquirectangularShader();
     const target = generator.fromEquirectangular(texture);
     scene.environment = target.texture;
-    scene.environmentIntensity = simplified ? 0.38 : 0.46;
+    scene.environmentIntensity = simplified ? 0.72 : 0.95;
 
     return () => {
       scene.environment = null;
@@ -190,11 +231,15 @@ function StudioEnvironment({ simplified }: { simplified: boolean }) {
 function SceneLights({ simplified }: { simplified: boolean }) {
   return (
     <>
-      <ambientLight intensity={simplified ? 0.1 : 0.06} color="#e9eeff" />
-      <hemisphereLight args={["#f8faff", "#9da9bd", simplified ? 0.2 : 0.18]} />
-      <directionalLight position={[4.5, 5.5, 6]} intensity={simplified ? 2.15 : 2.3} color="#fff7f1" />
-      <directionalLight position={[-5, 1.5, 3]} intensity={simplified ? 0.24 : 0.28} color="#b9caff" />
-      <directionalLight position={[-1.5, 3.2, -6]} intensity={simplified ? 0.95 : 1.2} color="#d6e0ff" />
+      <ambientLight intensity={simplified ? 0.06 : 0.018} color="#e9eeff" />
+      <hemisphereLight args={["#fbfcff", "#7b88a3", simplified ? 0.1 : 0.065]} />
+      {/* Warm key from the upper left: the terminator lands on the right. */}
+      <directionalLight position={[-5.2, 6.6, 5.2]} intensity={simplified ? 3.5 : 3.85} color="#fff3e6" />
+      {/* Cool fill keeps the shadow side blue-grey instead of muddy. */}
+      <directionalLight position={[5.6, 0.8, 3.8]} intensity={simplified ? 0.26 : 0.3} color="#b4c6ff" />
+      {/* Rim from behind picks out the silhouette of the shell. */}
+      <directionalLight position={[2.2, 3.1, -6.4]} intensity={simplified ? 1.5 : 1.85} color="#cfdcff" />
+      <directionalLight position={[-1.2, -3.8, 3.2]} intensity={simplified ? 0.14 : 0.2} color="#e8e2ff" />
     </>
   );
 }
@@ -222,6 +267,7 @@ function CoreSystem({
   labelRefs,
   labelSizesRef,
   occlusionRef,
+  contentBlocksRef,
   canvasOpacityRef,
   haloRef
 }: AICoreSceneProps) {
@@ -251,17 +297,56 @@ function CoreSystem({
   const selfClock = useRef(0);
   const focusAmount = useRef(0);
   const lastFade = useRef(-1);
+  const travelFade = useRef(1);
+  const coverageRef = useRef(0);
 
   const glowTexture = useMemo(() => createGlowTexture(), []);
   useEffect(() => () => glowTexture?.dispose(), [glowTexture]);
   const coreMaterial = useMemo(() => createCoreMaterial(), []);
   useEffect(() => () => coreMaterial.dispose(), [coreMaterial]);
 
+  /**
+   * A pearl body: a soft vertical colour gradient baked into vertex colours.
+   * It keeps the top lavender, the equator pearl-blue and the underside
+   * blue-grey without adding another shader pass.
+   */
+  const coreGeometry = useMemo(() => {
+    const geometry = new SphereGeometry(
+      0.58,
+      simplified ? 64 : 128,
+      simplified ? 44 : 96
+    );
+    const position = geometry.getAttribute("position");
+    const colors = new Float32Array(position.count * 3);
+    const topLavender = new Color("#e7e1f8");
+    const topBlue = new Color("#dfe8f7");
+    const equator = new Color("#cfd8ee");
+    const bottom = new Color("#7c8dbb");
+    const sample = new Color();
+    const cap = new Color();
+    for (let index = 0; index < position.count; index += 1) {
+      const x = clamp(position.getX(index) / 0.58, -1, 1);
+      const t = clamp(position.getY(index) / 0.58, -1, 1);
+      if (t >= 0) {
+        cap.copy(topBlue).lerp(topLavender, (x + 1) / 2);
+        sample.copy(equator).lerp(cap, t);
+      } else {
+        sample.copy(equator).lerp(bottom, -t);
+      }
+      colors[index * 3] = sample.r;
+      colors[index * 3 + 1] = sample.g;
+      colors[index * 3 + 2] = sample.b;
+    }
+    geometry.setAttribute("color", new BufferAttribute(colors, 3));
+    return geometry;
+  }, [simplified]);
+  useEffect(() => () => coreGeometry.dispose(), [coreGeometry]);
+
   const fresnelUniforms = useMemo(
     () => ({
-      uColor: { value: new Color("#d4ddff") },
-      uPower: { value: 2.8 },
-      uOpacity: { value: 0.32 }
+      uColor: { value: new Color("#93a6d6") },
+      uPower: { value: 2.35 },
+      uOpacity: { value: 0.5 }
     }),
     []
   );
@@ -340,6 +425,7 @@ function CoreSystem({
           progress: 0,
           anchorX: 0.5,
           anchorY: 0.5,
+          fit: 1,
           sceneIndex: 0
         };
 
@@ -347,41 +433,78 @@ function CoreSystem({
     const currentPose = pose.current;
     const fade = timeline ? fadeForScroll(timeline, rawScroll) : 1;
 
-    if (fade < 0.005 && lastFade.current >= 0.005) {
+    // ---- transition choreography -----------------------------------------
+    // The authored arc is zero at both stops, so this path is identical when
+    // scrolling forward and backward.
+    const transitionIndex = Math.min(sample.from, sample.to);
+    const transition = aiCoreTransitions[transitionIndex] ?? {
+      arcX: 0,
+      arcY: 0,
+      dolly: 0,
+      spin: 0,
+      roll: 0
+    };
+    const arc = Math.sin(Math.PI * sample.t);
+
+    // The model steps back and fades whenever its silhouette would be cut by a
+    // card or copy block. The target comes from the previous frame's measured
+    // coverage; a short exponential smooth keeps it from flickering.
+    const coverageTarget = clamp(
+      1 - smoothstep01((coverageRef.current - 0.12) / 0.22),
+      0,
+      1
+    );
+    travelFade.current += (coverageTarget - travelFade.current) * (1 - Math.exp(-dampDelta * 9));
+    const travel = reducedMotion ? coverageTarget : travelFade.current;
+    const travelScale = 0.74 + 0.26 * travel;
+    const travelDistance = 1 + (1 - travel) * 0.22;
+    const sceneOpacity = fade * travel;
+
+    if (sceneOpacity < 0.005 && lastFade.current >= 0.005) {
       rig.visible = false;
     } else {
       rig.visible = true;
     }
-    lastFade.current = fade;
+    lastFade.current = sceneOpacity;
 
-    if (canvasOpacityRef.current && Math.abs(Number(canvasOpacityRef.current.style.opacity || 1) - fade) > 0.004) {
-      canvasOpacityRef.current.style.opacity = fade.toFixed(3);
+    if (
+      canvasOpacityRef.current &&
+      Math.abs(Number(canvasOpacityRef.current.style.opacity || 1) - sceneOpacity) > 0.004
+    ) {
+      canvasOpacityRef.current.style.opacity = sceneOpacity.toFixed(3);
     }
 
     // ---- camera rig -------------------------------------------------------
     const drift = reducedMotion ? 0 : 1;
     const cameraYaw = currentPose.yaw + Math.sin(coreClock.current * 0.34) * 0.018 * drift;
     const cameraPitch = currentPose.pitch + Math.cos(coreClock.current * 0.27) * 0.012 * drift;
-    const cameraDistance = currentPose.distance + Math.sin(coreClock.current * 0.5) * 0.06 * drift;
+    const cameraDistance =
+      (currentPose.distance + Math.sin(coreClock.current * 0.5) * 0.06 * drift) *
+      (1 + transition.dolly * arc) *
+      travelDistance;
 
     const focusTarget = focusedId ? 1 : 0;
     focusAmount.current += (focusTarget - focusAmount.current) * (1 - Math.exp(-dampDelta * 6));
     const effectiveDistance = cameraDistance * (1 - focusAmount.current * 0.055);
+
+    const lookX = currentPose.lookX + Math.sin(coreClock.current * 0.21) * 0.02 * drift;
+    const lookY = currentPose.lookY + Math.cos(coreClock.current * 0.24) * 0.015 * drift;
 
     camera.position.set(
       Math.sin(cameraYaw) * Math.cos(cameraPitch) * cameraDistance,
       Math.sin(cameraPitch) * cameraDistance,
       Math.cos(cameraYaw) * Math.cos(cameraPitch) * cameraDistance
     );
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(lookX, lookY, 0);
+    camera.rotateZ(currentPose.roll + transition.roll * arc);
     camera.updateMatrixWorld();
 
     const cameraFov = (camera as PerspectiveCamera).fov ?? AI_CORE_FOV;
     const aspect = size.width / Math.max(1, size.height);
     const halfHeight = Math.tan((cameraFov * Math.PI) / 360) * effectiveDistance;
     const halfWidth = halfHeight * aspect;
-    const anchorX = clamp(sample.anchorX, 0, 1);
-    const anchorY = clamp(sample.anchorY, 0, 1);
+    const anchorX = clamp(sample.anchorX + transition.arcX * arc, 0, 1);
+    const anchorY = clamp(sample.anchorY + transition.arcY * arc, 0, 1);
 
     temps.forward.set(0, 0, -1).applyQuaternion(camera.quaternion);
     temps.right.set(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -443,12 +566,15 @@ function CoreSystem({
 
     rig.rotation.set(
       currentPose.rotation[0] + drag.currentPitch + parallaxY,
-      currentPose.rotation[1] + drag.currentYaw + parallaxX,
+      currentPose.rotation[1] + drag.currentYaw + parallaxX + transition.spin * arc,
       currentPose.rotation[2]
     );
 
     const breathe = reducedMotion ? 1 : 1 + Math.sin(coreClock.current * 0.82) * 0.006;
-    const modelScale = currentPose.scale * layoutScale * (1 + focusAmount.current * 0.035) * breathe;
+    const baseModelScale =
+      currentPose.scale * sample.fit * layoutScale * (1 + focusAmount.current * 0.035) * breathe;
+    const exitScale = 0.92 + 0.08 * fade;
+    const modelScale = baseModelScale * travelScale * exitScale;
     rig.scale.setScalar(modelScale);
 
     // ---- clocks -----------------------------------------------------------
@@ -478,7 +604,7 @@ function CoreSystem({
       coreRingBRef.current.rotation.y = 0.6 - coreClock.current * 0.07;
     }
     if (coreLightRef.current) {
-      coreLightRef.current.intensity = 1.7 + Math.sin(coreClock.current * 1.3) * 0.28;
+      coreLightRef.current.intensity = 3.9 + Math.sin(coreClock.current * 1.3) * 0.35;
     }
 
     // ---- planets + connections -------------------------------------------
@@ -532,7 +658,7 @@ function CoreSystem({
         const material = connection.material as LineBasicMaterial;
         const connectionBase = currentPose.connections * (isFocused ? 0.72 : isHovered ? 0.55 : 0.44);
         material.opacity += (connectionBase - material.opacity) * (1 - Math.exp(-dampDelta * 6));
-        connection.visible = currentPose.connections > 0.01 && fade > 0.01;
+        connection.visible = currentPose.connections > 0.01 && sceneOpacity > 0.01;
       }
     }
 
@@ -542,9 +668,9 @@ function CoreSystem({
     if (haloMeshRef.current && haloMaterialRef.current) {
       haloMeshRef.current.position.copy(rig.position);
       haloMeshRef.current.quaternion.copy(camera.quaternion);
-      haloMeshRef.current.scale.setScalar(modelScale * 5.6);
-      haloMaterialRef.current.opacity = fade * currentPose.halo * 0.1;
-      haloMeshRef.current.visible = fade > 0.01;
+      haloMeshRef.current.scale.setScalar(modelScale * 4.7);
+      haloMaterialRef.current.opacity = sceneOpacity * currentPose.halo * 0.055;
+      haloMeshRef.current.visible = sceneOpacity > 0.01;
     }
 
     // ---- projection: world -> screen labels ------------------------------
@@ -567,8 +693,32 @@ function CoreSystem({
     projectedRef.current.coreX = coreX;
     projectedRef.current.coreY = coreY;
     projectedRef.current.coreRadius = coreRadius;
-    projectedRef.current.fade = fade;
+    projectedRef.current.fade = sceneOpacity;
     projectedRef.current.sceneIndex = sample.sceneIndex;
+
+    // Measure how much of the authored silhouette would sit behind real
+    // content. The next frame uses this to recede or fade instead of letting a
+    // half-hidden sphere peek out from under a card.
+    const coverageScale = currentPose.scale * sample.fit * layoutScale;
+    const coverageDistance = Math.max(1, currentPose.distance * (1 + transition.dolly * arc));
+    let maxOrbit = 0;
+    for (const node of aiCoreNodes) {
+      maxOrbit = Math.max(
+        maxOrbit,
+        node.orbit.radius * currentPose.orbitSpread + currentPose.separation + node.radius
+      );
+    }
+    const coverageRadius =
+      ((maxOrbit * coverageScale * size.height) /
+        (2 * Math.tan((cameraFov * Math.PI) / 360) * coverageDistance)) *
+      0.94;
+    coverageRef.current = modelCoverage(
+      contentBlocksRef.current,
+      rawScroll,
+      coreX,
+      coreY,
+      coverageRadius
+    );
 
     const rawScrollForOcclusion = rawScroll;
     let placementIndex = 0;
@@ -592,7 +742,8 @@ function CoreSystem({
         size.height;
 
       const behindCore =
-        distance > coreDistance + 0.12 && Math.hypot(screenX - coreX, screenY - coreY) < coreRadius * 0.88;
+        distance > coreDistance + 0.12 &&
+        Math.hypot(screenX - coreX, screenY - coreY) < coreRadius * 0.62 + nodeRadius;
       const onScreen =
         temps.projected.z > -1 &&
         temps.projected.z < 1 &&
@@ -601,7 +752,7 @@ function CoreSystem({
         screenY >= 0 &&
         screenY <= size.height;
 
-      const visible = onScreen && !behindCore && fade > 0.01;
+      const visible = onScreen && !behindCore && sceneOpacity > 0.01;
       placement.distance = distance;
       placement.visible = visible;
       placement.x = screenX;
@@ -635,7 +786,7 @@ function CoreSystem({
       viewportWidth: size.width,
       viewportHeight: size.height,
       scrollY: rawScrollForOcclusion,
-      fade,
+      fade: sceneOpacity,
       labelOpacity: currentPose.labelOpacity,
       focusedId,
       hoveredId,
@@ -650,7 +801,7 @@ function CoreSystem({
     if (haloRef.current) {
       const haloScale = clamp((coreRadius * 2.1) / 260, 0.35, 1.45);
       haloRef.current.style.transform = `translate3d(${coreX.toFixed(1)}px, ${coreY.toFixed(1)}px, 0) scale(${haloScale.toFixed(3)})`;
-      haloRef.current.style.opacity = (fade * currentPose.halo * 0.95).toFixed(3);
+      haloRef.current.style.opacity = (sceneOpacity * currentPose.halo * 0.6).toFixed(3);
     }
   });
 
@@ -673,22 +824,21 @@ function CoreSystem({
 
       <group ref={rigRef}>
         <group ref={coreGroupRef}>
-          <mesh ref={coreMeshRef} name="ai-core-inner">
-            <sphereGeometry args={[0.58, simplified ? 64 : 128, simplified ? 44 : 96]} />
+          <mesh ref={coreMeshRef} geometry={coreGeometry} name="ai-core-inner">
             <primitive object={coreMaterial} attach="material" />
           </mesh>
 
           <mesh ref={shellRef} scale={1.0} name="ai-core-glass">
             <sphereGeometry args={[0.9, simplified ? 56 : 96, simplified ? 36 : 64]} />
             <meshPhysicalMaterial
-              color="#cfdaf4"
+              color="#cbd8f4"
               roughness={0.07}
               metalness={0}
               clearcoat={1}
-              clearcoatRoughness={0.05}
-              envMapIntensity={1.0}
+              clearcoatRoughness={0.02}
+              envMapIntensity={1.45}
               transparent
-              opacity={0.06}
+              opacity={0.072}
               depthWrite={false}
             />
           </mesh>
@@ -701,7 +851,6 @@ function CoreSystem({
               fragmentShader={FRESNEL_FRAGMENT}
               transparent
               depthWrite={false}
-              blending={AdditiveBlending}
               toneMapped={false}
             />
           </mesh>
@@ -709,14 +858,21 @@ function CoreSystem({
 
         <mesh ref={coreRingARef} rotation={[0.92, 0.2, 0.4]} renderOrder={4}>
           <torusGeometry args={[1.08, 0.006, 8, simplified ? 80 : 128]} />
-          <meshBasicMaterial color="#aebcdd" transparent opacity={0.24} depthWrite={false} toneMapped={false} />
+          <meshBasicMaterial color="#aebcdd" transparent opacity={0.3} depthWrite={false} toneMapped={false} />
         </mesh>
         <mesh ref={coreRingBRef} rotation={[0.4, 0.6, -0.3]} renderOrder={4}>
           <torusGeometry args={[1.22, 0.005, 8, simplified ? 72 : 120]} />
-          <meshBasicMaterial color="#b9aed8" transparent opacity={0.17} depthWrite={false} toneMapped={false} />
+          <meshBasicMaterial color="#b9aed8" transparent opacity={0.2} depthWrite={false} toneMapped={false} />
         </mesh>
 
-        <pointLight ref={coreLightRef} color="#dfe7ff" intensity={2.1} distance={5.5} decay={2} />
+        <pointLight
+          ref={coreLightRef}
+          position={[-1.15, 1.85, 1.55]}
+          color="#fff5e9"
+          intensity={4.1}
+          distance={7}
+          decay={2}
+        />
 
         {aiCoreNodes.map((node) => (
           <group key={node.id} rotation={[node.orbit.tiltX, 0, node.orbit.tiltZ]}>
@@ -728,7 +884,7 @@ function CoreSystem({
               <OrbitRing
                 radius={node.orbit.radius}
                 color={node.color}
-                opacity={node.id === "agent" ? 0.18 : node.id === "llm" ? 0.12 : 0.07}
+                opacity={node.id === "agent" ? 0.24 : node.id === "llm" ? 0.18 : 0.12}
                 simplified={simplified}
               />
             </group>
@@ -781,6 +937,45 @@ function rectsOverlap(
   );
 }
 
+/**
+ * Fraction of the model's projected bounds that sits behind an opaque semantic
+ * block. Overlapping blocks are merged by taking the largest single coverage,
+ * which is stable and avoids summing nested copy containers twice.
+ */
+function modelCoverage(
+  blocks: ContentBlock[],
+  scrollY: number,
+  centerX: number,
+  centerY: number,
+  radius: number
+): number {
+  if (radius <= 1 || blocks.length === 0) {
+    return 0;
+  }
+
+  const left = centerX - radius;
+  const right = centerX + radius;
+  const top = centerY - radius;
+  const bottom = centerY + radius;
+  const area = (radius * 2) * (radius * 2);
+  let coverage = 0;
+
+  for (const block of blocks) {
+    const blockTop = block.fixed ? block.top : block.top - scrollY;
+    const blockBottom = block.fixed ? block.bottom : block.bottom - scrollY;
+    if (block.right <= left || block.left >= right || blockBottom <= top || blockTop >= bottom) {
+      continue;
+    }
+    const overlapWidth = Math.min(right, block.right) - Math.max(left, block.left);
+    const overlapHeight = Math.min(bottom, blockBottom) - Math.max(top, blockTop);
+    if (overlapWidth > 0 && overlapHeight > 0) {
+      coverage = Math.max(coverage, (overlapWidth * overlapHeight) / area);
+    }
+  }
+
+  return Math.min(1, coverage);
+}
+
 function updateLabels({
   placements,
   viewportWidth,
@@ -808,30 +1003,115 @@ function updateLabels({
 
     const width = placement.width;
     const height = placement.height;
-    const nearNodeX = Math.hypot(placement.x - coreX, placement.y - coreY) < coreRadius * 0.88;
+    const nearNodeX = Math.hypot(placement.x - coreX, placement.y - coreY) < coreRadius * 0.62 + placement.radius;
     const hiddenBehindCore = placement.distance > coreDistance + 0.12 && nearNodeX;
     const depthOpacity = clamp(1 - Math.max(0, placement.distance - coreDistance) / 3.6, 0.42, 1);
     const emphasis = focusedId === placement.id ? 1 : hoveredId === placement.id ? 1 : 0.92;
     let targetOpacity = placement.visible && !hiddenBehindCore ? fade * labelOpacity * depthOpacity * emphasis : 0;
 
-    let x = clamp(placement.x - width / 2, 8, Math.max(8, viewportWidth - width - 8));
-    let y = clamp(
-      placement.y - placement.radius - 12 - height,
-      8,
-      Math.max(8, viewportHeight - height - 8)
-    );
+    const minX = 8;
+    const maxX = Math.max(8, viewportWidth - width - 8);
+    const minY = 8;
+    const maxY = Math.max(8, viewportHeight - height - 8);
+    const gap = 12;
+    const candidates = [
+      { x: placement.x - width / 2, y: placement.y - placement.radius - gap - height },
+      { x: placement.x - width / 2, y: placement.y + placement.radius + gap },
+      { x: placement.x + placement.radius + gap, y: placement.y - height / 2 },
+      { x: placement.x - placement.radius - gap - width, y: placement.y - height / 2 }
+    ];
+
+    let x = clamp(candidates[0].x, minX, maxX);
+    let y = clamp(candidates[0].y, minY, maxY);
+
+    const coreRect = {
+      left: coreX - coreRadius * 0.94,
+      top: coreY - coreRadius * 0.94,
+      right: coreX + coreRadius * 0.94,
+      bottom: coreY + coreRadius * 0.94
+    };
+    const planetRects = placements.map((planet) => ({
+      id: planet.id,
+      left: planet.x - planet.radius - 3,
+      top: planet.y - planet.radius - 3,
+      right: planet.x + planet.radius + 3,
+      bottom: planet.y + planet.radius + 3
+    }));
+    const occluderRects = occlusionRef.current.map((occluder) => ({
+      left: occluder.left,
+      top: occluder.fixed ? occluder.top : occluder.top - scrollY,
+      right: occluder.right,
+      bottom: occluder.fixed ? occluder.bottom : occluder.bottom - scrollY
+    }));
+
+    const fits = (candidateX: number, candidateY: number, id: AICoreNodeId) => {
+      const rect = {
+        left: candidateX,
+        top: candidateY,
+        right: candidateX + width,
+        bottom: candidateY + height
+      };
+      if (rectsOverlap(rect, coreRect, 2)) {
+        return false;
+      }
+      if (placed.some((other) => rectsOverlap(rect, other, 4))) {
+        return false;
+      }
+      if (
+        planetRects.some(
+          (planet) => planet.id !== id && rectsOverlap(rect, planet, 1)
+        )
+      ) {
+        return false;
+      }
+      if (occluderRects.some((occluder) => rectsOverlap(rect, occluder, 3))) {
+        return false;
+      }
+      return true;
+    };
 
     if (targetOpacity > 0.02) {
       let resolved = false;
-      for (let attempt = 0; attempt < 7; attempt += 1) {
-        const candidate = { left: x, top: y, right: x + width, bottom: y + height };
-        if (!placed.some((rect) => rectsOverlap(candidate, rect, 4))) {
+      for (const candidate of candidates) {
+        const candidateX = clamp(candidate.x, minX, maxX);
+        const candidateY = clamp(candidate.y, minY, maxY);
+        if (fits(candidateX, candidateY, placement.id)) {
+          x = candidateX;
+          y = candidateY;
           resolved = true;
           break;
         }
-        const direction = attempt % 2 === 0 ? -1 : 1;
-        const step = Math.ceil((attempt + 1) / 2) * (height + 6);
-        y = clamp(placement.y - placement.radius - 12 - height + direction * step, 8, Math.max(8, viewportHeight - height - 8));
+      }
+
+      // Nodes that sit in front of the core cannot use their own edge: every
+      // adjacent slot overlaps the sphere. Slide the pill out to the core's
+      // silhouette, staying on the node's own radial direction.
+      if (!resolved) {
+        const ringRadius =
+          coreRadius * 1.08 + gap + Math.max(width, height) / 2;
+        const baseAngle = Math.atan2(
+          placement.y - coreY,
+          placement.x - coreX
+        );
+        const angles = [baseAngle, baseAngle + 0.5, baseAngle - 0.5, baseAngle + 1, baseAngle - 1, baseAngle + 1.55, baseAngle - 1.55, baseAngle + Math.PI];
+        for (const angle of angles) {
+          const candidateX = clamp(
+            coreX + Math.cos(angle) * ringRadius - width / 2,
+            minX,
+            maxX
+          );
+          const candidateY = clamp(
+            coreY + Math.sin(angle) * ringRadius - height / 2,
+            minY,
+            maxY
+          );
+          if (fits(candidateX, candidateY, placement.id)) {
+            x = candidateX;
+            y = candidateY;
+            resolved = true;
+            break;
+          }
+        }
       }
       if (!resolved) {
         targetOpacity = 0;
@@ -839,26 +1119,37 @@ function updateLabels({
     }
 
     if (targetOpacity > 0.02) {
-      const candidate = { left: x, top: y, right: x + width, bottom: y + height };
-      const occluded = occlusionRef.current.some((rect) =>
-        rectsOverlap(
-          candidate,
-          {
-            left: rect.left,
-            top: rect.fixed ? rect.top : rect.top - scrollY,
-            right: rect.right,
-            bottom: rect.fixed ? rect.bottom : rect.bottom - scrollY
-          },
-          3
-        )
-      );
-      if (occluded) {
-        targetOpacity = 0;
-      }
+      placed.push({ left: x, top: y, right: x + width, bottom: y + height });
     }
 
-    if (targetOpacity > 0.02) {
-      placed.push({ left: x, top: y, right: x + width, bottom: y + height });
+    const labelCenterX = x + width / 2;
+    const labelCenterY = y + height / 2;
+    const deltaX = placement.x - labelCenterX;
+    const deltaY = placement.y - labelCenterY;
+    const distance = Math.hypot(deltaX, deltaY);
+    const leader = label.querySelector<HTMLElement>(".ai-core-label__leader");
+    if (leader) {
+      if (targetOpacity > 0.02 && distance > placement.radius + 6) {
+        const unitX = deltaX / distance;
+        const unitY = deltaY / distance;
+        const edgeX = Math.min(
+          Math.abs(unitX) < 1e-4 ? Number.POSITIVE_INFINITY : width / 2 / Math.abs(unitX),
+          Math.abs(unitY) < 1e-4 ? Number.POSITIVE_INFINITY : height / 2 / Math.abs(unitY)
+        );
+        const exitX = width / 2 + unitX * edgeX;
+        const exitY = height / 2 + unitY * edgeX;
+        const leaderLength = Math.max(0, distance - edgeX - placement.radius - 3);
+        leader.style.left = `${exitX.toFixed(1)}px`;
+        leader.style.top = `${(exitY - 0.5).toFixed(1)}px`;
+        leader.style.width = `${leaderLength.toFixed(1)}px`;
+        leader.style.transform = `rotate(${(
+          (Math.atan2(deltaY, deltaX) * 180) /
+          Math.PI
+        ).toFixed(2)}deg)`;
+        leader.style.opacity = (targetOpacity * 0.82).toFixed(3);
+      } else {
+        leader.style.opacity = "0";
+      }
     }
 
     label.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`;
