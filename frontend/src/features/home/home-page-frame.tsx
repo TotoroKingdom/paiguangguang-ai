@@ -8,6 +8,7 @@ type HomePageFrameProps = {
   footerLabel?: string;
   footerCopy?: string;
   mainClassName?: string;
+  overlay?: ReactNode;
 };
 
 export function HomePageFrame({
@@ -15,10 +16,12 @@ export function HomePageFrame({
   children,
   footerLabel = "TotoroKingdom / AI Agent Engineer",
   footerCopy = "让系统清晰，让交付可靠。",
-  mainClassName = "home-main"
+  mainClassName = "home-main",
+  overlay
 }: HomePageFrameProps) {
   return (
     <div className={`home-page${activePage === "home" ? " home-page--spatial" : ""}`}>
+      {overlay}
       <div className="relative z-10 brand-page-layer">
         <SiteNavigation activePage={activePage} />
 

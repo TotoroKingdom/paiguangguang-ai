@@ -4,9 +4,12 @@ export function HomepageRoadmap() {
   return (
     <section id="journey" className="brand-section brand-journey" aria-labelledby="journey-title">
       <div className="brand-section-heading">
-        <div>
+        <div className="brand-section-heading__copy">
           <h2 id="journey-title" className="brand-section-title">{homepageSections.journey.title}</h2>
           <p className="brand-section-description">{homepageSections.journey.description}</p>
+        </div>
+        <div className="brand-section-visual" aria-hidden="true">
+          <span className="ai-scene-anchor" data-ai-scene-anchor="journey" />
         </div>
       </div>
       <ol className="brand-approach-track brand-journey-track" aria-label="工程能力成长路径">
