@@ -1,316 +1,213 @@
-# s01：Codex 是怎样运行起来的？——从 `codex` 命令到 Agent Runtime
+# Learn Codex：从一个 AI 助手，到一套 Agent 系统
 
-> **一句话**：Codex 不只是一次大模型 API 调用，而是一套把用户界面、会话管理、模型推理、工具执行和本地状态连接起来的软件系统。
->
-> **本章只解决一个问题**：在终端输入 `codex` 后，究竟有哪些模块参与工作？
+> **读懂 Codex，不只是弄清楚它如何调用大模型，而是理解一个 AI Agent 如何理解任务、采取行动、管理状态，并在真实软件工程环境中持续工作。**
 
-**源码基线**：[openai/codex @ `014489466a17`](https://github.com/openai/codex/tree/014489466a1739c2c563cdfe57880c2c7c8680e3)（2026-10-20 检查）。GitHub `main` 会持续变化，本教程后续以固定提交为准；不同版本可能存在实现差异。
+你不需要先学会 Rust，也不需要一开始就理解上百个源码目录。这份教程会从一个熟悉的场景出发，逐层拆开 Codex 的架构，最后再把各个模块连接回真实源码。
 
-## 你将学会什么
+## 一个问题：为什么 Codex 能帮你改代码？
 
-学完本章，你应当能回答三个问题：
+假设你对 Codex 说：
 
-1. `codex`、`codex exec` 和 Codex 的核心引擎是什么关系？
-2. `cli`、`tui`、`app-server`、`core`、`exec-server` 各自负责什么？
-3. 如果想追踪用户的一次提问，应该从哪个源码文件进入？
+> 这个项目的登录功能有问题，帮我定位原因、修复它，再运行相关测试。
 
-不要求提前会 Rust，也**不需要编译整个 Codex 仓库**。
+普通聊天模型可以根据你提供的信息分析问题、给出建议，但它并不会仅凭一段回复就自动获得项目文件、终端和测试结果。
+
+Codex 不同。它能够在获得相应权限后，围绕这项任务反复进行工作：
+
+```text
+理解需求
+   ↓
+查看项目与相关代码
+   ↓
+判断下一步要做什么
+   ↓
+读取文件 / 修改代码 / 运行测试
+   ↓
+观察执行结果
+   ↓
+继续分析，直到形成答复
+```
+
+这里有一个关键区别：
+
+**模型提供理解和决策能力；Codex 的 Agent Runtime 把这些决策组织成可执行、可控制、可持续的工作过程。**
+
+这也是本教程真正要研究的对象。
 
 ---
 
-## 1. 从一个真实场景开始
+## 第一层：从用户看到的 Codex 开始
 
-你在某个 Git 仓库打开终端，输入：
+我们最先接触的是交互界面：在终端提问、查看工具执行过程，或者通过非交互命令把任务交给 Codex。
 
-```bash
-codex
-```
+这些只是不同的**使用入口**。
 
-进入交互界面，输入：
+入口负责接收用户意图、呈现过程与结果，却不应该各自重新实现一套 Agent。它们背后需要一个能够处理请求、传递运行事件、协调会话的公共系统。
 
-> 帮我看看这个项目是做什么的，不要修改任何文件。
-
-表面看，它只是回答你的问题。实际上，要完成这样一件事，系统至少需要做几类工作：接收输入、找到或创建会话、组织模型上下文、请求模型、执行模型要求的只读操作、把结果反馈给模型、再把最终答复显示出来。
-
-由此得到第一个结论：
-
-**模型负责生成回答和提出操作请求；Codex Runtime 负责管理一次任务，并在权限边界内执行操作。**
-
-请先不要急着阅读成百上千行 Rust。我们先认识这些职责分别放在什么地方。
-
-## 2. 一张图看懂 Codex 的整体结构
-
-下图是**便于理解的逻辑视图**，不是“每个方框对应一个独立操作系统进程”的进程图。
+因此，先记住第一条关系：
 
 ```text
-               ┌──────────────────────────────┐
-               │          用户入口              │
-               │  交互终端 / 非交互命令 / IDE 等  │
-               └──────────────┬───────────────┘
-                              │
-               ┌──────────────▼───────────────┐
-               │      Client / App Server      │
-               │     接收请求、返回事件、对外协议  │
-               └──────────────┬───────────────┘
-                              │
-               ┌──────────────▼───────────────┐
-               │           Core               │
-               │  ThreadManager / CodexThread  │
-               │     Session / Turn Runtime    │
-               └──────┬──────────┬───────────┘
-                      │          │
-            ┌─────────▼────┐ ┌──▼────────────────┐
-            │ Model Client │ │ Tool / Execution  │
-            │ 请求模型与流式 │ │ 工具路由、命令、补丁 │
-            │ 响应解析      │ │ 审批、Sandbox      │
-            └──────────────┘ └───────────────────┘
-                      │          │
-                      └─────┬────┘
-                            │
-                     History / State
-                     会话记录与持久化
+用户
+ ↓
+交互界面 / 非交互命令 / 其他客户端
+ ↓
+服务与通信层
+ ↓
+Codex Agent Runtime
 ```
 
-阅读方向是：**用户入口 → 请求与通信 → 会话运行时 → 模型与执行能力 → 状态记录**。
+这是一张**职责关系图，不是进程部署图**。例如，当前 Codex 的部分入口可以使用进程内 App Server，并非每一层都必须运行在独立进程中。
 
-注意两个重要边界：
+## 第二层：进入真正的 Agent Runtime
 
-- **App Server 是服务/通信边界，不等于一定启动了单独进程。** 当前 TUI 与 `codex exec` 均可使用进程内 App Server；也存在连接守护进程或远程服务的路径。
-- **Core 不是大模型。** `codex-core` 是本地 Agent 的业务逻辑，真正推理由模型服务完成；Core 组织请求、处理结果并驱动工具执行。
+当你提交一个任务，Codex 不能只考虑“调用哪一个模型”。
 
-## 3. 到真实源码里认领这些模块
+它还需要知道：
 
-Codex 的主体实现位于 `codex-rs/` Rust workspace。Rust 中的 **crate** 可以先理解为一个可编译的库或程序单元；不等同于 Java 的 package，也不保证每个 crate 都是单独进程。
+- 这是哪个会话？之前聊过什么？
+- 当前要完成的任务是什么？是否仍在执行？
+- 模型下一步是回答用户，还是请求使用工具？
+- 用户中途补充要求、打断任务时怎么办？
 
-| 目录（相对 `codex-rs/`） | 本章只需要记住的职责 |
-|---|---|
-| `cli/` | `codex` 命令的参数解析和子命令分发 |
-| `tui/` | 交互式终端界面：输入、渲染、交互 |
-| `exec/` | `codex exec` 非交互式使用入口 |
-| `app-server/` | 应用服务运行时：请求处理、事件投递、客户端连接 |
-| `app-server-client/` | TUI/Exec 复用的 App Server 客户端，支持进程内调用 |
-| `app-server-protocol/` | 面向 App Server 客户端的请求与通知协议 |
-| `core/` | Codex 核心业务逻辑与 Agent Runtime |
-| `protocol/` | Core 运行时的内部操作、事件和数据类型 |
-| `codex-client/`、`codex-api/`、`model-provider/` | 模型请求与提供方相关能力 |
-| `exec-server/`、`sandboxing/` 等 | 环境中的命令执行与安全隔离基础设施 |
-| `thread-store/`、`history/`、`state/` | 会话历史、持久化、状态支持 |
+这就引出了 Codex 的核心：**围绕会话和任务组织运行的 Agent Runtime**。
 
-这些目录不是严格的“依赖层级”。例如，安全、配置、状态、扩展能力会被多个模块共同使用。今天只需要记住**主要职责**，不必研究所有依赖。
+在真实源码中，你会逐渐遇到几个重要名字：
 
-## 4. 从 `codex` 命令开始追踪
+| 概念 | 先这样理解 |
+| --- | --- |
+| **Thread** | 一段可以持续交互、恢复和管理的会话 |
+| **Session** | 支撑会话运行的配置与状态 |
+| **Turn** | 一次任务执行所处的运行周期 |
+| **Agent Loop** | 反复调用模型、处理工具结果、推进任务的执行循环 |
 
-先打开第一个真实文件：
+现在不必记住这些对象的所有字段和生命周期。你只需要理解：**Codex 能连续完成多步工作，是因为有 Runtime 在持续组织它，而不是模型一次调用就做完了全部事情。**
 
-**[`codex-rs/cli/src/main.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/cli/src/main.rs)**
+## 第三层：模型如何让 Codex 真正采取行动？
 
-搜索关键词：
+有了 Runtime，还需要回答一个更实际的问题：
+
+> 模型说“我需要读取这个文件”，文件到底是谁读取的？
+
+答案不是模型本身。
+
+模型可以生成回答，也可以提出工具调用请求；Codex 则通过工具系统识别请求、检查约束、调用相应执行能力，再把结果送回模型。
 
 ```text
-Exec(ExecCli)
-run_main
+         ┌───────────────┐
+         │  Agent Runtime │
+         └───────┬───────┘
+                 │
+          组织模型请求
+                 ↓
+            大模型服务
+                 │
+          返回回答或工具请求
+                 ↓
+            Agent Runtime
+                 │
+          路由与执行工具
+                 ↓
+       文件 / 终端 / 测试 / 外部服务
+                 │
+            返回执行结果
+                 └──────→ 进入下一步判断
 ```
 
-你会看到两件事：
+例如，运行测试并不意味着“大模型拥有一个终端”。而是 Codex 提供了受控的执行能力，并根据有效权限与执行环境处理工具调用。
 
-- `codex exec` 是一个单独的非交互子命令；
-- 不指定子命令时，会进入交互式 CLI/TUI 路径。
+这条循环，是理解 Codex 的核心线索。后面的课程会从最小可运行模型开始，再对照真正的 Rust 实现。
 
-因此，`codex` 并不是“运行某个 Agent 函数”的命令，它先要**决定用户使用哪种产品入口**。
+## 第四层：一个能用的 Agent，还需要什么？
 
-```text
-codex
-  └─ 交互入口 → TUI
+如果只有“模型调用 + 工具调用”，我们已经能做一个简单 Demo，但距离能够用于真实项目的 Codex 还有很长的路。
 
-codex exec "任务"
-  └─ 非交互入口 → Exec
+Codex 还必须处理四类问题：
+
+| 关键问题 | 对应的架构能力 |
+| --- | --- |
+| **模型应该知道什么？** | 上下文构建、项目指令、Skills、历史信息 |
+| **Agent 可以做什么？** | 工具系统、权限、审批、Sandbox |
+| **执行过程如何持续和恢复？** | 会话状态、历史记录、持久化、上下文压缩 |
+| **如何支持更复杂的任务？** | MCP、扩展机制、多 Agent、长期记忆等 |
+
+这些能力不是与 Agent Loop 毫无关系的功能清单。它们都在解决同一个问题：
+
+**如何让一个会调用模型的程序，逐步成为可靠、可扩展的 Agent 系统？**
+
+## 把四层放到同一张图里
+
+```mermaid
+flowchart TD
+    U["用户：定位并修复登录问题"]
+    I["使用入口<br/>终端 · 非交互命令 · 客户端"]
+    S["服务与通信层<br/>请求 · 事件"]
+    R["Codex Agent Runtime<br/>会话 · 任务 · 执行循环"]
+    M["模型服务<br/>理解 · 推理 · 决策"]
+    T["工具与执行环境<br/>文件 · 命令 · 测试"]
+    C["上下文与指令<br/>项目知识 · 历史 · Skills"]
+    P["权限与安全边界<br/>审批 · 策略 · Sandbox"]
+    H["状态与持久化<br/>记录 · 恢复 · 压缩"]
+    E["扩展与协作<br/>MCP · Hooks · Multi-Agent"]
+
+    U --> I
+    I <--> S
+    S <--> R
+    R <--> M
+    R <--> T
+    C -.-> R
+    P -.-> T
+    H <--> R
+    E -.-> R
 ```
 
-两条路径最终都可以复用 Codex 的核心业务能力。**不同入口可以有不同的交互体验，但不需要各自复制一套 Agent 核心。**
+> 这是用于教学的**逻辑架构图**：箭头帮助理解职责与信息流，并不代表真实源码里的每一条函数调用或进程关系。
 
-## 5. TUI 发出的请求去哪了？
-
-打开：
-
-**[`codex-rs/app-server-client/README.md`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/app-server-client/README.md)**
-
-其中明确说明，`codex-tui` 与 `codex-exec` 使用共享的进程内 App Server 客户端能力。进程内路径通过 **typed channels（类型化通道）** 传递请求与事件，而对外部 stdio/WebSocket 等传输仍可使用相应的协议序列化。
-
-新会话典型地会发出类似：
-
-```text
-thread/start
-```
-
-已有会话则可能走：
-
-```text
-thread/resume
-```
-
-这只是一个逻辑示意：
-
-```text
-TUI / Exec
-    │
-    │ thread/start
-    ▼
-App Server 接口
-    │
-    ▼
-Core 的 ThreadManager
-```
-
-**这里不要把 App Server 理解成“永远是单独的服务进程”。** 当前源码里存在 embedded / local daemon / remote 等接入方式；本章谈的是**服务职责边界**。
-
-## 6. 真正管理 Agent 会话的是谁？
-
-现在进入 Core。
-
-第一份文件：**[`core/src/thread_manager.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/thread_manager.rs)**
-
-搜索：
-
-```rust
-pub struct ThreadManager
-```
-
-源码注释给它的职责是：创建并在内存中维护 Thread。
-
-第二份文件：**[`core/src/codex_thread.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/codex_thread.rs)**
-
-搜索：
-
-```rust
-pub struct CodexThread
-```
-
-你会看到它持有 `Session`、`SessionIo` 等字段。我们先把它理解为：**一个会话的对外运行对象，负责连接输入输出与内部 Session**。
-
-最简化关系如下：
-
-```text
-ThreadManager
-    │
-    ├─ CodexThread A ── Session A
-    ├─ CodexThread B ── Session B
-    └─ CodexThread C ── Session C
-```
-
-现在你已经找到“创建和持有会话”的位置。但会话里怎样连续请求模型和执行工具？请看下面这一行。
-
-第三份文件：**[`core/src/session/turn.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/session/turn.rs)**
-
-搜索：
-
-```rust
-pub(crate) async fn run_turn(
-```
-
-这是核心执行路径的重要入口。你目前**不需要读完它**，只要确认：真正处理一次任务的模型调用、工具结果和后续步骤，发生在这个 Runtime 里，而不是 TUI 组件里。
-
-## 7. 把一次提问串起来
-
-以“只读查看项目”为例，一条**简化的典型路径**如下：
-
-```text
-① 用户在 TUI 输入问题
-        ↓
-② TUI 通过 App Server 客户端提交请求
-        ↓
-③ ThreadManager 创建或取得会话
-        ↓
-④ CodexThread / Session 接收任务输入
-        ↓
-⑤ run_turn 组织一次模型执行
-        ↓
-⑥ Model Client 请求模型
-        ↓
-⑦ 模型可能要求执行只读工具
-        ↓
-⑧ Tool Runtime 在有效权限下执行并返回结果
-        ↓
-⑨ 模型继续处理，生成回答
-        ↓
-⑩ 事件传回界面，并按配置记录会话状态
-```
-
-这不是逐个 Rust 函数的精确调用栈；它刻意省略了配置加载、权限细节、流式事件、异常路径和持久化时机。**它是第一章用来建立全局认知的路线图。**
-
-## 8. 动手实验：不改代码，验证架构
-
-### 实验 A：认识不同入口
-
-如果你已经安装 Codex，在终端执行：
-
-```bash
-codex --version
-codex --help
-codex exec --help
-```
-
-观察：`codex` 是命令入口，`exec` 是它提供的一种运行模式；这两者不是两个不同的 Agent 算法。
-
-### 实验 B：只读追踪源码
-
-在浏览器依次打开上述三个 Core 文件，以及 `cli/src/main.rs`。在 GitHub 页面使用搜索，依次找到：
-
-```text
-Exec(ExecCli)
-ThreadManager
-CodexThread
-run_turn
-```
-
-把它们按顺序写成一句话：
-
-> CLI 选择运行入口，服务层把请求交给 Core，ThreadManager 维护会话，CodexThread 连接会话，执行逻辑最终进入 run_turn。
-
-如果你希望本地阅读，可选地浅克隆固定基线版本（不需要编译）：
-
-```bash
-git clone --filter=blob:none --no-checkout https://github.com/openai/codex.git
-cd codex
-git fetch --depth 1 origin 014489466a1739c2c563cdfe57880c2c7c8680e3
-git checkout --detach FETCH_HEAD
-```
-
-注意：上述命令仅用于下载与阅读公开源码；**不要在原有业务项目目录直接执行**。如果克隆速度太慢，直接阅读 GitHub 文件即可。
-
-## 9. 三个容易产生的误解
-
-**误解一：“Codex = GPT + while True。”**
-
-最小 Agent 可以这样实现，但 Codex 产品还必须处理客户端协议、运行状态、权限、执行环境、持久化等问题。
-
-**误解二：“App Server 就是独立的后台进程。”**
-
-错。它首先是职责和通信边界，当前也支持进程内运行方式。是否独立进程，要看具体入口与部署方式。
-
-**误解三：“Thread 就是 messages 数组。”**
-
-错。消息历史只是 Thread 相关状态的一部分；Thread 还有生命周期、配置、输入输出、关联 Session 与持久化行为。后续章节会专门拆解。
-
-## 10. 本章验收与下一章
-
-如果不看图，你可以用自己的话解释下面这条链，就算通过本章：
-
-```text
-CLI / TUI → App Server 接口 → ThreadManager
-→ CodexThread / Session → run_turn → Model / Tools
-```
-
-**下一章：ThreadManager 与 CodexThread。** 我们从“为什么需要一个会话管理器”出发，追踪一条 `thread/start` 请求的创建路径，了解会话是怎样被创建、引用和关闭的。
+读完这张图，你应该已经能大致解释一次任务是如何流动的：**用户提出目标，Runtime 组织工作，模型决定下一步，工具执行动作，状态系统记录过程，必要时再次进入循环。**
 
 ---
 
-## 本章源码索引
+## 这套教程会带你学到什么？
 
-- [CLI 入口 `cli/src/main.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/cli/src/main.rs)
-- [TUI `tui/src/lib.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/tui/src/lib.rs)
-- [App Server Client 设计说明](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/app-server-client/README.md)
-- [App Server `app-server/src/lib.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/app-server/src/lib.rs)
-- [Core `core/src/lib.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/lib.rs)
-- [ThreadManager](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/thread_manager.rs)
-- [CodexThread](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/codex_thread.rs)
-- [Turn Runtime](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/session/turn.rs)
+我们的目标不是背下 Codex 有多少个目录、多少个 Rust 类型，而是让你最终能够独立回答几个工程问题：
+
+**第一，Codex 是如何运转的？** 从用户输入到会话创建、模型请求、工具执行，再到结果返回，完整追踪一条任务链路。
+
+**第二，Codex 为什么这样设计？** 理解为什么需要 Thread、Session、工具路由、事件协议、执行隔离和状态管理，而不是把所有逻辑塞进一个循环。
+
+**第三，Codex 如何从单 Agent 走向复杂系统？** 看懂上下文管理、扩展机制、长期记忆、多 Agent 协作等能力怎样建立在核心 Runtime 之上。
+
+**第四，能不能自己构建一个简化版？** 学会把真实源码中的核心机制抽象出来，先实现小而清晰的教学模型，再理解生产实现为何复杂。
+
+### 我们将怎样学习？
+
+课程按理解难度逐步推进，而不是按源码目录逐个讲解：
+
+| 阶段 | 学习主题 | 要解决的问题 |
+| --- | --- | --- |
+| **01 · 架构认知** | Codex 整体架构 | 这是一个怎样的系统？ |
+| **02 · 运行时模型** | Thread、Session、Turn、Step | 一项任务由谁管理？ |
+| **03 · Agent 核心** | Agent Loop、模型、Context、Tools | Codex 如何思考并行动？ |
+| **04 · 执行与安全** | 命令执行、权限与 Sandbox | 如何安全地操作真实环境？ |
+| **05 · 状态与持续运行** | 事件通信、历史、持久化、压缩 | 为什么它可以交互、恢复和持续工作？ |
+| **06 · 扩展与高级系统** | Skills、MCP、Hooks、Multi-Agent、Memory 等 | 如何从基础 Agent 扩展到复杂系统？ |
+
+最后，我们会回到一次完整的真实任务，把前面学过的模块沿着源码调用链串起来。
+
+完整章节安排见：[课程大纲（codex00.md）](./codex00.md)。
+
+## 这套教程适合谁？
+
+适合了解一点编程、对 AI Agent 或 Codex 感兴趣，但面对大型开源项目不知道从哪里开始的读者。
+
+**不要求你一开始就会 Rust。** 我们会先用图解、简化示例和运行过程建立概念；真正需要阅读源码时，再引入对应的类型、函数与调用关系。
+
+这套教程有两个坚持：
+
+- **先回答“为什么需要这个设计”，再解释“源码如何实现”。**
+- **简化示例用于理解原理，真实源码用于验证架构，两者明确区分。**
+
+教程依据 [OpenAI 开源 Codex 仓库](https://github.com/openai/codex) 展开，源码阅读使用[固定教学基线](https://github.com/openai/codex/tree/014489466a1739c2c563cdfe57880c2c7c8680e3)，以减少持续更新带来的差异。这里研究的是公开仓库可见的实现，不代表覆盖所有未开源的服务端系统。
+
+---
+
+**接下来：Codex 的整体架构。** 我们将先认识用户入口、服务层与核心 Runtime 之间的边界，再逐步进入管理会话的 Thread 系统。
