@@ -477,7 +477,7 @@ Session / TurnContext
 
 **这章最重要的一句话：Codex 的 Agent Loop 不是“模型不断调用模型”，而是 Runtime 根据模型输出、工具观察和当前运行状态，决定何时继续、何时结束。**
 
-**下一章：[第 05 章：ModelClient——模型请求与流式响应（课程大纲）](../codex00.md)**。
+**下一章：[第 05 章：ModelClient——模型请求与流式响应](../05-model-client/README.zh.md)**。
 
 下一步，我们会深入本章暂时作为黑箱的 `ModelClientSession` 和模型流式响应，回答“Codex 究竟怎样把一次模型请求发送出去，并实时处理返回的不同事件”。
 
