@@ -9,7 +9,7 @@ Part 2  Agent Core
   04 [run_turn：真正的 Agent Loop](./04-agent-loop/README.zh.md)
   05 [ModelClient：模型请求与流式响应](./05-model-client/README.zh.md)
   06 [Context：Prompt 到底怎么构建](./06-context-prompt/README.zh.md)
-  07 Tool System：Spec / Registry / Router / Handler
+  07 [Tool System：Spec / Registry / Router / Handler](./07-tool-system/README.zh.md)
   08 一次 Shell Tool 的完整执行链
 
 Part 3  Execution & Safety
