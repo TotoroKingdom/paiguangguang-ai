@@ -1,5 +1,5 @@
 Part 0  Codex Architecture
-  01 Codex 是什么：整体进程与源码地图
+  01 [Codex 是什么：整体架构与运行主线](./01-codex-architecture/README.zh.md)
 
 Part 1  Runtime Model
   02 ThreadManager 与 CodexThread
