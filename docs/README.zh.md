@@ -125,7 +125,7 @@ Codex 在这里负责连接 **Model Client、Tool Router、执行环境和安全
 | --- | --- | --- |
 | **[04](./04-agent-loop/README.zh.md)** | [`run_turn`：Agent Loop](./04-agent-loop/README.zh.md) | 模型、工具和执行结果如何形成连续循环？ |
 | **[05](./05-model-client/README.zh.md)** | [ModelClient 与流式响应](./05-model-client/README.zh.md) | Runtime 如何请求模型、接收和处理流式事件？ |
-| **06** | Context 与 Prompt 构建 | Codex 怎样组织指令、项目知识、历史与当前输入？ |
+| **[06](./06-context-prompt/README.zh.md)** | [Context 与 Prompt 构建](./06-context-prompt/README.zh.md) | Codex 怎样组织指令、项目知识、历史与当前输入？ |
 | **07** | Tool System | 工具如何被声明、选择、路由和执行？ |
 | **08** | 一次 Shell 调用的完整链路 | 从模型提出命令到获得终端结果，中间发生了什么？ |
 
