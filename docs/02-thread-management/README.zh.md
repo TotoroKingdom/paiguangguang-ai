@@ -464,7 +464,7 @@ ThreadManager  —— 管理“有哪些运行中的会话”
 
 **本章的核心收获不是记住几个 Rust 类型，而是理解三种边界：会话身份、运行时对象、消息通道。**
 
-下一章：[第 03 章 · Session / Turn / Step（待编写）](../codex00.md)。
+下一章：[第 03 章 · Session / Turn / Step](../03-session-turn-step/README.zh.md)。
 
 我们会进入 `Session` 内部，回答一个更深入的问题：
 
