@@ -6,7 +6,7 @@ Part 1  Runtime Model
   03 [Session / Turn / Step](./03-session-turn-step/README.zh.md)
 
 Part 2  Agent Core
-  04 run_turn：真正的 Agent Loop
+  04 [run_turn：真正的 Agent Loop](./04-agent-loop/README.zh.md)
   05 ModelClient：模型请求与流式响应
   06 Context：Prompt 到底怎么构建
   07 Tool System：Spec / Registry / Router / Handler
