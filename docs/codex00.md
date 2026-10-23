@@ -13,7 +13,7 @@ Part 2  Agent Core
   08 [一次 Shell Tool 的完整执行链](./08-shell-execution/README.zh.md)
 
 Part 3  Execution & Safety
-  09 Permission / Approval / Sandbox / Exec
+  09 [Permission / Approval / Sandbox / Exec](./09-permission-sandbox/README.zh.md)
 
 Part 4  State & Product Runtime
   10 Op / Event：UI 与 Core 的通信模型
