@@ -7,7 +7,7 @@ Part 1  Runtime Model
 
 Part 2  Agent Core
   04 [run_turn：真正的 Agent Loop](./04-agent-loop/README.zh.md)
-  05 ModelClient：模型请求与流式响应
+  05 [ModelClient：模型请求与流式响应](./05-model-client/README.zh.md)
   06 Context：Prompt 到底怎么构建
   07 Tool System：Spec / Registry / Router / Handler
   08 一次 Shell Tool 的完整执行链
