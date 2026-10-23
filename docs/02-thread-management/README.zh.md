@@ -68,7 +68,7 @@ flowchart TD
 打开 [`core/src/thread_manager.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/core/src/thread_manager.rs#L251-L258)，你会找到：
 
 ```rust
-/// ThreadManager is responsible for creating threads and maintaining
+/// [`ThreadManager`] is responsible for creating threads and maintaining
 /// them in memory.
 pub struct ThreadManager {
     state: Arc<ThreadManagerState>,
