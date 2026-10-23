@@ -111,7 +111,7 @@ Codex 在这里负责连接 **Model Client、Tool Router、执行环境和安全
 
 | 章节 | 主题 | 你将理解 |
 | --- | --- | --- |
-| **01** | Codex 整体架构 | 从用户入口到 Agent Runtime，主要模块怎样协作？ |
+| **[01](./01-codex-architecture/README.zh.md)** | [Codex 整体架构](./01-codex-architecture/README.zh.md) | 从用户入口到 Agent Runtime，主要模块怎样协作？ |
 | **02** | ThreadManager 与 CodexThread | Codex 如何创建、管理和访问多个会话？ |
 | **03** | Session / Turn / Step | 一次任务为什么有多层生命周期？ |
 
@@ -198,4 +198,4 @@ Agent 不只是要“会做事”，还必须“知道能做什么，并记得�
 
 本教程以 [OpenAI 开源 Codex](https://github.com/openai/codex) 为研究对象，源码阅读采用[固定教学基线](https://github.com/openai/codex/tree/014489466a1739c2c563cdfe57880c2c7c8680e3)，以减少上游更新带来的差异。公开源码不等于所有产品或托管服务的完整实现。
 
-**从第 01 章开始：先看懂 Codex 这套系统，再进入它的源码。**
+**[进入第 01 章：Codex 整体架构 →](./01-codex-architecture/README.zh.md)**
