@@ -504,7 +504,7 @@ UnifiedExecRuntime / 执行后端
 
 **本章真正要掌握的不是执行一条 Shell 命令，而是理解“模型要求执行”与“操作系统实际执行”之间必须存在的完整、安全且可观测的控制链。**
 
-下一章：[第 09 章《Permission / Approval / Sandbox / Exec》（课程大纲）](../codex00.md)。
+下一章：[第 09 章《Permission / Approval / Sandbox / Exec》](../09-permission-sandbox/README.zh.md)。
 
 届时我们会进一步研究：**相同的命令为什么在某些上下文可以直接执行、某些需要审批、某些必须拒绝？Codex 如何将权限策略落实到不同执行环境？**
 
