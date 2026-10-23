@@ -480,7 +480,7 @@ All teaching assertions passed
 
 **最重要的结论：Context Engineering 不是“把所有信息拼进去”，而是在正确的作用域和结构下，让模型看到完成当前步骤真正需要的上下文。**
 
-下一章：[第 07 章《Tool System：Spec / Registry / Router / Handler》（课程大纲）](../codex00.md)。
+下一章：[第 07 章《Tool System：Spec / Registry / Router / Handler》](../07-tool-system/README.zh.md)。
 
 我们将继续研究：**模型看到了 `read_file` 这样的 ToolSpec 之后，Codex 到底怎样找到对应的处理器、校验请求并执行工具？**
 
