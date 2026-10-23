@@ -127,7 +127,7 @@ Codex 在这里负责连接 **Model Client、Tool Router、执行环境和安全
 | **[05](./05-model-client/README.zh.md)** | [ModelClient 与流式响应](./05-model-client/README.zh.md) | Runtime 如何请求模型、接收和处理流式事件？ |
 | **[06](./06-context-prompt/README.zh.md)** | [Context 与 Prompt 构建](./06-context-prompt/README.zh.md) | Codex 怎样组织指令、项目知识、历史与当前输入？ |
 | **[07](./07-tool-system/README.zh.md)** | [Tool System](./07-tool-system/README.zh.md) | 工具如何被声明、选择、路由和执行？ |
-| **08** | 一次 Shell 调用的完整链路 | 从模型提出命令到获得终端结果，中间发生了什么？ |
+| **[08](./08-shell-execution/README.zh.md)** | [一次 Shell 调用的完整链路](./08-shell-execution/README.zh.md) | 从模型提出命令到获得终端结果，中间发生了什么？ |
 
 **阶段成果：** 能跟踪一次真实工具调用，并尝试实现一个简化版 Coding Agent。
 
