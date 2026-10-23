@@ -3,7 +3,7 @@ Part 0  Codex Architecture
 
 Part 1  Runtime Model
   02 [ThreadManager 与 CodexThread](./02-thread-management/README.zh.md)
-  03 Session / Turn / Step
+  03 [Session / Turn / Step](./03-session-turn-step/README.zh.md)
 
 Part 2  Agent Core
   04 run_turn：真正的 Agent Loop
