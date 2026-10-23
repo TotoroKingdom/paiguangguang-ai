@@ -67,8 +67,8 @@ flowchart TD
     CONTEXT --> MODEL --> CHECK
     CHECK -->|是| TOOL
     TOOL -->|执行结果反馈| CONTEXT
-    CHECK -->|否| FINISH --> APP
-    APP --> DONE
+    CHECK -->|否| FINISH
+    FINISH -->|经事件返回客户端| DONE
 
     classDef input fill:#E9F2FF,stroke:#7AA3D8,color:#213F69
     classDef core fill:#EAF7F0,stroke:#76B596,color:#22543E
