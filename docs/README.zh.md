@@ -112,7 +112,7 @@ Codex 在这里负责连接 **Model Client、Tool Router、执行环境和安全
 | 章节 | 主题 | 你将理解 |
 | --- | --- | --- |
 | **[01](./01-codex-architecture/README.zh.md)** | [Codex 整体架构](./01-codex-architecture/README.zh.md) | 从用户入口到 Agent Runtime，主要模块怎样协作？ |
-| **02** | ThreadManager 与 CodexThread | Codex 如何创建、管理和访问多个会话？ |
+| **[02](./02-thread-management/README.zh.md)** | [ThreadManager 与 CodexThread](./02-thread-management/README.zh.md) | Codex 如何创建、管理和访问多个会话？ |
 | **03** | Session / Turn / Step | 一次任务为什么有多层生命周期？ |
 
 **阶段成果：** 能在脑海中建立 Codex 的运行时结构，不再把它看成一个单独的循环函数。
