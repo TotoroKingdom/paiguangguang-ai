@@ -772,7 +772,7 @@ Stage 1 针对不同 Rollout 生成独立输出；Stage 2 会整合/修改共享
 
 **这一章最重要的结论：Codex Memory 是“有来源的跨 Session 信息提炼与读取系统”，而不是简单地把所有对话写进向量库。真正可靠的 Memory 必须同时解决提取质量、全局整合、使用边界、引用证据、过期清理和权限隔离。**
 
-下一篇：[Agent Systems A6《Guardian》（课程大纲）](../codex00.md)。
+下一篇：[Agent Systems A6《Guardian》](../A6-guardian/README.zh.md)。
 
 我们将继续研究：**一个 Agent 如何在执行前、中、后受到独立审查，Guardian 怎样限制高风险操作，又如何与 Tool Approval、Hooks 及 Permission 系统配合？**
 
