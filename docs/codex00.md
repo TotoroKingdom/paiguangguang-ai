@@ -22,7 +22,7 @@ Part 4  State & Product Runtime
 
 Part 5  Capability Extensions
   A1 [AGENTS.md / Skills](./A1-agents-md-skills/README.zh.md)
-  A2 MCP / Plugins / Connectors
+  A2 [MCP / Plugins / Connectors](./A2-mcp-plugins-connectors/README.zh.md)
   A3 Hooks / Extension API
 
 Part 6  Agent Systems
