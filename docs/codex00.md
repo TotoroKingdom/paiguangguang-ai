@@ -26,7 +26,7 @@ Part 5  Capability Extensions
   A3 [Hooks / Extension API](./A3-hooks-extension-api/README.zh.md)
 
 Part 6  Agent Systems
-  A4 Multi-Agent
+  A4 [Multi-Agent](./A4-multi-agent/README.zh.md)
   A5 Memory
   A6 Guardian
   A7 Goal Runtime
