@@ -164,7 +164,7 @@ Agent 不只是要“会做事”，还必须“知道能做什么，并记得�
 | --- | --- | --- |
 | **[A4](./A4-multi-agent/README.zh.md)** | [Multi-Agent](./A4-multi-agent/README.zh.md) | 多个 Agent 如何创建、通信、分工与协作？ |
 | **[A5](./A5-memory/README.zh.md)** | [Memory](./A5-memory/README.zh.md) | 跨会话信息如何提取、保存并用于后续任务？ |
-| **A6** | Guardian | 更复杂的操作审查与授权机制如何设计？ |
+| **[A6](./A6-guardian/README.zh.md)** | [Guardian](./A6-guardian/README.zh.md) | 更复杂的操作审查与授权机制如何设计？ |
 | **A7** | Goal Runtime | 如何围绕目标完成情况管理持续执行？ |
 
 **阶段成果：** 从理解单 Agent 的运行循环，进一步理解复杂 Agent 系统的组织方式。
