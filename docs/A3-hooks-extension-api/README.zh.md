@@ -467,6 +467,39 @@ pub struct ExtensionRegistryBuilder<C: Sync> {
 
 ---
 
+### 工具执行的一次 Hook 时序
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as Agent Loop / ToolRouter
+    participant H as Hook Runtime
+    participant A as Approval / Sandbox
+    participant T as Tool Handler
+    participant X as Extension Contributors
+
+    M->>X: on_tool_dispatch
+    M->>H: PreToolUse(tool_name, tool_input)
+    H-->>M: Block / UpdatedInput / Context
+    alt Hook 明确阻断
+        M-->>X: on_tool_finish(blocked)
+    else 继续执行
+        M->>X: on_tool_start
+        M->>A: 检查适用的审批与资源权限
+        alt 被其他权限拒绝
+            A-->>M: Rejected
+        else 获准执行
+            M->>T: 执行有效的工具参数
+            T-->>M: 工具观察
+            M->>H: PostToolUse(input, response)
+            H-->>M: Feedback / Stop
+        end
+        M->>X: on_tool_finish
+    end
+```
+
+此图是生命周期**教学示意**：现实中审批、工具准备及部分 Contributor 的实际调用先后还取决于工具种类与具体执行路径；尤其不要将 `PreToolUse` 的“继续”理解成跳过其他安全门禁。
+
 ## 18. 动手实验：模拟事件匹配、控制与宿主注册
 
 本章完整 Python Demo：[`demo.py`](./demo.py)。
