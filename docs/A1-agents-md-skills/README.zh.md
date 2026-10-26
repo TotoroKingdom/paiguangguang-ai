@@ -758,7 +758,7 @@ AGENTS 和 Skill 都可能来自仓库文件、插件或执行环境资源。它
 
 **最重要的结论：AGENTS.md 提供当前项目的上下文约束，Skills 提供可复用的任务指导；两者都是进入模型上下文的资源，但都不是绕过 Runtime 执行策略的权限凭证。**
 
-下一篇：[扩展篇 A2《MCP / Plugins / Connectors》（课程大纲）](../codex00.md)。
+下一篇：[扩展篇 A2《MCP / Plugins / Connectors》](../A2-mcp-plugins-connectors/README.zh.md)。
 
 接下来我们将进一步追踪：**外部工具能力从哪里发现、如何建立连接、如何转换成 ToolSpec，以及为什么 Skill、MCP Tool 与 Plugin 不应该混为一谈。**
 
