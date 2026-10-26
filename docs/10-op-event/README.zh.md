@@ -491,7 +491,7 @@ CodexThread / SessionIo
 
 **这一章最重要的结论：Codex 的 UI 与 Core 不是一次同步函数调用，而是通过“操作提交 + 异步事件 + 必要时双向请求”协同工作。**
 
-下一章：[第 11 章《History / Rollout / Thread Store》（课程大纲）](../codex00.md)。
+下一章：[第 11 章《History / Rollout / Thread Store》](../11-history-rollout-thread-store/README.zh.md)。
 
 接下来追问：**既然事件会持续产生，Codex 如何保存它们、恢复会话、重建 UI 状态，并保证下一次打开仍然知道之前发生过什么？**
 
