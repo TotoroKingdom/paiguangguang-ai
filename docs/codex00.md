@@ -32,4 +32,4 @@ Part 6  Agent Systems
   A7 [Goal Runtime](./A7-goal-runtime/README.zh.md)
 
 Final
-  一条真实 Codex 请求的完整源码追踪
+  [一条真实 Codex 请求的完整源码追踪](./final-end-to-end-trace/README.zh.md)
