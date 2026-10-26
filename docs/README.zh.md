@@ -152,7 +152,7 @@ Agent 不只是要“会做事”，还必须“知道能做什么，并记得�
 | --- | --- | --- |
 | **[A1](./A1-agents-md-skills/README.zh.md)** | [AGENTS.md / Skills](./A1-agents-md-skills/README.zh.md) | 项目指令与可复用技能怎样影响 Agent 的行为？ |
 | **[A2](./A2-mcp-plugins-connectors/README.zh.md)** | [MCP / Plugins / Connectors](./A2-mcp-plugins-connectors/README.zh.md) | Codex 如何发现并接入外部工具和服务？ |
-| **A3** | Hooks / Extension API | 如何在既有运行流程中增加扩展能力？ |
+| **[A3](./A3-hooks-extension-api/README.zh.md)** | [Hooks / Extension API](./A3-hooks-extension-api/README.zh.md) | 如何在既有运行流程中增加扩展能力？ |
 
 **阶段成果：** 理解“扩展 Agent”与“修改核心循环”的区别。
 
