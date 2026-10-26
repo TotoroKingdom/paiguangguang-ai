@@ -21,7 +21,7 @@ Part 4  State & Product Runtime
   12 [Token Budget / Compaction](./12-token-budget-compaction/README.zh.md)
 
 Part 5  Capability Extensions
-  A1 AGENTS.md / Skills
+  A1 [AGENTS.md / Skills](./A1-agents-md-skills/README.zh.md)
   A2 MCP / Plugins / Connectors
   A3 Hooks / Extension API
 
