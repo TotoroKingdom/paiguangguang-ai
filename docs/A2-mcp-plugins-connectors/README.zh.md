@@ -744,7 +744,7 @@ MCP Server / Plugin / Connector 来源
 
 **A2 的核心结论：MCP 负责协议连接与工具能力，Plugin 管理扩展的来源与组合，Connector 表示可访问的外部服务集成；Codex 的 Runtime 再负责把这些能力经过可见性、注册、授权和快照绑定，安全地变成 Agent 可调用的工具。**
 
-下一篇：[扩展篇 A3《Hooks / Extension API》（课程大纲）](../codex00.md)。
+下一篇：[扩展篇 A3《Hooks / Extension API》](../A3-hooks-extension-api/README.zh.md)。
 
 我们将继续分析：**当外部能力已能被调用，Codex 又如何让第三方扩展在任务生命周期、工具执行前后、压缩、审批等边界挂载自定义逻辑？**
 
