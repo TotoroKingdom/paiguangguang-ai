@@ -745,7 +745,7 @@ Goal Runtime + Lifecycle
 
 **核心结论：Goal Runtime 的价值不在于无限循环，而在于持久化真实目标、合理控制续跑与资源成本、正确区分停续状态，并用当前权威证据审计最终完成。**
 
-下一篇：[最终实战《一条真实 Codex 请求的完整源码追踪》（课程大纲）](../codex00.md)。
+下一篇：[最终实战《一条真实 Codex 请求的完整源码追踪》](../final-end-to-end-trace/README.zh.md)。
 
 最终篇会把第 01–12 章以及 A1–A7 串联起来：**从用户提交请求、Session / Thread / Turn、Prompt、Model Stream、Tool Call、Approval / Guardian，到 Rollout、Memory 和 Goal Continuation 形成端到端源码地图与追踪实验。**
 
