@@ -639,7 +639,7 @@ All teaching assertions passed
 
 **一句话总结：Compaction 不是单纯“把聊天记录总结一下”，而是 Runtime 根据 Token 预算、模型能力与执行阶段，安全地重建当前有效上下文，并保证后续运行与持久化恢复能够衔接。**
 
-下一篇：[扩展篇 A1《AGENTS.md / Skills》（课程大纲）](../codex00.md)。
+下一篇：[扩展篇 A1《AGENTS.md / Skills》](../A1-agents-md-skills/README.zh.md)。
 
 至此，**核心 Runtime 主线第 01–12 章完成**。接下来进入可扩展能力篇，重点研究 Codex 怎样发现和注入项目指令、Skills 与其他外部能力。
 
