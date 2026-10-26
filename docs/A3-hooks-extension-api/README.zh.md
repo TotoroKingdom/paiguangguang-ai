@@ -705,7 +705,7 @@ All teaching assertions passed
 
 **最重要的结论：Hook 是事件驱动的扩展点，Extension API 是宿主拥有的类型化运行时扩展点；两者都必须嵌入已有的权限和执行生命周期，而不是绕开它们。**
 
-下一篇：[Agent Systems A4《Multi-Agent》（课程大纲）](../codex00.md)。
+下一篇：[Agent Systems A4《Multi-Agent》](../A4-multi-agent/README.zh.md)。
 
 接下来进入多 Agent 系统：**一个主 Agent 怎样分派子任务、管理 Child Thread、并发等待、合并观察与控制执行隔离？**
 
