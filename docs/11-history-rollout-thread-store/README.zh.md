@@ -602,7 +602,7 @@ Session / Runtime
 
 **第 11 章最重要的一句话：历史是为推理准备的有效上下文，Rollout 是可回放的运行事实，ThreadStore 则负责这些事实的持久化、读取和恢复边界。**
 
-下一章：[第 12 章《Token Budget / Compaction》（课程大纲）](../codex00.md)。
+下一章：[第 12 章《Token Budget / Compaction》](../12-token-budget-compaction/README.zh.md)。
 
 接下来研究：**当历史越来越长、上下文窗口即将耗尽时，Codex 怎样选择保留什么、何时压缩、压缩后如何继续执行？**
 
