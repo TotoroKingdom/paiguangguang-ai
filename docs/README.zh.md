@@ -139,7 +139,7 @@ Agent 不只是要“会做事”，还必须“知道能做什么，并记得�
 | --- | --- | --- |
 | **[09](./09-permission-sandbox/README.zh.md)** | [Permission / Approval / Sandbox / Exec](./09-permission-sandbox/README.zh.md) | 权限、人工审批和操作系统隔离各自解决什么问题？ |
 | **[10](./10-op-event/README.zh.md)** | [Op / Event 与客户端通信](./10-op-event/README.zh.md) | 界面怎样获取进度、工具调用和任务状态？ |
-| **11** | History / Rollout / Thread Store | Codex 如何保存、恢复、分叉和管理会话历史？ |
+| **[11](./11-history-rollout-thread-store/README.zh.md)** | [History / Rollout / Thread Store](./11-history-rollout-thread-store/README.zh.md) | Codex 如何保存、恢复、分叉和管理会话历史？ |
 | **12** | Token Budget / Compaction | 上下文越来越长时，Runtime 如何控制模型输入？ |
 
 **阶段成果：** 不只看懂 Agent Demo，还能解释 Codex 作为长期运行软件系统需要的工程机制。
