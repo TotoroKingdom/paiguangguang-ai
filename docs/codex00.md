@@ -18,7 +18,7 @@ Part 3  Execution & Safety
 Part 4  State & Product Runtime
   10 [Op / Event：UI 与 Core 的通信模型](./10-op-event/README.zh.md)
   11 [History / Rollout / Thread Store](./11-history-rollout-thread-store/README.zh.md)
-  12 Token Budget / Compaction
+  12 [Token Budget / Compaction](./12-token-budget-compaction/README.zh.md)
 
 Part 5  Capability Extensions
   A1 AGENTS.md / Skills
