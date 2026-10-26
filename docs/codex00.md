@@ -16,7 +16,7 @@ Part 3  Execution & Safety
   09 [Permission / Approval / Sandbox / Exec](./09-permission-sandbox/README.zh.md)
 
 Part 4  State & Product Runtime
-  10 Op / Event：UI 与 Core 的通信模型
+  10 [Op / Event：UI 与 Core 的通信模型](./10-op-event/README.zh.md)
   11 History / Rollout / Thread Store
   12 Token Budget / Compaction
 
