@@ -741,7 +741,7 @@ All teaching assertions passed
 
 **一句话总结：Guardian 是对特定动作、当前授权与执行上下文进行独立审查的运行能力；真正可靠的实现必须同时验证评分证据时效、审查结果、授权版本、失败语义以及后续真实资源权限。**
 
-下一篇：[Agent Systems A7《Goal Runtime》（课程大纲）](../codex00.md)。
+下一篇：[Agent Systems A7《Goal Runtime》](../A7-goal-runtime/README.zh.md)。
 
 接下来我们将研究：**长期目标是否能独立于当前 Turn 持续运行？目标任务如何建模、跟踪进度、管理等待与失败，以及如何与 Multi-Agent、Memory 和 Guardian 对齐？**
 
