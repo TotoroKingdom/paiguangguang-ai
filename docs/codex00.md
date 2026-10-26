@@ -29,7 +29,7 @@ Part 6  Agent Systems
   A4 [Multi-Agent](./A4-multi-agent/README.zh.md)
   A5 [Memory](./A5-memory/README.zh.md)
   A6 [Guardian](./A6-guardian/README.zh.md)
-  A7 Goal Runtime
+  A7 [Goal Runtime](./A7-goal-runtime/README.zh.md)
 
 Final
   一条真实 Codex 请求的完整源码追踪
