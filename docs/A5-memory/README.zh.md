@@ -435,6 +435,53 @@ Phase 2 会先同步本次选择的输入文件，并检查与上一次成功 Ba
 
 ---
 
+### 一次完整 Memory 生成与读取时序
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant S as Root Session
+    participant W as Memory Startup Task
+    participant DB as State DB
+    participant M as Extraction Model
+    participant FS as Memory Workspace
+    participant C as Consolidation Agent
+    participant N as Next Session
+
+    S->>W: 启动 Memory 后台任务
+    W->>DB: Phase 1 Claim eligible rollouts
+    DB-->>W: 带 Lease 的任务集合
+    par 有界并发抽取
+        W->>M: Rollout A 的筛选证据
+        M-->>W: Stage1Output A
+    and 独立 Rollout
+        W->>M: Rollout B 的筛选证据
+        M-->>W: Stage1Output B
+    end
+    W->>DB: 校验、脱敏并保存 Stage 1
+    W->>DB: Claim 全局 Phase 2 Lock
+    DB-->>W: Owner Token
+    W->>DB: 读取筛选后的记忆记录
+    W->>FS: 同步摘要及生成 Workspace Diff
+    alt 有变化或产物需要修复
+        W->>C: 创建受限整合子 Agent
+        C->>FS: 生成 memory_summary.md
+        C-->>W: 终态与产物
+        W->>FS: 校验产物并重置 Git Baseline
+    else 没有变化且产物有效
+        W->>W: 跳过模型整合
+    end
+    W->>DB: 提交 Phase 2 结果及水位
+    N->>FS: 读取受限大小的 memory_summary.md
+    FS-->>N: Developer 级历史索引
+    opt 具体历史会改变答案
+        N->>FS: 读取选中的 rollout_summaries 文件
+        FS-->>N: 有来源的历史细节
+    end
+```
+
+这是固定源码中的**控制流教学图**：它省略了 Job 重试、Rate Limit、续租、模型失败、V1/V2 双写与关闭失败等分支。Phase 1 和 Phase 2 的状态提交也不等于“当前 UI 可以立即读取到一份绝对正确的长期记忆”。
+
 ## 16. 读取路径：新 Session 如何使用 Memory？
 
 读取路径位于 [`ext/memories/src/extension.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/ext/memories/src/extension.rs#L42-L100) 和 [`ext/memories/src/prompts.rs`](https://github.com/openai/codex/blob/014489466a1739c2c563cdfe57880c2c7c8680e3/codex-rs/ext/memories/src/prompts.rs#L31-L67)。
