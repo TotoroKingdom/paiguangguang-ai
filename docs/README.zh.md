@@ -150,7 +150,7 @@ Agent 不只是要“会做事”，还必须“知道能做什么，并记得�
 
 | 章节 | 主题 | 你将理解 |
 | --- | --- | --- |
-| **A1** | AGENTS.md / Skills | 项目指令与可复用技能怎样影响 Agent 的行为？ |
+| **[A1](./A1-agents-md-skills/README.zh.md)** | [AGENTS.md / Skills](./A1-agents-md-skills/README.zh.md) | 项目指令与可复用技能怎样影响 Agent 的行为？ |
 | **A2** | MCP / Plugins / Connectors | Codex 如何发现并接入外部工具和服务？ |
 | **A3** | Hooks / Extension API | 如何在既有运行流程中增加扩展能力？ |
 
