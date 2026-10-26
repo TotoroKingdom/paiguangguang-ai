@@ -28,7 +28,7 @@ Part 5  Capability Extensions
 Part 6  Agent Systems
   A4 [Multi-Agent](./A4-multi-agent/README.zh.md)
   A5 [Memory](./A5-memory/README.zh.md)
-  A6 Guardian
+  A6 [Guardian](./A6-guardian/README.zh.md)
   A7 Goal Runtime
 
 Final
