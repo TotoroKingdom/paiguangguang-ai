@@ -17,7 +17,7 @@ Part 3  Execution & Safety
 
 Part 4  State & Product Runtime
   10 [Op / Event：UI 与 Core 的通信模型](./10-op-event/README.zh.md)
-  11 History / Rollout / Thread Store
+  11 [History / Rollout / Thread Store](./11-history-rollout-thread-store/README.zh.md)
   12 Token Budget / Compaction
 
 Part 5  Capability Extensions
