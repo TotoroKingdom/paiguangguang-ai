@@ -622,7 +622,7 @@ All teaching assertions passed
 
 **这一章的核心结论：Multi-Agent 是由线程树、控制接口、消息交付、状态观测与隔离策略共同构成的运行系统；并不是让模型多次请求 `spawn_agent` 就自动实现可靠协作。**
 
-下一篇：[Agent Systems A5《Memory》（课程大纲）](../codex00.md)。
+下一篇：[Agent Systems A5《Memory》](../A5-memory/README.zh.md)。
 
 接下来研究 Codex 如何跨 Session 保存有效记忆、检索既有知识，以及 Memory 与 History、Rollout、Context 之间的差别。
 
