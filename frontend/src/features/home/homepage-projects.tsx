@@ -6,6 +6,7 @@ import type { ActiveProject, CompletedProject } from "./homepage-data";
 function ProjectCard({ project }: { project: CompletedProject | ActiveProject }) {
   const image = "image" in project ? project.image : undefined;
   const external = project.href?.startsWith("https://");
+  const cardLink = "cardLink" in project && project.cardLink;
 
   return (
     <NeumorphicCard className={`brand-project${image ? " brand-project--featured" : " brand-project--text"}`}>
@@ -21,18 +22,24 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
             {project.status} · {project.status === "BUILT" ? "阶段已完成" : "在建"}
           </span>
         </div>
-        <h3>{project.name}</h3>
+        <h3 id={cardLink ? `project-${project.id}-title` : undefined}>{project.name}</h3>
         <p className="brand-project__description">{project.description}</p>
         <ul aria-label={project.status === "BUILT" ? "已完成的工程能力" : "当前投入方向"}>
           {project.items.map((item) => <li key={item}>{item}</li>)}
         </ul>
-        {project.href && (
+        {cardLink && project.href && (
+          <span id={`project-${project.id}-action`} className="brand-project__link">{project.linkText} <span aria-hidden="true">→</span></span>
+        )}
+        {project.href && !cardLink && (
           <a className="brand-project__link" href={project.href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>
             {project.linkText ?? "查看项目"} <span aria-hidden="true">{external ? "↗" : "→"}</span>
             {external && <span className="sr-only">（新标签页打开）</span>}
           </a>
         )}
       </div>
+      {cardLink && project.href && (
+        <a className="brand-project__card-link" href={project.href} aria-labelledby={`project-${project.id}-title project-${project.id}-action`} />
+      )}
     </NeumorphicCard>
   );
 }
