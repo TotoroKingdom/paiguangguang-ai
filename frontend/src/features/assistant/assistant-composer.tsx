@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { getCapabilities } from "./data";
 import { useAssistant } from "./provider";
 import { AssistantIcon } from "./assistant-icon";
@@ -22,6 +22,14 @@ export function AssistantComposer() {
   const generating =
     conversation?.messages.some((message) => message.status === "generating") ?? false;
   const draft = state.draft;
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const input = textarea.current;
+    if (!input) return;
+    input.style.height = "0px";
+    input.style.height = `${Math.min(input.scrollHeight, 200)}px`;
+    input.style.overflowY = input.scrollHeight > 200 ? "auto" : "hidden";
+  }, [draft.text]);
   const attachments = state.files.filter((file) => draft.fileIds.includes(file.id));
   const match = draft.text.match(/(?:^|\s)@([^\s@]*)$/);
   const suggestions = match
@@ -118,9 +126,10 @@ export function AssistantComposer() {
           询问任何问题
         </label>
         <textarea
+          ref={textarea}
           id="assistant-message"
           value={draft.text}
-          rows={2}
+          rows={1}
           maxLength={6000}
           placeholder="询问任何问题，或输入 @ 选择能力…"
           onChange={(event) => {

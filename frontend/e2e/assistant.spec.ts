@@ -9,7 +9,7 @@ test.beforeEach(async ({ page }) => {
   externalRequests = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("request", (request) => {
-    if (/^https?:/.test(request.url()) && !request.url().startsWith("http://127.0.0.1:3100/"))
+    if (/^https?:/.test(request.url()) && !request.url().startsWith(`http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? 3100}/`))
       externalRequests.push(request.url());
   });
 });
@@ -447,4 +447,34 @@ test("capture desktop and mobile visual evidence", async ({ page }, testInfo) =>
     path: path.join(directory, `${prefix}-assistant-chat.png`),
     animations: "disabled",
   });
+});
+
+
+test("composer grows naturally, keeps a single focus surface, and respects keyboard input", async ({ page }, testInfo) => {
+  await ready(page);
+  const input = page.getByRole("textbox", { name: "询问任何问题" });
+  const sendButton = page.getByRole("button", { name: "发送消息", exact: true });
+  await expect(sendButton).toBeDisabled();
+  await input.focus();
+  await expect(input).toHaveCSS("outline-style", "none");
+  await page.screenshot({ path: testInfo.outputPath("assistant-polished.png"), animations: "disabled" });
+  const initialHeight = await input.evaluate((element) => element.clientHeight);
+  await input.fill("第一行");
+  await input.press("Shift+Enter");
+  await input.press("Shift+Enter");
+  await input.press("Shift+Enter");
+  await input.press("Shift+Enter");
+  await input.press("Shift+Enter");
+  await input.press("Shift+Enter");
+  await input.pressSequentially("继续整理");
+  await expect(input).toHaveValue(/第一行\n/);
+  expect(await input.evaluate((element) => element.clientHeight)).toBeGreaterThan(initialHeight);
+  await input.fill("短问题");
+  await expect.poll(() => input.evaluate((element) => element.clientHeight)).toBe(initialHeight);
+  await input.press("Enter");
+  await expect(page).toHaveURL(/\/assistant\/chat\//);
+  await expect(page.getByRole("article", { name: "用户消息", exact: true }).last()).toContainText("短问题");
+  await expect(input).toHaveValue("");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(page.locator(".as-composer")).toHaveCSS("transition-duration", "0s");
 });

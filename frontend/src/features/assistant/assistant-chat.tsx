@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
@@ -36,7 +37,13 @@ const entries = [
     href: "/assistant/agents",
     orbit: "规划 · 调用 · 总结",
   },
-];
+] as const;
+const capabilityArtwork = {
+  tool: "/assistant/icons/tool.png",
+  skill: "/assistant/icons/skill.png",
+  mcp: "/assistant/icons/mcp.png",
+  agent: "/assistant/icons/agent.png",
+} as const;
 const examples = [
   { label: "搜索 Agent 最新进展", text: "查一下最近一周的 AI Agent 新闻", capabilityId: "tool-1" },
   {
@@ -54,9 +61,24 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
   const { state, dispatch, retryMessage } = useAssistant();
   const conversation = state.conversations.find((c) => c.id === conversationId);
   const end = useRef<HTMLDivElement>(null);
+  const followOutput = useRef(true);
   const last = conversation?.messages[conversation.messages.length - 1];
   useEffect(() => {
-    end.current?.scrollIntoView?.({ block: "end", behavior: "instant" as ScrollBehavior });
+    followOutput.current = true;
+    const viewport = document.getElementById("assistant-main");
+    if (!viewport) return;
+    const onScroll = () => {
+      followOutput.current = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+    };
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    return () => viewport.removeEventListener("scroll", onScroll);
+  }, [conversationId]);
+  useEffect(() => {
+    if (!followOutput.current) return;
+    const frame = requestAnimationFrame(() => {
+      end.current?.scrollIntoView?.({ block: "end", behavior: "instant" as ScrollBehavior });
+    });
+    return () => cancelAnimationFrame(frame);
   }, [last?.content, last?.status, conversationId]);
   if (conversationId && !conversation)
     return (
@@ -82,14 +104,15 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
           {entries.map((entry) => (
             <Link className={`as-entry as-entry--${entry.kind}`} href={entry.href} key={entry.kind}>
               <div className="as-entry-art">
-                <span className="as-art-circle as-art-circle--one" />
-                <span className="as-art-circle as-art-circle--two" />
-                <span className="as-art-icon">
-                  <AssistantIcon name={entry.kind} size={57} />
-                </span>
-                <span className="as-art-dot">
-                  <AssistantIcon name="spark" size={17} />
-                </span>
+                <Image
+                  className="as-art-image"
+                  src={capabilityArtwork[entry.kind]}
+                  width={170}
+                  height={110}
+                  alt=""
+                  priority
+                  unoptimized
+                />
               </div>
               <h2>{entry.title}</h2>
               <p>{entry.text}</p>

@@ -20,10 +20,10 @@ const aliases: Record<string, string> = {
 };
 const paths: Record<string, string> = {
   search: "m21 21-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z",
-  tool: "m14 6 4-4a6 6 0 0 1-7 8L4 19a2 2 0 0 1-3-3l9-7a6 6 0 0 1 8-7l-4 4Z",
-  skill: "M12 5C8 2 4 3 2 4v16c4-2 7-1 10 1m0-16c4-3 8-2 10-1v16c-4-2-7-1-10 1V5Z",
-  mcp: "M8 2v5m8-5v5M5 7h14v3a7 7 0 0 1-14 0V7Zm7 10v5",
-  agent: "M12 2v3M8 2h8M4 8h16v12H4V8ZM1 12v4m22-4v4M8 12v3m8-3v3m-7 3h6",
+  tool: "M14.5 6.5 18 3a6 6 0 0 0-7.6 7.6l-7 7a2.1 2.1 0 0 0 3 3l7-7A6 6 0 0 0 21 6l-3.5 3.5-3-3Z",
+  skill: "M12 5.5C9 3.4 5.3 3.2 2 4.6v15c3.3-1.4 7-1.2 10 .9m0-15c3-2.1 6.7-2.3 10-.9v15c-3.3-1.4-7-1.2-10 .9v-15Z",
+  mcp: "M8 2.5v5m8-5v5M5 7.5h14v3a7 7 0 0 1-14 0v-3Zm7 10v4",
+  agent: "M12 3v4M8 3h8M4 8h16v12H4V8ZM1.5 12v4m21-4v4M8 12v3m8-3v3m-7 2h6",
   file: "M14 2H4v20h16V8l-6-6Zm0 0v6h6M8 13h8m-8 4h5",
   chat: "M21 11a9 9 0 0 1-9 9H6l-4 2 1-6a9 9 0 1 1 18-5Z",
   plus: "M12 4v16M4 12h16",
@@ -68,7 +68,7 @@ export function AssistantIcon({
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.65"
+      strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
       className={className}

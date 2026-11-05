@@ -18,6 +18,8 @@ const channel =
     ? "chrome"
     : undefined);
 
+const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -27,7 +29,7 @@ export default defineConfig({
   reporter: [["list"], ["html", { open: "never" }]],
   use: {
     channel,
-    baseURL: "http://127.0.0.1:3100",
+    baseURL: `http://127.0.0.1:${port}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
   },
@@ -44,8 +46,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
-    url: "http://127.0.0.1:3100/assistant",
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
+    url: `http://127.0.0.1:${port}/assistant`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },

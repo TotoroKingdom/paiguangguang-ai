@@ -31,7 +31,8 @@
   transition:
     background-color 0.15s,
     border-color 0.15s,
-    box-shadow 0.15s;
+    box-shadow 0.15s,
+    transform 0.2s ease;
 }
 .assistant-app button,
 .assistant-dialog button {
@@ -46,7 +47,7 @@
   width: 258px;
   flex: 0 0 258px;
   padding: 22px 14px 15px;
-  background: linear-gradient(155deg, #f4f5f7 0%, #f8f9fb 62%, #f1f3f7 100%);
+  background: #f9f9f9;
   border-right: 1px solid #eceef2;
   display: flex;
   flex-direction: column;
@@ -110,7 +111,7 @@
   white-space: nowrap;
 }
 .as-nav-link svg {
-  color: #606a7a;
+  color: #535965;
 }
 .as-nav-link:hover {
   background: #eceff4;
@@ -377,80 +378,42 @@
   margin: 36px auto 0;
 }
 .as-entry {
-  --tone: #397ccc;
-  --tone-soft: #edf5ff;
+  --tone: #4c72ad;
   position: relative;
   min-width: 0;
+  transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease;
   padding: 20px 12px 18px;
   border: 1px solid #e6e9f0;
   border-radius: 20px;
-  background: linear-gradient(155deg, #fff 10%, #fcfdff);
+  background: #fff;
   text-align: center;
   box-shadow: 0 4px 14px rgba(38, 54, 90, 0.015);
 }
 .as-entry--skill {
-  --tone: #9871dd;
-  --tone-soft: #f5efff;
+  --tone: #a06ed3;
 }
 .as-entry--mcp {
-  --tone: #4d87e4;
-  --tone-soft: #edf5ff;
+  --tone: #4b79b7;
 }
 .as-entry--agent {
-  --tone: #48a786;
-  --tone-soft: #edfaf4;
+  --tone: #4aa883;
 }
 .as-entry:hover {
   border-color: var(--tone);
   box-shadow: 0 10px 25px #1e3b6810;
+  transform: translateY(-3px);
 }
 .as-entry-art {
-  height: 112px;
+  height: 116px;
   position: relative;
   display: grid;
   place-items: center;
-  color: var(--tone);
 }
-.as-art-circle {
-  position: absolute;
-  border: 1px solid var(--tone);
-  opacity: 0.13;
-  border-radius: 50%;
-  transform: rotate(-28deg);
-}
-.as-art-circle--one {
-  width: 112px;
-  height: 68px;
-}
-.as-art-circle--two {
-  width: 82px;
-  height: 108px;
-  transform: rotate(25deg);
-  opacity: 0.08;
-}
-.as-art-icon {
-  width: 85px;
-  height: 85px;
-  background: radial-gradient(circle at 30% 20%, #fff 5%, var(--tone-soft) 70%);
-  border: 1px solid #ffffff;
-  border-radius: 24px;
-  display: grid;
-  place-items: center;
-  box-shadow: 0 10px 20px #4968a10c;
-  transform: rotate(-6deg);
-}
-.as-art-dot {
-  position: absolute;
-  right: calc(50% - 55px);
-  top: 9px;
-  width: 29px;
-  height: 29px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--tone-soft);
-  transform: rotate(12deg);
-  border: 2px solid #fff;
+.as-art-image {
+  display: block;
+  width: 170px;
+  height: 110px;
+  object-fit: contain;
 }
 .as-entry h2 {
   font-size: 18px;
@@ -516,35 +479,43 @@
 }
 .as-composer {
   position: relative;
-  width: min(100%, 1040px);
+  width: min(100%, 900px);
   margin: 0 auto;
-  border: 1px solid #dfe4ec;
-  box-shadow: 0 3px 10px #1d3b6610;
-  border-radius: 19px;
-  padding: 13px 16px 11px;
-  background: #fff;
+  border: 1px solid #e9e9e9;
+  box-shadow: 0 2px 8px #00000004;
+  border-radius: 28px;
+  padding: 18px 16px 12px;
+  background: #f4f4f4;
+  transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
 }
 .as-composer:focus-within {
-  border-color: #a7bce9;
-  box-shadow: 0 3px 16px #356cff0c;
+  border-color: #dedede;
+  box-shadow: 0 2px 12px #00000006;
+  background: #f7f7f7;
 }
 .as-composer textarea {
   display: block;
   resize: none;
   width: 100%;
-  max-height: 120px;
-  min-height: 48px;
+  max-height: 200px;
+  min-height: 28px;
   border: 0;
-  padding: 0 4px;
+  padding: 0 6px;
   background: transparent;
   font: inherit;
-  font-size: 14px;
-  line-height: 1.8;
-  color: #38465e;
-  outline: 0;
+  font-size: 16px;
+  line-height: 1.75;
+  color: #242424;
+  outline: none;
+  box-shadow: none;
+  scrollbar-width: thin;
+}
+.assistant-app .as-composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 .as-composer textarea::placeholder {
-  color: #a0a9b7;
+  color: #8f8f8f;
 }
 .as-composer-toolbar,
 .as-composer-tools {
@@ -554,12 +525,12 @@
 }
 .as-composer-toolbar {
   justify-content: space-between;
-  margin-top: 6px;
+  margin-top: 14px;
 }
 .as-attach-button {
-  width: 29px;
-  height: 29px;
-  border: 1px solid #e2e6ed;
+  width: 34px;
+  height: 34px;
+  border: 0;
   border-radius: 50%;
   color: #7f8a9c;
 }
@@ -599,15 +570,18 @@
   flex-shrink: 0;
   border: 0;
   border-radius: 50%;
-  background: #222c3b;
+  background: #171717;
+  transition: transform 160ms ease, background-color 160ms ease;
   color: #fff;
 }
 .as-send-button:hover {
-  background: #3468eb;
+  background: #343434;
+  transform: scale(1.04);
 }
 .as-send-button:disabled {
-  color: #a5afbc;
-  background: #eff2f7;
+  color: #fff;
+  background: #d7d7d7;
+  transform: none;
 }
 .as-composer-caption {
   margin: 9px 0 0;
@@ -1188,16 +1162,9 @@
   .as-entry-art {
     height: 82px;
   }
-  .as-art-icon {
-    width: 65px;
-    height: 65px;
-  }
-  .as-art-icon svg {
-    width: 43px;
-    height: 43px;
-  }
-  .as-art-circle--one {
-    width: 90px;
+  .as-art-image {
+    width: 142px;
+    height: 92px;
   }
   .as-entry small {
     margin-top: 10px;
@@ -1310,33 +1277,9 @@
     align-self: center;
     margin-right: 12px;
   }
-  .as-art-icon {
-    width: 58px;
-    height: 58px;
-    border-radius: 18px;
-  }
-  .as-art-icon svg {
-    width: 37px;
-    height: 37px;
-  }
-  .as-art-circle--one {
-    width: 66px;
-    height: 45px;
-  }
-  .as-art-circle--two {
-    width: 47px;
-    height: 70px;
-  }
-  .as-art-dot {
-    width: 22px;
-    height: 22px;
-    right: -2px;
-    top: 6px;
-    border-radius: 7px;
-  }
-  .as-art-dot svg {
-    width: 12px;
-    height: 12px;
+  .as-art-image {
+    width: 112px;
+    height: 72px;
   }
   .as-entry h2 {
     margin: 2px 0 6px;
@@ -1366,12 +1309,12 @@
     padding: 7px 12px 9px;
   }
   .as-composer {
-    border-radius: 15px;
-    padding: 10px 12px;
+    border-radius: 24px;
+    padding: 14px 12px 10px;
   }
   .as-composer textarea {
-    font-size: 13px;
-    min-height: 42px;
+    font-size: 16px;
+    min-height: 28px;
   }
   .as-composer-tools {
     gap: 3px;
@@ -1459,4 +1402,14 @@
 .as-text-button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .assistant-app *,
+  .assistant-app *::before,
+  .assistant-app *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
 }
