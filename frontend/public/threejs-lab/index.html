@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#070c18" />
+  <title>Three.js · AI 机器人实验室</title>
+  <meta name="description" content="无需外部模型文件：用 Three.js 纯代码生成可眨眼、挥手、思考的 3D 智能机器人。" />
+  <style>
+    :root { --bg:#070c18; --text:#eaf4ff; --muted:#8c9aae; --line:#ffffff16; --cyan:#67e8f9; --blue:#6585ff; --panel:#101a2ad9; --accent:#67e8f9; color-scheme:dark; }
+    * { box-sizing:border-box; }
+    html,body { margin:0; min-height:100%; font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); }
+    body { overflow-x:hidden; }
+    button, input { font:inherit; }
+    button { cursor:pointer; }
+    .shell { min-height:100vh; position:relative; overflow:hidden; background:radial-gradient(ellipse 70% 90% at 78% 44%,#12213e 0%,#0a1226 45%,#070c18 100%); }
+    .shell:before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.27; background-image:linear-gradient(#8ca7cb0d 1px,transparent 1px),linear-gradient(90deg,#8ca7cb0d 1px,transparent 1px); background-size:48px 48px; mask-image:linear-gradient(90deg,transparent 25%,#000 90%); }
+    .layout { max-width:1560px; margin:auto; min-height:100vh; display:grid; grid-template-columns:362px minmax(0,1fr) 280px; grid-template-rows:auto 1fr auto; gap:0; position:relative; z-index:1; }
+    .topbar { grid-column:1/-1; padding:27px 34px 14px; display:flex; justify-content:space-between; align-items:center; gap:14px; }
+    .brand { display:flex; gap:12px; align-items:center; font-weight:730; font-size:14px; letter-spacing:.04em; }
+    .mark { width:31px; height:31px; display:grid; place-items:center; border:1px solid #83deff69; border-radius:10px; background:linear-gradient(145deg,#172b48,#0a1425); box-shadow:inset 0 0 12px #67e8f924; }
+    .mark svg { width:19px; height:19px; }
+    .top-meta { font-size:11px; color:#a8b5c9; display:flex; gap:10px; align-items:center; letter-spacing:.075em; }
+    .status-dot { width:6px; height:6px; background:#3fe2ab; border-radius:50%; box-shadow:0 0 10px #3fe2ab; }
+    .left { padding:56px 24px 30px 34px; z-index:2; }
+    .eyebrow { display:inline-flex; align-items:center; gap:8px; font-size:10px; font-weight:700; color:#7bdbe7; letter-spacing:.22em; text-transform:uppercase; }
+    .eyebrow:before { content:""; width:19px; height:1px; background:var(--cyan); }
+    h1 { font-weight:780; letter-spacing:-.065em; line-height:1.12; font-size:clamp(39px,3.8vw,53px); margin:22px 0 20px; }
+    .gradient { background:linear-gradient(103deg,#78efff 0%,#91b7ff 52%,#d3aaff 100%); background-clip:text; -webkit-background-clip:text; color:transparent; }
+    .intro { color:#a1aec3; font-size:14px; line-height:1.95; margin:0 0 26px; max-width:288px; }
+    .intro strong { color:#eef5ff; font-weight:650; }
+    .pill-row { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:35px; }
+    .pill { border:1px solid #82b7d539; color:#a6d5e7; background:#13253a80; padding:7px 10px; font-size:10px; letter-spacing:.035em; border-radius:999px; }
+    .separator { height:1px; background:linear-gradient(90deg,#9ab4cf34,transparent); margin:0 0 24px; }
+    .section-title { color:#c6d7eb; font-size:11px; font-weight:740; letter-spacing:.14em; display:flex; justify-content:space-between; margin-bottom:17px; }
+    .section-title span { color:#667e9e; font-weight:500; }
+    .shape-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .shape-button { border:1px solid #ffffff17; background:#111d3194; padding:12px 4px 10px; color:#9aa9c0; border-radius:11px; min-width:0; display:flex; align-items:center; flex-direction:column; gap:9px; font-size:11px; transition:.2s; }
+    .shape-button svg { width:28px; height:28px; fill:none; stroke:currentColor; stroke-width:1.35; }
+    .shape-button:hover { border-color:#94d3ff87; color:#f3ffff; transform:translateY(-2px); }
+    .shape-button.active { border-color:#77e9ff93; color:#b5f8ff; background:linear-gradient(160deg,#15304e,#101e35); box-shadow:inset 0 1px 0 #a4efff27,0 0 22px #2ed8ff0b; }
+    .control-row { display:flex; justify-content:space-between; font-size:12px; color:#c3d1e4; margin:24px 0 10px; }
+    .control-row output { color:#83f0ff; font-variant-numeric:tabular-nums; font-size:12px; }
+    input[type=range] { width:100%; height:4px; accent-color:#72e1f7; cursor:pointer; }
+    .switch-row { display:flex; gap:12px; justify-content:space-between; margin-top:25px; font-size:12px; color:#bfcee1; align-items:center; }
+    .switch { width:37px; height:21px; padding:3px; border:1px solid #6fe0f35c; border-radius:999px; background:#1a4455; transition:background .2s; }
+    .switch:after { content:""; display:block; width:13px; height:13px; border-radius:50%; background:#8ff6ff; margin-left:16px; transition:margin-left .2s; box-shadow:0 0 8px #5ceeff52; }
+    .switch.off { background:#273045; border-color:#57677a; }
+    .switch.off:after { margin-left:0; background:#8e9aab; box-shadow:none; }
+    .swatch-row { display:flex; gap:10px; margin-top:15px; }
+    .swatch { border:2px solid transparent; width:30px; height:30px; border-radius:50%; background:transparent; padding:3px; }
+    .swatch i { display:block; height:20px; width:20px; border-radius:50%; }
+    .swatch.active { border-color:#c8eeff; }
+    .scene-area { min-height:570px; position:relative; }
+    #scene { position:absolute; inset:0; z-index:0; cursor:grab; touch-action:none; }
+    #scene:active { cursor:grabbing; }
+    #scene canvas { width:100%; height:100%; display:block; outline:none; }
+    .orbit-label { position:absolute; z-index:1; pointer-events:none; border-left:1px solid #80e9f559; padding-left:10px; font-size:10px; letter-spacing:.13em; color:#9db2ca; }
+    .orbit-label b { display:block; color:#e0f8ff; font-size:11px; letter-spacing:.07em; margin-bottom:5px; }
+    .label-one { top:20%; right:11%; }
+    .label-two { bottom:24%; left:8%; }
+    .hud-corner { position:absolute; left:18px; top:33px; color:#6b839e; font:10px ui-monospace,SFMono-Regular,Consolas,monospace; line-height:1.8; letter-spacing:.08em; pointer-events:none; }
+    .view-actions { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); display:flex; gap:7px; z-index:2; background:#0c1728d9; border:1px solid #ffffff1c; border-radius:999px; padding:6px; backdrop-filter:blur(14px); box-shadow:0 8px 30px #0005; }
+    .view-actions button { background:transparent; border:0; color:#a6bdd7; padding:8px 12px; border-radius:999px; font-size:11px; white-space:nowrap; transition:.2s; }
+    .view-actions button:hover { color:#fff; background:#1f3857; }
+    .view-actions button.primary { background:#1d445e; color:#b7f7ff; }
+    .toast { position:absolute; left:50%; top:14%; transform:translateX(-50%) translateY(-8px); padding:9px 15px; border:1px solid #71eaff70; background:#0e2c3ddf; color:#bdfbff; border-radius:9px; font-size:12px; opacity:0; pointer-events:none; transition:.2s; white-space:nowrap; }
+    .toast.visible { opacity:1; transform:translateX(-50%) translateY(0); }
+    .right { padding:58px 32px 30px 4px; position:relative; z-index:2; }
+    .inspector { border:1px solid #91b7dc29; border-radius:17px; padding:20px 18px 17px; background:linear-gradient(150deg,#152238df,#0c1727d6); backdrop-filter:blur(24px); box-shadow:0 20px 60px #00000025; }
+    .inspector-head { display:flex; align-items:center; justify-content:space-between; padding-bottom:16px; border-bottom:1px solid #ffffff12; }
+    .inspector-head strong { font-size:12px; letter-spacing:.05em; }
+    .inspector-head span { color:#48e7b5; font:10px ui-monospace,monospace; }
+    .stats { display:grid; grid-template-columns:1fr 1fr; gap:18px; padding:21px 0; }
+    .stat .val { font-size:24px; font-weight:720; letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+    .stat .name { font-size:10px; margin-top:5px; color:#7f91a9; }
+    .mini-divider { height:1px; background:#ffffff12; margin-bottom:19px; }
+    .capabilities { display:flex; flex-direction:column; gap:15px; }
+    .cap { display:flex; align-items:center; gap:11px; }
+    .cap-icon { display:grid; place-items:center; width:29px; height:29px; border-radius:8px; border:1px solid #74c1dd30; background:#18314a8c; color:#8cdaf2; flex:none; font-size:13px; }
+    .cap strong { display:block; font-size:11px; font-weight:620; }
+    .cap small { display:block; font-size:10px; color:#8394ab; margin-top:4px; }
+    .code-card { margin-top:20px; border:1px solid #ffffff16; border-radius:14px; overflow:hidden; background:#091323c9; }
+    .code-title { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #ffffff12; padding:12px 15px; font-size:10px; color:#b7c8df; }
+    .code-title span { color:#72879e; }
+    .code-tabs { display:flex; gap:3px; padding:10px 9px 0; }
+    .code-tabs button { flex:1; min-width:0; padding:6px 2px; font-size:10px; color:#778ca7; border:0; border-radius:6px; background:transparent; }
+    .code-tabs button.active { color:#8ef3ff; background:#1a3448; }
+    pre { margin:0; padding:14px 15px 17px; min-height:111px; font-size:10.5px; line-height:1.65; color:#9cb8d2; overflow:auto; white-space:pre-wrap; word-break:break-word; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .foot { grid-column:1/-1; border-top:1px solid #ffffff10; display:flex; justify-content:space-between; padding:16px 34px 22px; color:#61748f; font-size:10px; gap:12px; }
+    .foot strong { color:#94a8bf; font-weight:500; }
+    .error { position:absolute; inset:0; display:none; place-items:center; z-index:5; text-align:center; padding:40px; background:#0b1424db; color:#eea6a6; font-size:14px; }
+    @media (max-width:1200px) { .layout { grid-template-columns:300px minmax(0,1fr) 240px; } .left { padding-left:24px; padding-right:12px; } .right { padding-right:20px; } h1 { font-size:43px; } .label-one { right:4%; } }
+    @media (max-width:960px) { .layout { grid-template-columns:minmax(0,1fr) 255px; } .left { grid-column:1/-1; padding:24px 30px 10px; display:grid; grid-template-columns:1fr 1fr; column-gap:24px; align-items:center; } .hero { grid-row:1/4; } .hero .intro { max-width:430px; } .pill-row { margin-bottom:0; } .scene-area { min-height:535px; } .right { padding-top:28px; } .section-title { margin-top:16px; } .separator { display:none; } }
+    @media (max-width:680px) { .layout { display:flex; flex-direction:column; } .topbar { padding:19px 20px 0; } .top-meta span:last-child { display:none; } .left { display:block; padding:28px 20px 0; } h1 { margin:15px 0; font-size:40px; } .intro { max-width:100%; margin-bottom:16px; font-size:13px; } .pill-row { margin-bottom:22px; } .shape-grid { grid-template-columns:repeat(3,minmax(0,1fr)); } .left .section-title { margin-top:7px; } .control-row { margin-top:18px; } .switch-row { margin-top:17px; } .scene-area { min-height:460px; } .orbit-label { display:none; } .view-actions { bottom:14px; } .right { padding:6px 20px 24px; } .inspector { padding:16px; } .capabilities { display:grid; grid-template-columns:1fr 1fr; gap:14px; } .foot { padding:16px 20px 24px; } }
+    @media (prefers-reduced-motion:reduce) { * { scroll-behavior:auto!important; } }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="layout">
+      <header class="topbar">
+        <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#89ebff" stroke-width="1.3"><path d="M12 2 21 7v10l-9 5-9-5V7Z M3 7l9 5 9-5M12 12v10"/></svg></span> THREE.JS <span style="color:#586c87;font-weight:400">/</span> CODE LAB</div>
+        <div class="top-meta"><i class="status-dot"></i><span>REALTIME RENDERING</span><span style="color:#435776">—</span><span>NO 3D ASSETS</span></div>
+      </header>
+
+      <aside class="left">
+        <div class="hero">
+          <div class="eyebrow">Interactive experiment 002</div>
+          <h1>代码唤醒<br/><span class="gradient">AI 小机器人。</span></h1>
+          <p class="intro">一个会悬浮、眨眼、思考和挥手的智能机器人。<strong>从头到脚都由 Three.js 几何体拼装</strong>，不需要 Blender 或任何外部 3D 模型。</p>
+          <div class="pill-row"><span class="pill">🤖 程序化建模</span><span class="pill">✦ 实时动画</span><span class="pill">⌘ 点击互动</span></div>
+        </div>
+        <div class="separator"></div>
+        <div class="section-title">01 / 机器人行为 <span>ROBOT MODES</span></div>
+        <div class="shape-grid" id="shapeGrid">
+          <button class="shape-button active" data-mode="idle" aria-pressed="true"><svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="18" rx="6"/><path d="M11 15v3m10-3v3M12 21q4 3 8 0M16 3v4"/></svg>待机</button>
+          <button class="shape-button" data-mode="thinking" aria-pressed="false"><svg viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="18" rx="6"/><path d="M10 14h4m5-1h4M16 22h1M16 3V1"/><circle cx="25" cy="4" r="2"/></svg>思考</button>
+          <button class="shape-button" data-mode="wave" aria-pressed="false"><svg viewBox="0 0 32 32"><rect x="5" y="7" width="19" height="18" rx="6"/><path d="M11 15v3m7-3v3M12 21q3 2 6 0M25 10l4-4m-1 8 3-1M17 4V2"/></svg>挥手</button>
+        </div>
+        <div class="control-row"><label for="speed">动画速度</label><output id="speedValue">1.0×</output></div>
+        <input id="speed" type="range" min="0" max="2.5" step="0.1" value="1" aria-label="动画速度" />
+        <div class="switch-row"><span>周围的能量粒子</span><button id="particlesToggle" class="switch" type="button" aria-label="显示粒子" aria-pressed="true"></button></div>
+        <div class="control-row" style="margin-top:25px"><span>主色调</span><span style="color:#698099;font-size:10px">MATERIAL COLOR</span></div>
+        <div class="swatch-row" id="swatches">
+          <button class="swatch active" data-color="cyan" aria-label="青蓝色" aria-pressed="true"><i style="background:linear-gradient(130deg,#5ee7e7,#5f8bff)"></i></button>
+          <button class="swatch" data-color="purple" aria-label="紫粉色" aria-pressed="false"><i style="background:linear-gradient(130deg,#c39cff,#f18dd5)"></i></button>
+          <button class="swatch" data-color="gold" aria-label="金橙色" aria-pressed="false"><i style="background:linear-gradient(130deg,#ffd379,#ff8d6d)"></i></button>
+        </div>
+      </aside>
+
+      <section class="scene-area" aria-label="可交互的 Three.js 3D 场景">
+        <div id="scene"></div>
+        <div class="hud-corner">WORLD SPACE / XYZ<br>DRAG TO ORBIT · SCROLL TO ZOOM</div>
+        <div class="orbit-label label-one"><b>AI COMPANION</b>100% procedural model</div>
+        <div class="orbit-label label-two"><b>EXPRESSIVE FACE</b>Eyes · smile · blinking</div>
+        <div class="toast" id="toast" role="status">你好！很高兴见到你 👋</div>
+        <div class="view-actions"><button id="pause" class="primary">Ⅱ 暂停动画</button><button id="reset">↺ 重置视角</button><button id="pulse">✦ 让它打招呼</button></div>
+        <div class="error" id="sceneError">你的浏览器暂时无法创建 WebGL 场景。可以尝试开启硬件加速后刷新页面。</div>
+      </section>
+
+      <aside class="right">
+        <div class="inspector">
+          <div class="inspector-head"><strong>实时场景监测</strong><span>● LIVE</span></div>
+          <div class="stats"><div class="stat"><div class="val" id="fps">—</div><div class="name">帧率 / FPS</div></div><div class="stat"><div class="val" id="objects">—</div><div class="name">场景对象 / Objects</div></div><div class="stat"><div class="val" id="triangles">—</div><div class="name">三角面 / Triangles</div></div><div class="stat"><div class="val">0 <span style="font-size:12px;color:#8c9bb0;font-weight:500">KB</span></div><div class="name">外部模型资源</div></div></div>
+          <div class="mini-divider"></div>
+          <div class="section-title" style="margin-bottom:16px">机器人是怎样生成的？</div>
+          <div class="capabilities"><div class="cap"><span class="cap-icon">◇</span><div><strong>Geometry 几何体</strong><small>圆角方块、球体、圆柱</small></div></div><div class="cap"><span class="cap-icon">◈</span><div><strong>Material 材质</strong><small>陶瓷外壳、发光屏幕</small></div></div><div class="cap"><span class="cap-icon">☼</span><div><strong>Light 灯光</strong><small>环境光、边缘补光</small></div></div><div class="cap"><span class="cap-icon">↻</span><div><strong>Animation 动画</strong><small>悬浮、眨眼、关节动作</small></div></div></div>
+        </div>
+        <div class="code-card"><div class="code-title">对应的 Three.js 代码 <span>JAVASCRIPT</span></div><div class="code-tabs"><button data-tab="geometry" class="active">几何体</button><button data-tab="material">材质</button><button data-tab="animate">动画</button><button data-tab="interact">交互</button></div><pre id="codeSample" aria-live="polite"></pre></div>
+      </aside>
+      <footer class="foot"><span>BUILT WITH <strong>THREE.JS + JAVASCRIPT</strong> · NO 3D MODEL FILES</span><span>拖动视角、切换行为，再点一下机器人</span></footer>
+    </div>
+  </main>
+  <script type="module" src="./robot.js"></script>
+</body>
+</html>
