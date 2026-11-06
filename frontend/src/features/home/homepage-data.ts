@@ -28,6 +28,7 @@ export type CompletedProject = {
     status: "BUILT";
     href?: string;
     linkText?: string;
+    statusLabel?: string;
     cardLink?: boolean;
     image?: {
         src: string;
@@ -239,7 +240,7 @@ export const capabilities: Capability[] = [
 export const homepageSections = {
     about: { eyebrow: "01 / 关于" },
     capabilities: { eyebrow: "02 / 能力", title: "我的技术栈", description: "围绕全栈、智能体架构、知识治理与可靠性，记录我的工程实践。" },
-    projects: { eyebrow: "03 / 作品", title: "我的作品", description: "已完成的项目实践：知识检索、持续对话与办公任务执行。" },
+    projects: { eyebrow: "03 / 作品", title: "我的作品", description: "从可交互的三维实验，到智能助手与可追踪的知识检索系统。" },
     building: { eyebrow: "04 / 构建", title: "我正在构建的作品", description: "持续构建知识中心、企业数字员工与智能体运行框架，记录当前的工程进展。" },
     exploring: { eyebrow: "05 / 探索", title: "我正在探索的项目", description: "我正在研究的外部开源项目与学习资料。它们由各自的组织或作者维护。" },
     journey: { eyebrow: "06 / 规划", title: "我的职业生涯规划", description: "从后端工程到智能体工程、架构与前沿部署，持续积累系统设计与工程实践。" }
@@ -253,19 +254,21 @@ export const homepageContact = {
 
 export const completedProjects: CompletedProject[] = [
     {
-        id: "rag-knowledge-system",
-        name: "RAG 知识检索系统",
-        category: "KNOWLEDGE / 知识",
-        description: "将文档入库、混合召回、重排和引用组织成可追踪的知识检索链路。",
-        items: ["文档入库与切分", "混合召回与 RRF 融合", "重排与上下文组装", "引用与评估"],
+        id: "threejs-lab",
+        name: "3D 交互实验室",
+        category: "CREATIVE LAB / THREE.JS",
+        description: "用代码构建、驱动和探索三维世界。从智能机器人到机械结构，把程序化建模与实时交互变成看得见的作品。",
+        items: ["程序化建模", "交互动画", "WebGL 实时渲染"],
         status: "BUILT",
-        href: "/rag",
-        linkText: "查看系统说明",
+        statusLabel: "持续更新",
+        href: "/lab/3d",
+        linkText: "探索实验室",
+        cardLink: true,
         image: {
-            src: "/work/rag-control-plane.png",
-            alt: "RAG 知识检索系统链路说明截图",
-            width: 1440,
-            height: 900
+            src: "/work/threejs-lab-preview.svg",
+            alt: "3D 交互实验室的机器人、机械齿轮与粒子轨道视觉预览",
+            width: 1600,
+            height: 960
         }
     },
     {
@@ -280,12 +283,15 @@ export const completedProjects: CompletedProject[] = [
         cardLink: true
     },
     {
-        id: "office-automation-agent",
-        name: "办公自动化智能体",
-        category: "ACTION / 行动",
-        description: "将工具调用、审批和业务 API 集成到可追踪的企业任务流程中。",
-        items: ["智能体工作流与工具调用", "Human-in-the-loop 人工介入", "业务 API 集成与审批", "结构化输出与审计追踪"],
-        status: "BUILT"
+        id: "rag-knowledge-system",
+        name: "RAG 知识检索系统",
+        category: "KNOWLEDGE / 知识",
+        description: "将文档入库、混合检索、重排和引用组织成可追踪的知识检索链路。",
+        items: ["混合检索", "RRF 融合", "Rerank 重排", "引用与评估"],
+        status: "BUILT",
+        href: "/rag",
+        linkText: "查看系统",
+        cardLink: true
     }
 ];
 
@@ -317,15 +323,6 @@ export const activeProjects: ActiveProject[] = [
 ];
 
 export const explorationProjects: ExplorationProject[] = [
-    {
-        id: "threejs-robot",
-        name: "Three.js 智能机器人",
-        source: "自主实践",
-        description: "用 Three.js 原生几何体构建可悬浮、眨眼、思考和挥手的 3D 机器人，并探索实时渲染与交互。",
-        items: ["程序化 3D 建模", "动画与表情", "鼠标交互", "WebGL 实时渲染"],
-        status: "EXPLORING",
-        href: "/threejs"
-    },
     {
         id: "codex",
         name: "Codex",
