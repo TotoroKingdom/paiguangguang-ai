@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#090d14" />
+  <title>Three.js · 齿轮传动实验室</title>
+  <meta name="description" content="纯代码构建并实时驱动一对 3D 金属齿轮，探索齿数、转速和传动比。" />
+  <style>
+    :root { color-scheme:dark; --bg:#080d15; --panel:#111a28dc; --line:#ffffff19; --text:#eff4f7; --muted:#91a1b3; --amber:#f3b867; --light:#fff0c6; }
+    * { box-sizing:border-box; }
+    html,body { min-height:100%; margin:0; }
+    body { font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft Yahei",sans-serif; color:var(--text); background:var(--bg); }
+    button,input { font:inherit; }
+    button { cursor:pointer; }
+    .app { min-height:100vh; position:relative; overflow:hidden; background:radial-gradient(ellipse 57% 60% at 55% 46%,#1f2c38 0%,#0f1924 46%,#080d15 98%); }
+    .app:before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.28; background:linear-gradient(90deg,transparent 97%,#e1f0ff18 98%),linear-gradient(transparent 97%,#e1f0ff18 98%); background-size:44px 44px; mask-image:linear-gradient(90deg,transparent 21%,black 68%,transparent 100%); }
+    .shell { width:min(1600px,100%); margin:auto; min-height:100vh; position:relative; z-index:1; display:grid; grid-template-columns:312px minmax(0,1fr) 304px; grid-template-rows:auto minmax(620px,1fr) auto; }
+    .top { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; padding:24px 34px 15px; border-bottom:1px solid #ffffff0d; gap:15px; }
+    .logo { display:flex; align-items:center; gap:12px; font-weight:760; font-size:13px; letter-spacing:.13em; }
+    .logo-mark { display:grid; place-items:center; width:34px; height:34px; color:var(--amber); border:1px solid #f3b86762; border-radius:10px; background:#3a2b1b47; }
+    .logo-mark svg { width:21px; height:21px; }
+    .logo small { color:#697d91; font-size:10px; font-weight:500; }
+    .top-right { display:flex; align-items:center; gap:10px; font:10px ui-monospace,SFMono-Regular,Consolas,monospace; color:#90a2af; letter-spacing:.095em; }
+    .live-dot { display:inline-block; width:6px; height:6px; background:#70dfb5; border-radius:50%; box-shadow:0 0 12px #70dfb5; }
+    .intro { padding:63px 12px 32px 35px; z-index:2; }
+    .kicker { display:flex; align-items:center; gap:9px; color:#e6b575; letter-spacing:.17em; text-transform:uppercase; font-size:10px; font-weight:760; }
+    .kicker:before { content:""; width:19px; height:1px; background:var(--amber); }
+    h1 { font-size:clamp(39px,3.4vw,51px); line-height:1.16; letter-spacing:-.07em; font-weight:770; margin:22px 0 20px; }
+    .gold { color:transparent; background:linear-gradient(108deg,#ffe4a8,#f5b970 62%,#e48d52); -webkit-background-clip:text; background-clip:text; }
+    .lead { color:#a4b0c0; font-size:13px; line-height:1.95; max-width:280px; margin:0 0 26px; }
+    .lead strong { color:#ecf0ef; font-weight:650; }
+    .tags { display:flex; gap:7px; flex-wrap:wrap; margin-bottom:38px; }
+    .tag { font-size:10px; border:1px solid #d7b27b37; border-radius:999px; padding:7px 10px; color:#d7b98a; background:#35251936; }
+    .hairline { height:1px; background:linear-gradient(90deg,#a1aeb54a,transparent); margin:0 0 25px; }
+    .step-label { display:flex; align-items:center; justify-content:space-between; font-size:10px; color:#d3dfeb; letter-spacing:.12em; font-weight:720; margin-bottom:15px; }
+    .step-label span { color:#657a90; font-size:9px; font-weight:550; }
+    .explain { border-left:2px solid #e4aa586b; padding:2px 0 2px 13px; color:#8193a8; font-size:11px; line-height:1.95; max-width:270px; }
+    .explain b { display:block; color:#e2edf4; font-size:12px; margin-bottom:2px; }
+    .formula { margin:24px 0 0; padding:17px 16px; border:1px solid #ffffff16; background:#111b2b9e; border-radius:13px; }
+    .formula small { display:block; color:#7c90a6; font-size:10px; margin-bottom:10px; letter-spacing:.1em; }
+    .formula strong { font:500 17px ui-monospace,SFMono-Regular,Consolas,monospace; color:#f3d39a; }
+    .formula p { color:#879aae; margin:9px 0 0; font-size:10.5px; line-height:1.55; }
+    .stage { min-height:570px; position:relative; }
+    #viewport { position:absolute; inset:0; cursor:grab; touch-action:none; }
+    #viewport:active { cursor:grabbing; }
+    #viewport canvas { display:block; width:100%; height:100%; outline:none; }
+    .axis-info { position:absolute; left:18px; top:30px; font:10px/1.8 ui-monospace,Consolas,monospace; color:#637c93; letter-spacing:.085em; pointer-events:none; }
+    .axis-info strong { display:block; font-size:11px; color:#c6d7e5; font-weight:500; }
+    .float-label { position:absolute; z-index:1; border-left:1px solid #eac18362; padding-left:10px; color:#758a9b; font-size:10px; letter-spacing:.07em; pointer-events:none; }
+    .float-label b { display:block; font-size:10px; letter-spacing:.13em; color:#eac28a; margin-bottom:6px; }
+    .label-a { top:25%; left:10%; }
+    .label-b { top:20%; right:5%; }
+    .viewport-actions { position:absolute; left:50%; bottom:27px; transform:translateX(-50%); display:flex; gap:5px; padding:6px; border-radius:999px; background:#111a29e8; border:1px solid #ffffff1c; backdrop-filter:blur(18px); box-shadow:0 9px 30px #0005; z-index:2; }
+    .viewport-actions button { white-space:nowrap; border:0; padding:9px 13px; font-size:11px; color:#b1becd; background:transparent; border-radius:999px; }
+    .viewport-actions button:hover { background:#28374a; color:white; }
+    .viewport-actions .featured { background:#403021; color:#ffdca4; }
+    .viewport-actions .featured:hover { background:#55402b; }
+    .scene-fallback { display:none; place-items:center; position:absolute; inset:0; padding:30px; color:#f6a8a8; background:#101824ed; text-align:center; z-index:5; }
+    .control-area { padding:48px 30px 28px 8px; z-index:2; }
+    .panel { background:linear-gradient(147deg,#172333e9,#111b28ec); border:1px solid #98b5cc29; border-radius:17px; padding:20px; box-shadow:0 25px 62px #0002; }
+    .panel-head { display:flex; justify-content:space-between; align-items:center; padding-bottom:17px; border-bottom:1px solid #ffffff16; font-size:12px; font-weight:750; letter-spacing:.035em; }
+    .panel-head small { font:10px ui-monospace,Consolas,monospace; color:#7a8c9e; }
+    .group-title { font-size:11px; color:#c6d6e3; font-weight:640; margin:22px 0 13px; }
+    .presets { display:grid; gap:7px; grid-template-columns:repeat(3,1fr); }
+    .preset { min-width:0; background:#111b2999; border:1px solid #ffffff1c; border-radius:10px; padding:11px 5px 10px; color:#9eafc0; display:flex; flex-direction:column; gap:5px; align-items:center; font:11px ui-monospace,Consolas,monospace; }
+    .preset small { font:9px ui-sans-serif,system-ui; color:#6f8196; }
+    .preset.active { background:#47332381; border-color:#e5b56b87; color:#ffe1ad; }
+    .preset.active small { color:#d7b17e; }
+    .input-row { display:flex; justify-content:space-between; align-items:center; margin:25px 0 11px; color:#c4d4e3; font-size:11px; }
+    .value { color:#ffcf90; font:14px ui-monospace,Consolas,monospace; font-variant-numeric:tabular-nums; }
+    input[type=range] { width:100%; height:5px; accent-color:#eeb76c; cursor:pointer; }
+    .range-label { display:flex; justify-content:space-between; color:#677d90; font:10px ui-monospace,Consolas,monospace; margin-top:7px; }
+    .direction { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:10px; }
+    .direction button { border:1px solid #ffffff1d; border-radius:9px; padding:10px 5px; background:#101928ad; color:#91a4b7; font-size:11px; }
+    .direction button.active { color:#ffdeb0; background:#513b264f; border-color:#e7b67c7a; }
+    .toggle-row { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:19px; color:#b2c2d1; font-size:11px; }
+    .toggle { border-radius:999px; border:1px solid #e6ba758c; background:#563c23; width:38px; height:22px; padding:3px; }
+    .toggle:after { content:""; display:block; background:#ffd18d; border-radius:50%; width:14px; height:14px; margin-left:16px; transition:.2s; }
+    .toggle.off { background:#293344; border-color:#58677b; }
+    .toggle.off:after { margin-left:0; background:#8593a6; }
+    .readout { background:#0b1422a8; border:1px solid #ffffff16; border-radius:13px; padding:16px; margin-top:19px; }
+    .readout-label { display:flex; align-items:center; justify-content:space-between; color:#71889d; font-size:10px; }
+    .readout-label b { color:#d8e4ef; font-weight:550; }
+    .readout-main { display:flex; align-items:baseline; gap:10px; margin-top:10px; }
+    .readout-main strong { font:600 25px ui-monospace,Consolas,monospace; color:#f9d59a; }
+    .readout-main span { font-size:10px; color:#8699a9; }
+    .readout .bar { height:3px; border-radius:9px; background:#253547; margin-top:13px; overflow:hidden; }
+    .readout .bar span { display:block; height:100%; width:60%; background:linear-gradient(90deg,#d1a46c,#f6d59d); transition:width .15s; }
+    .footer { grid-column:1/-1; display:flex; justify-content:space-between; gap:12px; align-items:center; padding:19px 34px 24px; border-top:1px solid #ffffff10; font:10px ui-monospace,Consolas,monospace; color:#718597; letter-spacing:.05em; }
+    .footer strong { color:#c0d2df; font-weight:500; }
+    @media(max-width:1240px){.shell{grid-template-columns:285px minmax(0,1fr) 270px}.intro{padding-left:24px}.control-area{padding-right:18px}.label-a{left:2%}.label-b{right:2%}h1{font-size:41px}}
+    @media(max-width:1000px){.shell{grid-template-columns:1fr 280px;grid-template-rows:auto auto 1fr auto}.intro{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:0 26px;padding:24px 30px 8px}.intro .hero{grid-row:1/5}.intro .hairline{display:none}.intro .step-label{margin-top:18px}.intro .formula{margin-top:20px}.tags{margin-bottom:0}.stage{min-height:560px}.control-area{padding-top:20px}.footer{grid-column:1/-1}}
+    @media(max-width:680px){.shell{display:flex;flex-direction:column}.top{padding:18px 20px 12px}.top-right span:last-child{display:none}.intro{display:block;padding:29px 20px 0}h1{font-size:42px;margin:14px 0}.lead{max-width:100%;margin-bottom:15px}.tags{margin-bottom:20px}.intro .step-label{margin-top:16px}.intro .formula{margin:14px 0 0}.stage{min-height:470px}.float-label{display:none}.axis-info{left:15px;top:18px}.viewport-actions{bottom:14px}.control-area{padding:4px 20px 25px}.panel{padding:17px}.footer{padding:16px 20px 23px;line-height:1.6}}
+    @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important}}
+  </style>
+</head>
+<body>
+  <main class="app"><div class="shell">
+    <header class="top">
+      <div class="logo"><span class="logo-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10 2h4l.7 2.6 2 .9 2.5-1.2 2.8 2.8-1.2 2.5.9 2L24 12v4l-2.6.7-.9 2 1.2 2.5-2.8 2.8-2.5-1.2-2 .9L14 26h-4l-.7-2.6-2-.9-2.5 1.2L2 20.9l1.2-2.5-.9-2L0 16v-4l2.6-.7.9-2L2.3 6.8 5.1 4l2.5 1.2 2-.9L10 2Z" transform="translate(2,1) scale(.82)"/><circle cx="12" cy="13" r="4"/></svg></span> GEAR / LAB <small>001</small></div>
+      <div class="top-right"><i class="live-dot"></i><span>PROCEDURAL 3D</span><span>NO EXTERNAL MODELS</span></div>
+    </header>
+
+    <aside class="intro">
+      <div class="hero">
+        <div class="kicker">Three.js engineering demo</div>
+        <h1>让齿轮<br/><span class="gold">彼此驱动。</span></h1>
+        <p class="lead">这不是导入的机械模型。<strong>每一颗齿、每一个孔洞、每一层金属结构</strong>，都是 JavaScript 实时生成的三维几何体。</p>
+        <div class="tags"><span class="tag">⚙ 程序化建模</span><span class="tag">↻ 联动旋转</span><span class="tag">◇ 实时渲染</span></div>
+      </div>
+      <div class="hairline"></div>
+      <div class="step-label">传动原理 <span>GEAR RATIO</span></div>
+      <div class="explain"><b>转速与齿数成反比</b>同一对啮合齿轮，齿数少的转得快，齿数多的转得慢，并且旋转方向相反。</div>
+      <div class="formula"><small>ANGULAR VELOCITY</small><strong>ω₂ = −ω₁ × Z₁ / Z₂</strong><p>Z 代表齿数，ω 代表角速度。这里采用示意性梯形齿形，而非工程级渐开线齿廓。</p></div>
+    </aside>
+
+    <section class="stage" aria-label="交互式 3D 齿轮传动场景">
+      <div id="viewport"></div>
+      <div class="axis-info"><strong>MECHANICAL ASSEMBLY / 01</strong>DRAG TO ORBIT · SCROLL TO ZOOM<br><span id="fps">—</span> FPS / WEBGL</div>
+      <div class="float-label label-a"><b>DRIVER / A</b>Input shaft</div>
+      <div class="float-label label-b"><b>FOLLOWER / B</b>Driven shaft</div>
+      <div class="viewport-actions"><button id="playToggle" class="featured">Ⅱ 暂停</button><button id="resetCamera">↺ 重置视角</button><button id="stepButton">→ 单步 15°</button></div>
+      <div class="scene-fallback" id="fallback">你的浏览器无法启动 WebGL，试试开启硬件加速后刷新页面。</div>
+    </section>
+
+    <aside class="control-area"><div class="panel">
+      <div class="panel-head">传动控制台 <small>CONTROL / LIVE</small></div>
+      <div class="group-title">齿数组合</div>
+      <div class="presets" id="presets">
+        <button class="preset active" data-pair="14,24" aria-pressed="true">14 : 24<small>减速传动</small></button>
+        <button class="preset" data-pair="18,18" aria-pressed="false">18 : 18<small>等速传动</small></button>
+        <button class="preset" data-pair="12,28" aria-pressed="false">12 : 28<small>更大减速比</small></button>
+      </div>
+      <div class="input-row"><label for="speed">驱动齿轮转速</label><output class="value" id="speedValue">60 RPM</output></div>
+      <input type="range" id="speed" min="0" max="120" step="5" value="60" aria-label="驱动齿轮每分钟转速" />
+      <div class="range-label"><span>0</span><span>60</span><span>120 RPM</span></div>
+      <div class="group-title">旋转方向</div>
+      <div class="direction" id="directions"><button data-direction="1" class="active" aria-pressed="true">↻ 顺时针</button><button data-direction="-1" aria-pressed="false">↺ 逆时针</button></div>
+      <div class="toggle-row"><span>线框结构</span><button class="toggle off" id="wireToggle" aria-pressed="false" aria-label="显示线框结构"></button></div>
+      <div class="toggle-row"><span>啮合点高亮</span><button class="toggle" id="contactToggle" aria-pressed="true" aria-label="显示啮合点"></button></div>
+      <div class="readout"><div class="readout-label"><span>OUTPUT SHAFT</span><b id="ratioLabel">1 : 1.71</b></div><div class="readout-main"><strong id="outputSpeed">35.0</strong><span>RPM · 反向</span></div><div class="bar"><span id="outputBar" style="width:29%"></span></div></div>
+    </div></aside>
+
+    <footer class="footer"><span>POWERED BY <strong>THREE.JS / JAVASCRIPT</strong> · CODE-GENERATED 3D GEOMETRY</span><span>DRAG · ZOOM · CHANGE TEETH · OBSERVE MOTION</span></footer>
+  </div></main>
+  <script type="module" src="./gears.js"></script>
+</body>
+</html>
