@@ -13,6 +13,7 @@ describe("ThreeDLabGalleryPage", () => {
     const robotLink = screen.getByRole("link", { name: /智能机器人，进入交互实验/ });
     expect(robotLink).toHaveAttribute("href", "/lab/3d/robot");
     expect(within(robotLink).getByText("可交互", { exact: false })).toBeInTheDocument();
+    expect(robotLink.querySelector('img[src="/work/threejs-lab-preview.svg"]')).not.toBeNull();
 
     const gearsLink = screen.getByRole("link", { name: /机械齿轮，进入交互实验/ });
     expect(gearsLink).toHaveAttribute("href", "/lab/3d/gears");
