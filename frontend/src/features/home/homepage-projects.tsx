@@ -1,21 +1,22 @@
+import Link from "next/link";
 import { NeumorphicCard } from "@/components/ui/neumorphic-card";
-import { MiniRobotPreview } from "@/components/three/mini-robot-preview";
+import { MiniScenePreview } from "@/components/three/mini-scene-preview";
 import { activeProjects, completedProjects, explorationProjects, homepageSections } from "./homepage-data";
 import type { ActiveProject, CompletedProject } from "./homepage-data";
 
 function ProjectCard({ project }: { project: CompletedProject | ActiveProject }) {
-  const image = "image" in project ? project.image : undefined;
+  const previewScene = "previewScene" in project ? project.previewScene : undefined;
   const external = project.href?.startsWith("https://");
   const cardLink = "cardLink" in project && project.cardLink;
   const statusLabel = "statusLabel" in project && project.statusLabel
     ? project.statusLabel
     : project.status === "BUILT" ? "阶段已完成" : "在建";
 
-  return (
-    <NeumorphicCard className={`brand-project${image ? " brand-project--featured" : " brand-project--text"}${cardLink ? " brand-project--clickable" : ""}`}>
-      {image && (
+  const card = (
+    <NeumorphicCard className={`brand-project${previewScene ? " brand-project--featured" : " brand-project--text"}`}>
+      {previewScene && (
         <div className="brand-project__image">
-          <MiniRobotPreview poster={image.src} alt={image.alt} sizes="(max-width: 760px) 100vw, 55vw" />
+          <MiniScenePreview scene={previewScene} />
         </div>
       )}
       <div className="brand-project__body">
@@ -25,13 +26,13 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
             {project.status} · {statusLabel}
           </span>
         </div>
-        <h3 id={cardLink ? `project-${project.id}-title` : undefined}>{project.name}</h3>
+        <h3>{project.name}</h3>
         <p className="brand-project__description">{project.description}</p>
         <ul aria-label={project.status === "BUILT" ? "已完成的工程能力" : "当前投入方向"}>
           {project.items.map((item) => <li key={item}>{item}</li>)}
         </ul>
         {cardLink && project.href && (
-          <span id={`project-${project.id}-action`} className="brand-project__link">{project.linkText ?? "查看项目"} <span aria-hidden="true">→</span></span>
+          <span className="brand-project__link">{project.linkText ?? "查看项目"} <span aria-hidden="true">→</span></span>
         )}
         {project.href && !cardLink && (
           <a className="brand-project__link" href={project.href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>
@@ -40,11 +41,22 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
           </a>
         )}
       </div>
-      {cardLink && project.href && (
-        <a className="brand-project__card-link" href={project.href} aria-labelledby={`project-${project.id}-title project-${project.id}-action`} />
-      )}
     </NeumorphicCard>
   );
+
+  // The anchor owns the entire card surface, including padding and the 3D preview.
+  if (cardLink && project.href) {
+    return (
+      <Link
+        href={project.href}
+        className={`brand-project-entry${previewScene ? " brand-project-entry--featured" : ""}`}
+        aria-label={`${project.name} · ${project.linkText ?? "查看项目"}`}
+      >
+        {card}
+      </Link>
+    );
+  }
+  return card;
 }
 
 export function HomepageProjects() {

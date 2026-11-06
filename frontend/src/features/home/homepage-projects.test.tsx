@@ -25,31 +25,29 @@ describe("HomepageProjects", () => {
     expect(within(section).getByRole("heading", { name: "智能助手" })).toBeInTheDocument();
     expect(within(section).queryByRole("heading", { name: "办公自动化智能体" })).not.toBeInTheDocument();
 
-    const image = within(section).getByRole("img", { name: /3D 交互实验室的机器人/ });
-    expect(image).toBeInTheDocument();
-    expect(within(section).getAllByRole("img")).toHaveLength(1);
-
     const lab = projectCard("3D 交互实验室");
     expect(lab).toHaveClass("brand-project--featured");
-    const labLink = within(lab).getByRole("link", { name: /3D 交互实验室.*探索实验室/ });
+    expect(lab.querySelector('[data-mini-scene="robot"]')).not.toBeNull();
+    expect(within(section).queryByRole("img")).not.toBeInTheDocument();
+    const labLink = screen.getByRole("link", { name: /3D 交互实验室.*探索实验室/ });
     expect(labLink).toHaveAttribute("href", "/lab/3d");
-    expect(labLink).toHaveClass("brand-project__card-link");
-    expect(lab).toHaveClass("brand-project--clickable");
-    expect(lab.querySelectorAll("a")).toHaveLength(1);
+    expect(labLink).toHaveClass("brand-project-entry--featured");
+    expect(labLink).toContainElement(lab);
+    expect(lab.querySelectorAll("a")).toHaveLength(0);
 
     const rag = projectCard("RAG 知识检索系统");
     expect(rag).toHaveClass("brand-project--text");
-    const ragLink = within(rag).getByRole("link", { name: /RAG 知识检索系统.*查看系统/ });
+    const ragLink = screen.getByRole("link", { name: /RAG 知识检索系统.*查看系统/ });
     expect(ragLink).toHaveAttribute("href", "/rag");
-    expect(ragLink).toHaveClass("brand-project__card-link");
-    expect(rag.querySelectorAll("a")).toHaveLength(1);
+    expect(ragLink).toContainElement(rag);
+    expect(rag.querySelectorAll("a")).toHaveLength(0);
     const assistant = projectCard("智能助手");
-    const assistantLink = within(assistant).getByRole("link", { name: /智能助手.*体验原型/ });
+    const assistantLink = screen.getByRole("link", { name: /智能助手.*体验原型/ });
     expect(assistantLink).toHaveAttribute("href", "/assistant");
-    expect(assistantLink).toHaveClass("brand-project__card-link");
+    expect(assistantLink).toContainElement(assistant);
     expect(assistant).toHaveTextContent("交互原型");
     expect(assistant).toHaveTextContent("体验原型");
-    expect(assistant.querySelectorAll("a")).toHaveLength(1);
+    expect(assistant.querySelectorAll("a")).toHaveLength(0);
     expect(assistantLink.querySelector("a")).toBeNull();
   });
 });

@@ -4,7 +4,8 @@ export type LabDemo = {
   subtitle: string;
   description: string;
   tags: readonly string[];
-  preview: string;
+  preview?: string;
+  miniScene?: "robot" | "gears";
   status: "available" | "planned";
   href?: string;
 };
@@ -17,7 +18,7 @@ export const labDemos: readonly LabDemo[] = [
     subtitle: "AI ROBOT / 001",
     description: "从几何体开始塑造角色，体验悬浮、眨眼、挥手、换色与视角交互。",
     tags: ["程序化建模", "动画状态", "鼠标交互"],
-    preview: "/work/threejs-lab-preview.svg",
+    miniScene: "robot",
     status: "available",
     href: "/lab/3d/robot"
   },
@@ -27,7 +28,7 @@ export const labDemos: readonly LabDemo[] = [
     subtitle: "KINETIC SYSTEM / 002",
     description: "实时调整齿数、传动比和转速，观察双齿轮的反向啮合与三维机械运动。",
     tags: ["机械运动", "参数化几何", "实时交互"],
-    preview: "/work/threejs-gear-preview.svg",
+    miniScene: "gears",
     status: "available",
     href: "/lab/3d/gears"
   },

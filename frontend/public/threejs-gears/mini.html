@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN" data-variant="mini">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Three.js 机械齿轮 · Mini Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; overflow: hidden; background: #0f1a30; }
+    body { position: relative; background: radial-gradient(ellipse 83% 94% at 50% 46%,#26334c,#18233a 55%,#0b1428); }
+    #viewport, #viewport canvas { display: block; width: 100%; height: 100%; }
+    #viewport { position: absolute; inset: 0; }
+    #fallback { position: absolute; inset: 0; display: none; place-items: center; color: #d5eaff; font: 12px system-ui,sans-serif; }
+    .ambient { position: absolute; inset: 0; pointer-events: none; opacity: .3; background-image: radial-gradient(#c1e3ff 1px, transparent 1px); background-size: 57px 65px; }
+  </style>
+</head>
+<body>
+  <div id="viewport" aria-hidden="true"></div>
+  <div class="ambient" aria-hidden="true"></div>
+  <div id="fallback">当前设备暂时无法显示 3D 预览</div>
+  <script type="module" src="./gears.js"></script>
+</body>
+</html>

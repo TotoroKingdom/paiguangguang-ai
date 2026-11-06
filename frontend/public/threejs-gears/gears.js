@@ -1,15 +1,17 @@
 import * as THREE from '../threejs-lab/vendor/three.module.js';
 
+const miniMode = document.documentElement.dataset.variant === 'mini';
 const mount = document.getElementById('viewport');
 const fallback = document.getElementById('fallback');
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
+  renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:miniMode?'low-power':'high-performance'});
 } catch (error) {
   fallback.style.display = 'grid';
+  if(miniMode)window.parent.postMessage({type:'mini-scene-error'},window.location.origin);
   throw error;
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, miniMode?1.2:1.8));
 renderer.setClearColor(0x000000,0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -24,7 +26,7 @@ const isNarrow = () => window.innerWidth < 680;
 function resetCamera() {
   azimuth = 0.2;
   elevation = 0.12;
-  distance = isNarrow() ? 12.7 : 9.9;
+  distance = miniMode ? 10.3 : isNarrow() ? 12.7 : 9.9;
   updateCamera();
 }
 function updateCamera() {
@@ -61,9 +63,10 @@ const frameRing = new THREE.Mesh(
 frameRing.position.z = -1.28;
 scene.add(frameRing);
 
-const stars = new Float32Array(260*3);
+const starCount = miniMode?75:260;
+const stars = new Float32Array(starCount*3);
 function seeded(i) { const n=Math.sin(i*127.1+78.233)*43758.5453; return n-Math.floor(n); }
-for(let i=0;i<260;i++) {
+for(let i=0;i<starCount;i++) {
   stars[i*3] = (seeded(i+3)-.5)*24;
   stars[i*3+1] = (seeded(i+150)-.5)*16;
   stars[i*3+2] = -2.4+(seeded(i+570)-.5)*3;
@@ -257,12 +260,14 @@ function updateAngles() {
   follower.group.rotation.z=direction*angle*teethA/teethB+Math.PI/teethB;
 }
 function updateRatios() {
+  if(miniMode)return;
   document.getElementById('ratioLabel').textContent=`1 : ${(teethB/teethA).toFixed(2)}`;
   document.getElementById('outputSpeed').textContent=(speedRPM*teethA/teethB).toFixed(1);
   document.getElementById('outputBar').style.width=`${Math.min(100,speedRPM*teethA/teethB/120*100)}%`;
   document.getElementById('speedValue').textContent=`${speedRPM} RPM`;
 }
 
+if(!miniMode) {
 document.getElementById('presets').addEventListener('click',event=>{
   const button=event.target.closest('[data-pair]');
   if(!button)return;
@@ -335,6 +340,7 @@ renderer.domElement.addEventListener('wheel',event=>{
   distance=Math.max(5.8,Math.min(17,distance+event.deltaY*0.006));
   updateCamera();
 },{passive:false});
+}
 
 let currentWidth=0,currentHeight=0;
 function resize() {
@@ -353,11 +359,25 @@ rebuild(teethA,teethB);
 const reduceMotion=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if(reduceMotion) {
   isRunning=false;
-  const button=document.getElementById('playToggle');
-  button.textContent='▶ 继续';button.classList.remove('featured');
+  if(!miniMode) {
+    const button=document.getElementById('playToggle');
+    button.textContent='▶ 继续';button.classList.remove('featured');
+  }
 }
 let previous=performance.now(),sampleTime=performance.now(),frames=0;
+let lastMiniFrame=0,firstMiniRender=true;
+if(miniMode)window.addEventListener('message',event=>{
+  if(event.origin===window.location.origin&&event.data?.type==='mini-scene-status-request'&&!firstMiniRender) {
+    window.parent.postMessage({type:'mini-scene-ready'},window.location.origin);
+  }
+});
 function animate(now) {
+  requestAnimationFrame(animate);
+  if(miniMode) {
+    if(document.hidden||(reduceMotion&&!firstMiniRender))return;
+    if(now-lastMiniFrame<1000/24)return;
+    lastMiniFrame=now;
+  }
   const dt=Math.min(0.06,(now-previous)/1000);
   previous=now;
   if(isRunning) angle+=dt*speedRPM*Math.PI*2/60;
@@ -368,11 +388,17 @@ function animate(now) {
     contactHalo.scale.setScalar(0.9+Math.sin(now*0.004)*0.17);
   }
   renderer.render(scene,camera);
+  if(miniMode) {
+    if(firstMiniRender) {
+      firstMiniRender=false;
+      window.parent.postMessage({type:'mini-scene-ready'},window.location.origin);
+    }
+    return;
+  }
   frames++;
   if(now-sampleTime>1000) {
     document.getElementById('fps').textContent=Math.round(frames*1000/(now-sampleTime));
     frames=0;sampleTime=now;
   }
-  requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
-import { MiniRobotPreview } from "@/components/three/mini-robot-preview";
+import { MiniScenePreview } from "@/components/three/mini-scene-preview";
 import { labDemos } from "@/features/lab/3d-demos";
 import styles from "./gallery.module.css";
 
@@ -47,11 +47,11 @@ export default function ThreeDLabGalleryPage() {
               const content = (
                 <>
                   <div className={styles.poster}>
-                    {demo.id === "robot" ? (
-                      <MiniRobotPreview poster={demo.preview} alt="" sizes="(max-width: 720px) 100vw, (max-width: 1080px) 50vw, 33vw" />
-                    ) : (
+                    {demo.miniScene ? (
+                      <MiniScenePreview scene={demo.miniScene} />
+                    ) : demo.preview ? (
                       <Image src={demo.preview} alt="" fill sizes="(max-width: 720px) 100vw, (max-width: 1080px) 50vw, 33vw" unoptimized />
-                    )}
+                    ) : null}
                     <span className={`${styles.status} ${available ? styles.statusLive : styles.statusPlanned}`}>
                       {available ? "● 可交互" : "规划中"}
                     </span>

@@ -9,6 +9,7 @@ try {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: miniMode ? 'low-power' : 'high-performance' });
 } catch (error) {
   errorEl.style.display = 'grid';
+  if (miniMode) window.parent.postMessage({type: 'mini-scene-error'}, window.location.origin);
   throw error;
 }
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, miniMode ? 1.2 : 1.8));
@@ -474,6 +475,11 @@ if (reducedMotion) {
 let previous = performance.now(), sampleTime = performance.now(), frames = 0;
 let lastMiniFrame = 0;
 let firstMiniRender = true;
+if (miniMode) window.addEventListener('message', event => {
+  if (event.origin === window.location.origin && event.data?.type === 'mini-scene-status-request' && !firstMiniRender) {
+    window.parent.postMessage({type: 'mini-scene-ready'}, window.location.origin);
+  }
+});
 const objectCount = (() => { let count = 0; scene.traverse(obj => { if (obj.isMesh || obj.isPoints || obj.isSprite || obj.isLine) count++; }); return count; })();
 function animate(now) {
   requestAnimationFrame(animate);
@@ -518,7 +524,7 @@ function animate(now) {
   if (miniMode) {
     if (firstMiniRender) {
       firstMiniRender = false;
-      document.getElementById('miniPoster')?.classList.add('ready');
+      window.parent.postMessage({type: 'mini-scene-ready'}, window.location.origin);
     }
     return;
   }

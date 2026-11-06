@@ -30,12 +30,7 @@ export type CompletedProject = {
     linkText?: string;
     statusLabel?: string;
     cardLink?: boolean;
-    image?: {
-        src: string;
-        alt: string;
-        width: number;
-        height: number;
-    };
+    previewScene?: "robot";
 };
 
 export type ActiveProject = {
@@ -264,12 +259,7 @@ export const completedProjects: CompletedProject[] = [
         href: "/lab/3d",
         linkText: "探索实验室",
         cardLink: true,
-        image: {
-            src: "/work/threejs-lab-preview.svg",
-            alt: "3D 交互实验室的机器人、机械齿轮与粒子轨道视觉预览",
-            width: 1600,
-            height: 960
-        }
+        previewScene: "robot"
     },
     {
         id: "ai-chatbot",
