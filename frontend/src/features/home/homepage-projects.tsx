@@ -7,6 +7,9 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
   const image = "image" in project ? project.image : undefined;
   const external = project.href?.startsWith("https://");
   const cardLink = "cardLink" in project && project.cardLink;
+  const statusLabel = "statusLabel" in project && project.statusLabel
+    ? project.statusLabel
+    : project.status === "BUILT" ? "阶段已完成" : "在建";
 
   return (
     <NeumorphicCard className={`brand-project${image ? " brand-project--featured" : " brand-project--text"}`}>
@@ -19,7 +22,7 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
         <div className="brand-project__meta">
           <p className="brand-project__number">{project.category}</p>
           <span className={`brand-status brand-status--${project.status.toLowerCase()}`}>
-            {project.status} · {project.status === "BUILT" ? "阶段已完成" : "在建"}
+            {project.status} · {statusLabel}
           </span>
         </div>
         <h3 id={cardLink ? `project-${project.id}-title` : undefined}>{project.name}</h3>
@@ -28,7 +31,7 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
           {project.items.map((item) => <li key={item}>{item}</li>)}
         </ul>
         {cardLink && project.href && (
-          <span id={`project-${project.id}-action`} className="brand-project__link">{project.linkText} <span aria-hidden="true">→</span></span>
+          <span id={`project-${project.id}-action`} className="brand-project__link">{project.linkText ?? "查看项目"} <span aria-hidden="true">→</span></span>
         )}
         {project.href && !cardLink && (
           <a className="brand-project__link" href={project.href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined}>
