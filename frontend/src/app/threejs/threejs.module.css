@@ -1,0 +1,50 @@
+.labPage {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #070c18;
+  color: #d7eaff;
+}
+
+.labNav {
+  display: flex;
+  flex: none;
+  min-height: 52px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid rgba(141, 174, 213, 0.15);
+  padding: 10px clamp(16px, 3vw, 36px);
+  font-size: 12px;
+}
+
+.backLink {
+  color: #b8e9ff;
+  transition: color 150ms ease;
+}
+
+.backLink:hover {
+  color: #fff;
+}
+
+.labLabel {
+  color: #7087a4;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.labFrame {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: calc(100vh - 52px);
+  min-height: calc(100dvh - 52px);
+  border: 0;
+  background: #070c18;
+}
+
+@media (max-width: 480px) {
+  .labLabel { font-size: 9px; letter-spacing: 0.04em; }
+}

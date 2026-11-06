@@ -88,21 +88,28 @@ export function HomepageExploring() {
         </div>
       </div>
       <div className="brand-exploration-grid">
-        {explorationProjects.map((project) => (
-          <NeumorphicCard key={project.id} className="brand-exploration">
-            <a className="brand-exploration__link" href={project.href} target="_blank" rel="noopener noreferrer" aria-labelledby={`exploration-${project.id}-title exploration-${project.id}-destination`} aria-describedby={`exploration-${project.id}-source exploration-${project.id}-description`}>
-              <div className="brand-exploration__meta">
-                <span className="brand-status brand-status--exploring">{project.status} · 研究中</span>
-                <span className="brand-exploration__arrow" aria-hidden="true">↗</span>
-              </div>
-              <h3 id={`exploration-${project.id}-title`}>{project.name}</h3>
-              <p id={`exploration-${project.id}-source`} className="brand-exploration__source">来源 · {project.source}</p>
-              <p id={`exploration-${project.id}-description`} className="brand-exploration__description">{project.description}</p>
-              <ul aria-label="研究主题">{project.items.map((item) => <li key={item}>{item}</li>)}</ul>
-              <span id={`exploration-${project.id}-destination`} className="brand-exploration__destination">GitHub · 外部仓库<span className="sr-only">（新标签页打开）</span></span>
-            </a>
-          </NeumorphicCard>
-        ))}
+        {explorationProjects.map((project) => {
+          const external = project.href.startsWith("https://");
+
+          return (
+            <NeumorphicCard key={project.id} className="brand-exploration">
+              <a className="brand-exploration__link" href={project.href} target={external ? "_blank" : undefined} rel={external ? "noopener noreferrer" : undefined} aria-labelledby={`exploration-${project.id}-title exploration-${project.id}-destination`} aria-describedby={`exploration-${project.id}-source exploration-${project.id}-description`}>
+                <div className="brand-exploration__meta">
+                  <span className="brand-status brand-status--exploring">{project.status} · 研究中</span>
+                  <span className="brand-exploration__arrow" aria-hidden="true">{external ? "↗" : "→"}</span>
+                </div>
+                <h3 id={`exploration-${project.id}-title`}>{project.name}</h3>
+                <p id={`exploration-${project.id}-source`} className="brand-exploration__source">来源 · {project.source}</p>
+                <p id={`exploration-${project.id}-description`} className="brand-exploration__description">{project.description}</p>
+                <ul aria-label="研究主题">{project.items.map((item) => <li key={item}>{item}</li>)}</ul>
+                <span id={`exploration-${project.id}-destination`} className="brand-exploration__destination">
+                  {external ? "GitHub · 外部仓库" : "查看交互演示 · 站内页面"}
+                  {external && <span className="sr-only">（新标签页打开）</span>}
+                </span>
+              </a>
+            </NeumorphicCard>
+          );
+        })}
       </div>
     </section>
   );

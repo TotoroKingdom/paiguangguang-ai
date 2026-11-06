@@ -314,6 +314,15 @@ export const activeProjects: ActiveProject[] = [
 
 export const explorationProjects: ExplorationProject[] = [
     {
+        id: "threejs-robot",
+        name: "Three.js 智能机器人",
+        source: "自主实践",
+        description: "用 Three.js 原生几何体构建可悬浮、眨眼、思考和挥手的 3D 机器人，并探索实时渲染与交互。",
+        items: ["程序化 3D 建模", "动画与表情", "鼠标交互", "WebGL 实时渲染"],
+        status: "EXPLORING",
+        href: "/threejs"
+    },
+    {
         id: "codex",
         name: "Codex",
         source: "OpenAI",
