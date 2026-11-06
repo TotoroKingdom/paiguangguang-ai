@@ -53,13 +53,21 @@ describe("HomepageBuilding", () => {
 });
 
 describe("HomepageExploring", () => {
-  it("uses one external semantic card link for each official research source", () => {
+  it("keeps external research cards and opens the robot lab inside the site", () => {
     render(<HomepageExploring />);
 
     const section = screen.getByRole("region", { name: "我正在探索的项目" });
     expect(section).toHaveAttribute("id", "exploring");
-    expect(within(section).getAllByRole("article")).toHaveLength(6);
-    expect(within(section).getAllByText(/EXPLORING · 研究中/)).toHaveLength(6);
+    expect(within(section).getAllByRole("article")).toHaveLength(7);
+    expect(within(section).getAllByText(/EXPLORING · 研究中/)).toHaveLength(7);
+
+    const robotCard = projectCard("Three.js 智能机器人");
+    const robotLink = within(robotCard).getByRole("link");
+    expect(robotLink).toHaveAttribute("href", "/threejs");
+    expect(robotLink).not.toHaveAttribute("target");
+    expect(robotLink).not.toHaveAttribute("rel");
+    expect(within(robotCard).getByText("来源 · 自主实践")).toBeInTheDocument();
+    expect(within(robotCard).getByText("查看交互演示 · 站内页面")).toBeInTheDocument();
 
     const sources = [
       ["Codex", "OpenAI", "https://github.com/openai/codex"],
