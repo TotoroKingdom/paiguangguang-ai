@@ -34,6 +34,7 @@ describe("HomepageProjects", () => {
     const labLink = within(lab).getByRole("link", { name: /3D 交互实验室.*探索实验室/ });
     expect(labLink).toHaveAttribute("href", "/lab/3d");
     expect(labLink).toHaveClass("brand-project__card-link");
+    expect(lab).toHaveClass("brand-project--clickable");
     expect(lab.querySelectorAll("a")).toHaveLength(1);
 
     const rag = projectCard("RAG 知识检索系统");

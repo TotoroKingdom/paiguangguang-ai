@@ -697,7 +697,7 @@
 /* Nested LangGraph patterns and the full-card assistant entry. */
 .home-page .brand-capability__children { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
 .home-page .brand-capability__children li { font-size: 10px; }
-.home-page .brand-project:has(.brand-project__card-link) { position: relative; }
+.home-page .brand-project--clickable { position: relative; cursor: pointer; }
 .home-page .brand-project__card-link { position: absolute; inset: 0; z-index: 2; border-radius: inherit; }
 .home-page .brand-project__card-link:focus-visible { outline: 3px solid var(--portfolio-blue); outline-offset: 4px; }
 .home-page--spatial .brand-project--featured:has(.brand-project__card-link):hover .brand-project__image img { transform: scale(1.025); }

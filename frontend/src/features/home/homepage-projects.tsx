@@ -1,5 +1,5 @@
-import Image from "next/image";
 import { NeumorphicCard } from "@/components/ui/neumorphic-card";
+import { MiniRobotPreview } from "@/components/three/mini-robot-preview";
 import { activeProjects, completedProjects, explorationProjects, homepageSections } from "./homepage-data";
 import type { ActiveProject, CompletedProject } from "./homepage-data";
 
@@ -12,10 +12,10 @@ function ProjectCard({ project }: { project: CompletedProject | ActiveProject })
     : project.status === "BUILT" ? "阶段已完成" : "在建";
 
   return (
-    <NeumorphicCard className={`brand-project${image ? " brand-project--featured" : " brand-project--text"}`}>
+    <NeumorphicCard className={`brand-project${image ? " brand-project--featured" : " brand-project--text"}${cardLink ? " brand-project--clickable" : ""}`}>
       {image && (
         <div className="brand-project__image">
-          <Image src={image.src} width={image.width} height={image.height} alt={image.alt} unoptimized />
+          <MiniRobotPreview poster={image.src} alt={image.alt} sizes="(max-width: 760px) 100vw, 55vw" />
         </div>
       )}
       <div className="brand-project__body">
