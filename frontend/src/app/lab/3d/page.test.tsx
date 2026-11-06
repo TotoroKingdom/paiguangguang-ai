@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import ThreeDLabGalleryPage from "./page";
 
 describe("ThreeDLabGalleryPage", () => {
-  it("provides one interactive experiment and non-clickable future concepts", () => {
+  it("links to the robot and gears experiments while keeping future concepts non-clickable", () => {
     render(<ThreeDLabGalleryPage />);
 
     expect(screen.getByRole("heading", { level: 1, name: /3D 交互实验室/ })).toBeInTheDocument();
@@ -14,7 +14,11 @@ describe("ThreeDLabGalleryPage", () => {
     expect(robotLink).toHaveAttribute("href", "/lab/3d/robot");
     expect(within(robotLink).getByText("可交互", { exact: false })).toBeInTheDocument();
 
-    for (const name of ["机械齿轮", "粒子星系"]) {
+    const gearsLink = screen.getByRole("link", { name: /机械齿轮，进入交互实验/ });
+    expect(gearsLink).toHaveAttribute("href", "/lab/3d/gears");
+    expect(within(gearsLink).getByText("可交互", { exact: false })).toBeInTheDocument();
+
+    for (const name of ["粒子星系"]) {
       const planned = screen.getByRole("article", { name: `${name}，规划中` });
       expect(within(planned).getByRole("heading", { name })).toBeInTheDocument();
       expect(within(planned).getByText("规划中")).toBeInTheDocument();
@@ -22,6 +26,7 @@ describe("ThreeDLabGalleryPage", () => {
       expect(within(planned).queryByRole("link")).not.toBeInTheDocument();
     }
 
-    expect(screen.queryByRole("link", { name: /机械齿轮|粒子星系/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /粒子星系/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("已上线 2 个实验，共规划 3 个")).toBeInTheDocument();
   });
 });
