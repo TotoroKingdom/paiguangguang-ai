@@ -26,6 +26,7 @@ export type SendMessageInput = {
   capability?: CapabilityRef | null;
   fileIds: string[];
   simulateFailure?: boolean;
+  clientTurnId?: string;
 };
 export type ExecutionStep = { title: string; detail: string };
 export type ChatMessage = {
@@ -37,6 +38,7 @@ export type ChatMessage = {
   capability?: CapabilityRef | null;
   attachments?: { id: string; name: string }[];
   request?: SendMessageInput;
+  error?: string;
 };
 export type Conversation = {
   id: string;
@@ -44,6 +46,8 @@ export type Conversation = {
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
+  loaded?: boolean;
+  version?: number;
 };
 export type DemoState = {
   version: 1;
@@ -66,6 +70,8 @@ export type DemoAction =
   | { type: "ADD_FILES"; files: DemoFile[] }
   | { type: "DELETE_FILE"; id: string }
   | { type: "CREATE_CONVERSATION"; conversation: Conversation }
+  | { type: "SET_CONVERSATIONS"; conversations: Conversation[] }
+  | { type: "UPSERT_CONVERSATION"; conversation: Conversation }
   | { type: "RENAME_CONVERSATION"; id: string; title: string }
   | { type: "DELETE_CONVERSATION"; id: string }
   | { type: "APPEND_MESSAGES"; conversationId: string; messages: ChatMessage[] }
