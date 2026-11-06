@@ -1,0 +1,35 @@
+Part 0  Codex Architecture
+  01 [Codex 是什么：整体架构与运行主线](./01-codex-architecture/README.zh.md)
+
+Part 1  Runtime Model
+  02 [ThreadManager 与 CodexThread](./02-thread-management/README.zh.md)
+  03 [Session / Turn / Step](./03-session-turn-step/README.zh.md)
+
+Part 2  Agent Core
+  04 [run_turn：真正的 Agent Loop](./04-agent-loop/README.zh.md)
+  05 [ModelClient：模型请求与流式响应](./05-model-client/README.zh.md)
+  06 [Context：Prompt 到底怎么构建](./06-context-prompt/README.zh.md)
+  07 [Tool System：Spec / Registry / Router / Handler](./07-tool-system/README.zh.md)
+  08 [一次 Shell Tool 的完整执行链](./08-shell-execution/README.zh.md)
+
+Part 3  Execution & Safety
+  09 [Permission / Approval / Sandbox / Exec](./09-permission-sandbox/README.zh.md)
+
+Part 4  State & Product Runtime
+  10 [Op / Event：UI 与 Core 的通信模型](./10-op-event/README.zh.md)
+  11 [History / Rollout / Thread Store](./11-history-rollout-thread-store/README.zh.md)
+  12 [Token Budget / Compaction](./12-token-budget-compaction/README.zh.md)
+
+Part 5  Capability Extensions
+  A1 [AGENTS.md / Skills](./A1-agents-md-skills/README.zh.md)
+  A2 [MCP / Plugins / Connectors](./A2-mcp-plugins-connectors/README.zh.md)
+  A3 [Hooks / Extension API](./A3-hooks-extension-api/README.zh.md)
+
+Part 6  Agent Systems
+  A4 [Multi-Agent](./A4-multi-agent/README.zh.md)
+  A5 [Memory](./A5-memory/README.zh.md)
+  A6 [Guardian](./A6-guardian/README.zh.md)
+  A7 [Goal Runtime](./A7-goal-runtime/README.zh.md)
+
+Final
+  [一条真实 Codex 请求的完整源码追踪](./final-end-to-end-trace/README.zh.md)

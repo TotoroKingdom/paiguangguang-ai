@@ -45,23 +45,33 @@ describe("Homepage", () => {
 
     const capabilities = screen.getByRole("region", { name: "我的技术栈" });
     expect(within(capabilities).getAllByRole("article")).toHaveLength(4);
-    for (const name of ["AI & Agent / AI 与智能体", "Backend / 后端", "Frontend / 前端", "Data & Delivery / 数据与部署"]) {
+    for (const name of ["全栈 / Full-Stack", "智能体架构 / Agent Architecture", "RAG 与知识治理", "评估与可靠性 / Evaluation & Reliability"]) {
       expect(within(capabilities).getByRole("heading", { name })).toBeInTheDocument();
     }
 
-    for (const technology of ["LangGraph", "LangChain", "Python", "SQLAlchemy", "Pydantic", "React", "Three.js", "PostgreSQL", "Nginx", "Jenkins / GitHub Actions"]) {
+    for (const technology of ["Python", "FastAPI", "Java", "Spring Boot", "TypeScript", "MySQL / PostgreSQL", "Docker", "Redis", "编排 LangGraph", "Workflow", "Plan & Execute", "ReAct（推理与行动）", "Reflection", "Supervisor", "工具调用 / Tool Calling", "上下文工程 / Context Engineering", "记忆系统 / Memory", "人机协作 / HITL", "Embedding", "BM25", "RRF", "Rerank", "Milvus", "知识治理", "Agent Evals（智能体评估）", "Tracing（追踪）", "Langfuse", "故障恢复", "成本与延迟优化", "审计与安全边界"]) {
       expect(within(capabilities).getByText(technology)).toBeInTheDocument();
     }
 
+    expect(within(capabilities).getByRole("list", { name: "编排 LangGraph 工作模式" })).toHaveTextContent("ReAct");
+
     const journey = screen.getByRole("region", { name: "我的职业生涯规划" });
-    const currentHeading = within(journey).getByRole("heading", { name: "AI 智能体工程师", level: 3 });
+    const currentHeading = within(journey).getByRole("heading", { name: "Agent 工程师（智能体工程师）", level: 3 });
     const current = currentHeading.closest("li");
     expect(current).toBeInTheDocument();
     expect(current).toHaveAttribute("aria-current", "step");
-    const futureHeading = within(journey).getByRole("heading", { name: "AI 智能体架构师", level: 3 });
+    const futureHeading = within(journey).getByRole("heading", { name: "Agent 架构师（智能体架构师）", level: 3 });
     const future = futureHeading.closest("li");
     expect(future).toBeInTheDocument();
     expect(future).toHaveTextContent("成长目标");
+
+    const stages = within(journey).getAllByRole("listitem");
+    expect(stages).toHaveLength(4);
+    expect(stages.map((stage) => within(stage).getByRole("heading").textContent)).toEqual([
+      "后端工程师", "Agent 工程师（智能体工程师）", "Agent 架构师（智能体架构师）", "FDE（前沿部署工程师）"
+    ]);
+    expect(stages[3]).toHaveTextContent("成长目标");
+    expect(within(journey).queryByText("AI 应用工程师")).not.toBeInTheDocument();
 
     const contact = screen.getByRole("region", { name: "保持联系" });
     expect(within(contact).getByRole("link", { name: /邮箱/ })).toHaveAttribute(

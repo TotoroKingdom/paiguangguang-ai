@@ -16,7 +16,7 @@ export type Identity = {
 export type Capability = {
     name: string;
     description: string;
-    items: string[];
+    items: (string | { name: string; children: string[] })[];
 };
 
 export type CompletedProject = {
@@ -28,6 +28,7 @@ export type CompletedProject = {
     status: "BUILT";
     href?: string;
     linkText?: string;
+    cardLink?: boolean;
     image?: {
         src: string;
         alt: string;
@@ -214,34 +215,34 @@ export const homepageIdentity: Identity = {
 
 export const capabilities: Capability[] = [
     {
-        name: "AI & Agent / AI 与智能体",
-        description: "探索模型、知识检索与智能体工作流的组合。",
-        items: ["LangGraph", "LangChain", "RAG / 检索增强生成", "Tool Calling / 工具调用", "Human-in-the-loop / 人工介入", "LLM API / 大模型接口 · DeepSeek"]
+        name: "全栈 / Full-Stack",
+        description: "以服务、界面和基础设施支撑完整应用。",
+        items: ["Python", "FastAPI", "Java", "Spring Boot", "TypeScript", "MySQL / PostgreSQL", "Docker", "Redis"]
     },
     {
-        name: "Backend / 后端",
-        description: "用服务、接口与数据模型组织应用逻辑。",
-        items: ["Java", "Python", "FastAPI", "SQLAlchemy", "Pydantic", "REST API / REST 接口"]
+        name: "智能体架构 / Agent Architecture",
+        description: "组织智能体工作模式、工具与人机协作。",
+        items: [{ name: "编排 LangGraph", children: ["Workflow", "Plan & Execute", "ReAct（推理与行动）", "Reflection", "Supervisor"] }, "工具调用 / Tool Calling", "上下文工程 / Context Engineering", "记忆系统 / Memory", "人机协作 / HITL"]
     },
     {
-        name: "Frontend / 前端",
-        description: "连接 AI 系统与可理解、可交互的界面。",
-        items: ["Next.js", "TypeScript", "Tailwind CSS", "Framer Motion", "React", "Three.js"]
+        name: "RAG 与知识治理",
+        description: "围绕检索和知识治理构建可靠的知识基础。",
+        items: ["Embedding", "BM25", "RRF", "Rerank", "Milvus", "知识治理"]
     },
     {
-        name: "Data & Delivery / 数据与部署",
-        description: "围绕存储、检索、部署与持续集成积累实践。",
-        items: ["PostgreSQL", "Redis", "ChromaDB / Vector DB / 向量数据库", "Docker", "Nginx", "Jenkins / GitHub Actions"]
+        name: "评估与可靠性 / Evaluation & Reliability",
+        description: "通过评估、追踪和安全边界提升系统可靠性。",
+        items: ["Agent Evals（智能体评估）", "Tracing（追踪）", "Langfuse", "故障恢复", "成本与延迟优化", "审计与安全边界"]
     }
 ];
 
 export const homepageSections = {
     about: { eyebrow: "01 / 关于" },
-    capabilities: { eyebrow: "02 / 能力", title: "我的技术栈", description: "围绕 AI 与智能体、后端、前端、数据与部署，记录我使用和学习的技术。" },
+    capabilities: { eyebrow: "02 / 能力", title: "我的技术栈", description: "围绕全栈、智能体架构、知识治理与可靠性，记录我的工程实践。" },
     projects: { eyebrow: "03 / 作品", title: "我的作品", description: "已完成的项目实践：知识检索、持续对话与办公任务执行。" },
-    building: { eyebrow: "04 / 构建", title: "我正在构建的作品", description: "持续构建知识平台、企业数字员工与智能体运行框架，记录当前的工程进展。" },
+    building: { eyebrow: "04 / 构建", title: "我正在构建的作品", description: "持续构建知识中心、企业数字员工与智能体运行框架，记录当前的工程进展。" },
     exploring: { eyebrow: "05 / 探索", title: "我正在探索的项目", description: "我正在研究的外部开源项目与学习资料。它们由各自的组织或作者维护。" },
-    journey: { eyebrow: "06 / 规划", title: "我的职业生涯规划", description: "沿着后端、AI 应用、智能体工程到智能体架构的路线，持续积累系统设计与工程实践。" }
+    journey: { eyebrow: "06 / 规划", title: "我的职业生涯规划", description: "从后端工程到智能体工程、架构与前沿部署，持续积累系统设计与工程实践。" }
 };
 
 export const homepageContact = {
@@ -269,11 +270,14 @@ export const completedProjects: CompletedProject[] = [
     },
     {
         id: "ai-chatbot",
-        name: "AI 聊天机器人",
+        name: "智能助手",
         category: "CONVERSATION / 对话",
-        description: "围绕多会话、持久历史和记忆组织可持续的流式对话体验。",
-        items: ["多会话与持久历史", "流式响应与模型网关", "短期、长期与语义记忆", "检查点与数据持久化"],
-        status: "BUILT"
+        description: "通过交互原型体验多会话、能力选择与模拟对话。",
+        items: ["多会话", "工具与技能", "连接器与智能体", "文件管理"],
+        status: "BUILT",
+        href: "/assistant",
+        linkText: "体验原型",
+        cardLink: true
     },
     {
         id: "office-automation-agent",
@@ -288,7 +292,7 @@ export const completedProjects: CompletedProject[] = [
 export const activeProjects: ActiveProject[] = [
     {
         id: "knowledge-platform",
-        name: "知识平台",
+        name: "知识中心",
         category: "KNOWLEDGE / 知识治理",
         description: "正在构建知识对象、权限边界和治理规则，为智能体提供可靠的知识基础。",
         items: ["知识对象", "ACL 访问权限治理", "知识规则", "智能体治理"],
@@ -324,7 +328,7 @@ export const explorationProjects: ExplorationProject[] = [
     },
     {
         id: "deepseek-harness",
-        name: "DeepSeek Harness",
+        name: "DSH（DeepSeek Harness）",
         source: "DeepSeek",
         description: "研究模型接入、工具执行和上下文管理在智能体运行框架中的组合方式。",
         items: ["模型接入", "工具执行", "上下文管理", "智能体集成"],
@@ -350,15 +354,6 @@ export const explorationProjects: ExplorationProject[] = [
         href: "https://github.com/NousResearch/hermes-agent"
     },
     {
-        id: "openclaw",
-        name: "OpenClaw",
-        source: "OpenClaw",
-        description: "研究智能体运行时如何连接工具、上下文、记忆与外部集成。",
-        items: ["智能体运行时", "工具与集成", "上下文管理", "记忆机制"],
-        status: "EXPLORING",
-        href: "https://github.com/openclaw/openclaw"
-    },
-    {
         id: "pytorch-deep-learning",
         name: "PyTorch 学习实践",
         source: "Daniel Bourke",
@@ -378,24 +373,24 @@ export const careerStages: CareerStage[] = [
         state: "past"
     },
     {
-        id: "ai-application-engineer",
-        title: "AI 应用工程师",
-        label: "AI APPLICATION / AI 应用",
-        description: "将 RAG、LLM 和 AI 交互组织成可使用的产品。",
-        state: "past"
-    },
-    {
         id: "ai-agent-engineer",
-        title: "AI 智能体工程师",
+        title: "Agent 工程师（智能体工程师）",
         label: "AGENT ENGINEERING / 智能体工程",
         description: "围绕工作流、工具、记忆和人机协同构建可执行的 Agent 系统。",
         state: "current"
     },
     {
         id: "ai-agent-architect",
-        title: "AI 智能体架构师",
+        title: "Agent 架构师（智能体架构师）",
         label: "AGENT ARCHITECTURE / 智能体架构",
         description: "持续探索 Agent 运行时、知识基础设施、分布式系统、评估与治理。",
+        state: "future"
+    },
+    {
+        id: "fde",
+        title: "FDE（前沿部署工程师）",
+        label: "FORWARD DEPLOYED ENGINEER / 前沿部署",
+        description: "深入真实业务场景，部署并迭代智能体系统。",
         state: "future"
     }
 ];

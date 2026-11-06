@@ -13,9 +13,16 @@ export function HomepageOverview() {
           <p className="brand-capability__description">{capability.description}</p>
           <ul className="brand-capability__list">
             {capability.items.map((item) => (
-              <li key={item}>
+              <li key={typeof item === "string" ? item : item.name}>
                 <span className="brand-capability__bullet" aria-hidden="true" />
-                {item}
+                {typeof item === "string" ? item : (
+                  <>
+                    {item.name}
+                    <ul className="brand-capability__children" aria-label={`${item.name} 工作模式`}>
+                      {item.children.map((child) => <li key={child}>{child}</li>)}
+                    </ul>
+                  </>
+                )}
               </li>
             ))}
           </ul>
