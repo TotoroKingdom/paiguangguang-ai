@@ -1,7 +1,37 @@
 services:
-  app:
-    image: ${IMAGE_NAME}
-    container_name: paiguangguang-ai
+  backend:
+    image: ${BACKEND_IMAGE_NAME:?BACKEND_IMAGE_NAME must be set}
+    container_name: paiguangguang-ai-backend
     restart: unless-stopped
+    environment:
+      ASSISTANT_ENVIRONMENT: production
+      ASSISTANT_DATABASE_URL: sqlite:////data/assistant.db
+      ASSISTANT_OWNER_COOKIE_SECRET: ${ASSISTANT_OWNER_COOKIE_SECRET:?ASSISTANT_OWNER_COOKIE_SECRET must be set}
+      ASSISTANT_OWNER_COOKIE_SECURE: ${ASSISTANT_OWNER_COOKIE_SECURE:-true}
+      ASSISTANT_ALLOWED_ORIGINS: ${ASSISTANT_ALLOWED_ORIGINS:?ASSISTANT_ALLOWED_ORIGINS must be set}
+    volumes:
+      - assistant_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    image: ${IMAGE_NAME:?IMAGE_NAME must be set}
+    container_name: paiguangguang-ai-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "127.0.0.1:3000:3000"
+
+volumes:
+  assistant_data:
+    name: ${ASSISTANT_DATA_VOLUME:-paiguangguang-ai-assistant-data}
