@@ -1,8 +1,12 @@
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
 
+from app.config import settings
 from app.db import SessionLocal
 from app.main import app
 from app.models import Message
+from app.repositories import utc_now
 
 
 def create_conversation(client: TestClient, title: str = "新对话") -> dict:
@@ -97,13 +101,35 @@ def test_rename_uses_optimistic_version_and_delete_cascades_messages():
         assert session.query(Message).count() == 0
 
 
-def test_generating_message_is_recovered_and_can_finish_or_stop():
+def test_recent_generating_message_survives_a_second_tab_read():
     client = TestClient(app)
     conversation = create_conversation(client)
     created = client.post(
         f"/api/v1/conversations/{conversation['id']}/turns", json=turn_payload()
     ).json()
     assistant = created["assistantMessage"]
+    detail = client.get(f"/api/v1/conversations/{conversation['id']}").json()
+    assert detail["messages"][1]["status"] == "generating"
+
+    stale = TestClient(app)
+    stale.cookies.update({"paiguangguang_owner": client.cookies.get("paiguangguang_owner")})
+    second_read = stale.get(f"/api/v1/conversations/{conversation['id']}")
+    assert second_read.status_code == 200
+    assert second_read.json()["messages"][1]["status"] == "generating"
+
+
+def test_stale_generating_message_is_recovered_and_can_finish_or_stop():
+    client = TestClient(app)
+    conversation = create_conversation(client)
+    created = client.post(
+        f"/api/v1/conversations/{conversation['id']}/turns", json=turn_payload()
+    ).json()
+    assistant = created["assistantMessage"]
+    with SessionLocal() as session:
+        message = session.get(Message, assistant["id"])
+        assert message is not None
+        message.updated_at = utc_now() - timedelta(seconds=settings.orphan_generation_after_seconds + 1)
+        session.commit()
     detail = client.get(f"/api/v1/conversations/{conversation['id']}").json()
     assert detail["messages"][1]["status"] == "stopped"
 
@@ -123,6 +149,23 @@ def test_generating_message_is_recovered_and_can_finish_or_stop():
         json={"content": "停止", "status": "stopped", "steps": []},
     )
     assert stopped.status_code == 409
+
+
+def test_generating_recovery_is_conservative_for_multiple_readers(monkeypatch):
+    monkeypatch.setattr(settings, "orphan_generation_after_seconds", 120)
+    client = TestClient(app)
+    conversation = create_conversation(client)
+    created = client.post(
+        f"/api/v1/conversations/{conversation['id']}/turns", json=turn_payload()
+    ).json()
+    message_id = created["assistantMessage"]["id"]
+
+    first = client.get(f"/api/v1/conversations/{conversation['id']}")
+    second = client.get(f"/api/v1/conversations/{conversation['id']}")
+
+    assert first.json()["messages"][1]["id"] == message_id
+    assert first.json()["messages"][1]["status"] == "generating"
+    assert second.json()["messages"][1]["status"] == "generating"
 
 
 def test_input_origin_and_content_type_guards():

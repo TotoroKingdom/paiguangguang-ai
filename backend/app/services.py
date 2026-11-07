@@ -1,6 +1,6 @@
 import base64
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Conversation, Message
+from app.config import settings
 from app.repositories import ConversationRepository, utc_now
 from app.schemas import (
     AttachmentSnapshot,
@@ -71,9 +72,16 @@ class ConversationService:
         return conversation
 
     def recover_orphaned_generating(self, conversation: Conversation) -> None:
+        # A second tab can read a turn while the original tab is still simulating.
+        # Only convert messages that have exceeded the configured stale window.
         changed = False
+        stale_before = utc_now() - timedelta(seconds=settings.orphan_generation_after_seconds)
         for message in conversation.messages:
-            if message.role == "assistant" and message.status == "generating":
+            if (
+                message.role == "assistant"
+                and message.status == "generating"
+                and message.updated_at < stale_before
+            ):
                 message.status = "stopped"
                 message.updated_at = utc_now()
                 changed = True
