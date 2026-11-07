@@ -15,7 +15,7 @@ Date: 2026-11-07 (Asia/Shanghai)
 
 | Area | Command | Result |
 | --- | --- | --- |
-| Backend | `backend/.venv/Scripts/python.exe -m pytest tests -q` | PASS: 10 passed, 1 deprecation warning |
+| Backend | `backend/.venv/Scripts/python.exe -m pytest tests -q` | PASS: 12 passed, 1 deprecation warning |
 | Backend syntax | `backend/.venv/Scripts/python.exe -m compileall -q app alembic` | PASS |
 | Migration | `backend/.venv/Scripts/alembic.exe upgrade head` against isolated SQLite | PASS |
 | Frontend typecheck | `frontend/npx tsc --noEmit` | PASS during production build; standalone run requires generated `.next/types` after a clean build |
@@ -27,6 +27,7 @@ Date: 2026-11-07 (Asia/Shanghai)
 | Compose config | `docker compose --env-file .env.example config` | PASS |
 | Docker images | backend and frontend `docker build` commands with a temporary smoke tag | PASS: both images built locally |
 | Container smoke | temporary Compose project with isolated named volume | PASS: Alembic startup, backend health, frontend same-origin `/api/v1/health`, create/turn, backend recreate, and same-owner read after recreate |
+| GitHub Checks | PR #9 `Assistant session CI` run 1 | PASS: Backend tests and Frontend tests and E2E |
 
 ## Browser scenarios observed
 
@@ -41,6 +42,7 @@ Date: 2026-11-07 (Asia/Shanghai)
 
 - Local deployment configuration was validated syntactically and the local FastAPI/Next proxy path was exercised. Both production images and a temporary Compose smoke project were built and tested; the temporary images/containers/volume were removed afterward. The production GitHub Actions workflow was not triggered from this worktree, so GHCR push, server SSH deployment, actual production backup/restore, and production health status remain unobserved.
 - Production requires `ASSISTANT_OWNER_COOKIE_SECRET` (at least 32 characters), `ASSISTANT_ALLOWED_ORIGINS`, and HTTPS `ASSISTANT_OWNER_COOKIE_SECURE=true`; the workflow fails before `docker compose up` when these are absent.
+- Generating recovery is conservative: recent generating messages remain generating for concurrent tabs; only messages older than `ASSISTANT_ORPHAN_GENERATION_AFTER_SECONDS` become stopped.
 - Anonymous owner cookies provide browser isolation, not authentication or sensitive-data protection. Cross-device sync and account login remain out of scope.
 - Manual visual acceptance beyond the automated desktop session scenarios was not claimed; the existing site/3D routes were covered by the pre-existing regression suite and production build.
 
