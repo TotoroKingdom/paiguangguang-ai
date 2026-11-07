@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN" data-variant="mini">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Three.js 智能机器人 · Mini Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #101a32; }
+    body { position: relative; background: radial-gradient(ellipse 85% 95% at 50% 48%, #233956 0%, #15243e 50%, #0b1329 100%); }
+    #scene, #scene canvas { display: block; width: 100%; height: 100%; }
+    #scene { position: absolute; inset: 0; z-index: 1; }
+    #sceneError { position: absolute; inset: 0; display: none; z-index: 4; place-items: center; color: #d5eaff; font: 12px system-ui,sans-serif; }
+    .grain { position: absolute; inset: 0; z-index: 3; pointer-events: none; opacity: .35; background-image: radial-gradient(#b5eaff 1px, transparent 1px); background-size: 58px 62px; mask-image: linear-gradient(90deg, #000, transparent 47%, #000); }
+  </style>
+</head>
+<body>
+  <div id="scene" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+  <div id="sceneError" role="status">当前设备暂时无法显示 3D 预览</div>
+  <script type="module" src="./robot.js"></script>
+</body>
+</html>

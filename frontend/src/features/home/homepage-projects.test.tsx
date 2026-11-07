@@ -11,26 +11,44 @@ function projectCard(name: string) {
 }
 
 describe("HomepageProjects", () => {
-  it("presents the three completed systems and links only the RAG explanation", () => {
+  it("features the 3D lab, keeps the assistant, and moves RAG to a whole-card entry", () => {
     render(<HomepageProjects />);
 
     const section = screen.getByRole("region", { name: "我的作品" });
     expect(section).toHaveAttribute("id", "projects");
     expect(within(section).getAllByRole("article")).toHaveLength(3);
-    expect(within(section).getAllByText(/BUILT · 阶段已完成/)).toHaveLength(3);
+    expect(within(section).getAllByText(/BUILT · 阶段已完成/)).toHaveLength(2);
+    expect(within(section).getByText(/BUILT · 持续更新/)).toBeInTheDocument();
 
+    expect(within(section).getByRole("heading", { name: "3D 交互实验室" })).toBeInTheDocument();
     expect(within(section).getByRole("heading", { name: "RAG 知识检索系统" })).toBeInTheDocument();
-    expect(within(section).getByRole("heading", { name: "AI 聊天机器人" })).toBeInTheDocument();
-    expect(within(section).getByRole("heading", { name: "办公自动化智能体" })).toBeInTheDocument();
+    expect(within(section).getByRole("heading", { name: "智能助手" })).toBeInTheDocument();
+    expect(within(section).queryByRole("heading", { name: "办公自动化智能体" })).not.toBeInTheDocument();
 
-    const image = within(section).getByRole("img", { name: "RAG 知识检索系统链路说明截图" });
-    expect(image).toBeInTheDocument();
-    expect(within(section).getAllByRole("img")).toHaveLength(1);
+    const lab = projectCard("3D 交互实验室");
+    expect(lab).toHaveClass("brand-project--featured");
+    expect(lab.querySelector('[data-mini-scene="robot"]')).not.toBeNull();
+    expect(within(section).queryByRole("img")).not.toBeInTheDocument();
+    const labLink = screen.getByRole("link", { name: /3D 交互实验室.*探索实验室/ });
+    expect(labLink).toHaveAttribute("href", "/lab/3d");
+    expect(labLink).toHaveClass("brand-project-entry--featured");
+    expect(labLink).toContainElement(lab);
+    expect(lab.querySelectorAll("a")).toHaveLength(0);
 
-    const ragLink = within(projectCard("RAG 知识检索系统")).getByRole("link", { name: /查看系统说明/ });
+    const rag = projectCard("RAG 知识检索系统");
+    expect(rag).toHaveClass("brand-project--text");
+    const ragLink = screen.getByRole("link", { name: /RAG 知识检索系统.*查看系统/ });
     expect(ragLink).toHaveAttribute("href", "/rag");
-    expect(within(projectCard("AI 聊天机器人")).queryByRole("link")).not.toBeInTheDocument();
-    expect(within(projectCard("办公自动化智能体")).queryByRole("link")).not.toBeInTheDocument();
+    expect(ragLink).toContainElement(rag);
+    expect(rag.querySelectorAll("a")).toHaveLength(0);
+    const assistant = projectCard("智能助手");
+    const assistantLink = screen.getByRole("link", { name: /智能助手.*体验原型/ });
+    expect(assistantLink).toHaveAttribute("href", "/assistant");
+    expect(assistantLink).toContainElement(assistant);
+    expect(assistant).toHaveTextContent("交互原型");
+    expect(assistant).toHaveTextContent("体验原型");
+    expect(assistant.querySelectorAll("a")).toHaveLength(0);
+    expect(assistantLink.querySelector("a")).toBeNull();
   });
 });
 
@@ -43,7 +61,7 @@ describe("HomepageBuilding", () => {
     expect(within(section).getAllByRole("article")).toHaveLength(3);
     expect(within(section).getAllByText(/BUILDING · 在建/)).toHaveLength(3);
 
-    for (const name of ["知识平台", "企业数字员工", "ChatGPT Harness（运行框架）"]) {
+    for (const name of ["知识中心", "企业数字员工", "ChatGPT Harness（运行框架）"]) {
       expect(within(section).getByRole("heading", { name })).toBeInTheDocument();
     }
 
@@ -53,30 +71,24 @@ describe("HomepageBuilding", () => {
 });
 
 describe("HomepageExploring", () => {
-  it("keeps external research cards and opens the robot lab inside the site", () => {
+  it("keeps five external research links without a duplicate robot entry", () => {
     render(<HomepageExploring />);
 
     const section = screen.getByRole("region", { name: "我正在探索的项目" });
     expect(section).toHaveAttribute("id", "exploring");
-    expect(within(section).getAllByRole("article")).toHaveLength(7);
-    expect(within(section).getAllByText(/EXPLORING · 研究中/)).toHaveLength(7);
-
-    const robotCard = projectCard("Three.js 智能机器人");
-    const robotLink = within(robotCard).getByRole("link");
-    expect(robotLink).toHaveAttribute("href", "/threejs");
-    expect(robotLink).not.toHaveAttribute("target");
-    expect(robotLink).not.toHaveAttribute("rel");
-    expect(within(robotCard).getByText("来源 · 自主实践")).toBeInTheDocument();
-    expect(within(robotCard).getByText("查看交互演示 · 站内页面")).toBeInTheDocument();
+    expect(within(section).getAllByRole("article")).toHaveLength(5);
+    expect(within(section).getAllByText(/EXPLORING · 研究中/)).toHaveLength(5);
+    expect(within(section).queryByRole("heading", { name: "Three.js 智能机器人" })).not.toBeInTheDocument();
 
     const sources = [
       ["Codex", "OpenAI", "https://github.com/openai/codex"],
-      ["DeepSeek Harness", "DeepSeek", "https://github.com/deepseek-ai/deepseek-harness"],
+      ["DSH（DeepSeek Harness）", "DeepSeek", "https://github.com/deepseek-ai/deepseek-harness"],
       ["Pi", "earendil-works", "https://github.com/earendil-works/pi"],
       ["Hermes", "Nous Research", "https://github.com/NousResearch/hermes-agent"],
-      ["OpenClaw", "OpenClaw", "https://github.com/openclaw/openclaw"],
       ["PyTorch 学习实践", "Daniel Bourke", "https://github.com/mrdbourke/pytorch-deep-learning"]
     ] as const;
+
+    expect(within(section).queryByText("OpenClaw")).not.toBeInTheDocument();
 
     for (const [name, source, href] of sources) {
       const card = projectCard(name);

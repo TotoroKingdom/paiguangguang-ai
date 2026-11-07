@@ -693,3 +693,12 @@
   .home-page--spatial #exploring .brand-section-visual { order: 0; }
   .home-page--spatial .brand-section-visual .ai-scene-anchor { left: 50%; top: 50%; }
 }
+
+/* Nested LangGraph patterns and the full-card assistant entry. */
+.home-page .brand-capability__children { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.home-page .brand-capability__children li { font-size: 10px; }
+.home-page .brand-project-entry { display: block; min-width: 0; height: 100%; border-radius: 28px; color: inherit; text-decoration: none; cursor: pointer; }
+.home-page .brand-project-entry .brand-project { height: 100%; }
+.home-page .brand-project-entry:focus-visible { outline: 3px solid var(--portfolio-blue); outline-offset: 5px; }
+.home-page--spatial .brand-projects__list--built > .brand-project-entry--featured { grid-column: 1 / -1; }
+.home-page--spatial .brand-project-entry:hover .brand-project__link { color: #303c9b; border-bottom-color: #5261ca; }
