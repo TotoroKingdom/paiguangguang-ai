@@ -9,6 +9,7 @@ from app.config import Settings, settings
 from app.core.security import hash_password
 from app.db import SessionLocal
 from app.main import app
+from app.modules.capabilities import router as capabilities_router
 from app.modules.identity.service import login_limiter
 from app.modules.identity.models import AdminSession, AdminUser
 from app.repositories import utc_now
@@ -282,6 +283,41 @@ def test_capability_draft_publish_disable_and_immutable_versions():
     audits = client.get("/api/v1/admin/audit-events").json()["items"]
     assert any(item["action"] == "capability.published" for item in audits)
     assert any(item["action"] == "capability.disabled" for item in audits)
+
+
+def test_publication_rolls_back_when_audit_write_fails(monkeypatch):
+    create_admin()
+    client = TestClient(app, raise_server_exceptions=False)
+    csrf = login(client)
+    detail = create_capability(client, csrf, name="事务回滚能力")
+
+    def fail_audit(*_args, **_kwargs):
+        raise RuntimeError("audit storage unavailable")
+
+    monkeypatch.setattr(capabilities_router, "record_audit", fail_audit)
+    response = client.post(
+        f"/api/v1/admin/capabilities/{detail['id']}/publish",
+        json={"versionId": detail["draft"]["id"]},
+        headers=mutation_headers(csrf),
+    )
+    assert response.status_code == 500
+
+    rolled_back = client.get(f"/api/v1/admin/capabilities/{detail['id']}").json()
+    assert rolled_back["status"] == "draft"
+    assert rolled_back["published"] is None
+    assert rolled_back["draft"]["id"] == detail["draft"]["id"]
+    assert all(
+        item["id"] != detail["id"]
+        for item in client.get("/api/v1/capabilities").json()["items"]
+    )
+    audit_events = client.get("/api/v1/admin/audit-events").json()["items"]
+    assert all(
+        not (
+            event["action"] == "capability.published"
+            and event["resourceId"] == detail["id"]
+        )
+        for event in audit_events
+    )
 
 
 def test_conversation_rejects_unknown_or_disabled_capability_and_records_runs():
