@@ -46,3 +46,16 @@ Date: 2026-11-07 (Asia/Shanghai)
 - Anonymous owner cookies provide browser isolation, not authentication or sensitive-data protection. Cross-device sync and account login remain out of scope.
 - Manual visual acceptance beyond the automated desktop session scenarios was not claimed; the existing site/3D routes were covered by the pre-existing regression suite and production build.
 
+## Branch consolidation verification
+
+Date: 2026-11-07 (Asia/Shanghai)
+
+- `main` was merged into `dev` without dropping the independent Three.js history; the later `/lab/3d/robot` implementation and `/threejs` redirect were retained.
+- PR #9's six commits were merged into `dev` with the SQLite API, Alembic migration, frontend session client, CI, backup, rollback, and dual-image deployment configuration.
+- Backend: `12 passed`; frontend: `19` test files and `76` tests passed; TypeScript, ESLint, and the Next.js production build passed.
+- Assistant session Playwright: `6 passed` across desktop and mobile, including create, refresh persistence, rename/delete, stop/retry, and browser isolation.
+- Local Docker images built from both Dockerfiles. Compose startup, production fail-fast configuration, frontend-to-backend health, session/turn persistence, backend restart persistence, and SQLite backup integrity were observed locally.
+- Windows-built containers initially failed because `docker-entrypoint.sh` had CRLF line endings; the Dockerfile now normalizes the entrypoint and `.gitattributes` enforces LF for shell files.
+- `npm audit --omit=dev` against the public npm registry reports 1 critical and 3 high production dependency findings. The critical finding is in Next.js 14.2.35 and the available fix is a breaking major upgrade; this release does not claim that dependency risk is resolved.
+- Production publish remains **BLOCKED**: the repository lacks `ASSISTANT_OWNER_COOKIE_SECRET` and `ASSISTANT_ALLOWED_ORIGINS`; the production server exposes no HTTPS listener or certificate, its Nginx configuration only serves a default HTTP host on port 80, and the deploy account has no usable non-interactive sudo. No `dev` → `main` merge or production deployment was performed.
+

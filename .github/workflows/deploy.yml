@@ -14,13 +14,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  verify:
+    name: Verify before production deploy
+    uses: ./.github/workflows/assistant-session-ci.yml
+
   deploy:
+    name: Deploy production
+    needs: verify
     runs-on: ubuntu-latest
+    environment:
+      name: production
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set GHCR image name
+      - name: Set GHCR image names
         id: image
         shell: bash
         run: |
@@ -51,6 +59,9 @@ jobs:
             ${{ steps.image.outputs.frontend }}
             ${{ steps.image.outputs.frontend_latest }}
           build-args: ASSISTANT_API_INTERNAL_URL=http://backend:8000
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -63,6 +74,9 @@ jobs:
           tags: |
             ${{ steps.image.outputs.backend }}
             ${{ steps.image.outputs.backend_latest }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -77,21 +91,43 @@ jobs:
             app_dir=/opt/paiguangguang-ai
             docker info >/dev/null
             if [ -d "$app_dir" ]; then
-              find "$app_dir" -maxdepth 1 -type f -name '.env*' -printf '%f %m\n' || true
-              docker ps --format '{{.Names}} {{.Image}} {{.Status}}'
-              df -h "$app_dir"
+              printf 'app_dir=present\n'
               if [ -f "$app_dir/.env" ]; then
-                test "$(stat -c '%a' "$app_dir/.env")" = 600
-                grep -q '^ASSISTANT_OWNER_COOKIE_SECRET=.' "$app_dir/.env"
-                grep -q '^ASSISTANT_ALLOWED_ORIGINS=https://' "$app_dir/.env"
-                volume_name="$(sed -n 's/^ASSISTANT_DATA_VOLUME=//p' "$app_dir/.env")"
-                test -n "$volume_name"
-                docker volume inspect "$volume_name" >/dev/null
-                if [ -d "$app_dir/backups" ]; then
-                  test "$(stat -c '%a' "$app_dir/backups")" = 700
-                  find "$app_dir/backups" -maxdepth 1 -type f -name 'assistant-*.db' -printf '%f %m\n' || true
+                env_mode="$(stat -c '%a' "$app_dir/.env")"
+                printf 'env_mode=%s\n' "$env_mode"
+                if [ "$env_mode" != 600 ] && [ "$env_mode" != 400 ]; then
+                  echo 'legacy or insecure .env mode detected; deployment will replace it with mode 600'
                 fi
+                if grep -q '^ASSISTANT_DATA_VOLUME=.' "$app_dir/.env"; then
+                  volume_name="$(sed -n 's/^ASSISTANT_DATA_VOLUME=//p' "$app_dir/.env" | head -n 1)"
+                elif grep -q '^IMAGE_NAME=.' "$app_dir/.env"; then
+                  volume_name=paiguangguang-ai-assistant-data
+                  echo 'legacy .env detected; existing frontend image will be preserved for rollback'
+                else
+                  volume_name=paiguangguang-ai-assistant-data
+                  echo 'unrecognized .env detected; deployment will fail closed if required settings are absent'
+                fi
+                if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+                  printf 'data_volume=%s\n' "$volume_name"
+                else
+                  printf 'data_volume=%s (not created yet)\n' "$volume_name"
+                fi
+              else
+                echo 'production .env absent: initial deployment will create it'
               fi
+              if [ -f "$app_dir/docker-compose.yml" ]; then
+                echo 'compose_file=present; rollback copy will be created'
+              else
+                echo 'compose_file=absent'
+              fi
+              if [ -d "$app_dir/backups" ]; then
+                printf 'backup_dir_mode=%s\n' "$(stat -c '%a' "$app_dir/backups")"
+                find "$app_dir/backups" -maxdepth 1 -type f -name 'assistant-*.db' -printf '%f %m\n' || true
+              else
+                echo 'backup_dir=absent; deployment will create it'
+              fi
+              docker ps --format '{{.Names}} {{.Image}} {{.Status}}' || true
+              df -h "$app_dir"
             else
               echo 'production directory absent: initial deployment preflight'
             fi
@@ -104,17 +140,19 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             install -d -m 700 /opt/paiguangguang-ai
+            install -d -m 700 /opt/paiguangguang-ai/.incoming
 
-      - name: Upload docker-compose.yml
+      - name: Upload next docker-compose.yml
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           source: docker-compose.yml
-          target: /opt/paiguangguang-ai
+          target: /opt/paiguangguang-ai/.incoming
 
-      - name: Pull and restart production container
+      - name: Pull, migrate, restart, and verify production
+        id: deploy_production
         uses: appleboy/ssh-action@v1
         env:
           IMAGE_NAME: ${{ steps.image.outputs.frontend }}
@@ -133,27 +171,79 @@ jobs:
             set -eu
             umask 077
             app_dir=/opt/paiguangguang-ai
-            install -d -m 700 "$app_dir"
             rollback_env="$app_dir/.env.rollback"
+            rollback_compose="$app_dir/.docker-compose.rollback.yml"
+            incoming_compose="$app_dir/.incoming/docker-compose.yml"
+            old_app_image_id=""
             existing_volume_name=""
+
+            if docker inspect paiguangguang-ai >/dev/null 2>&1; then
+              old_app_image_id="$(docker inspect --format='{{.Image}}' paiguangguang-ai)"
+            fi
+            if [ -n "$old_app_image_id" ]; then
+              printf '%s\n' "$old_app_image_id" > "$app_dir/.rollback-image"
+              chmod 600 "$app_dir/.rollback-image"
+            else
+              rm -f "$app_dir/.rollback-image"
+            fi
             if [ -f "$app_dir/.env" ]; then
               install -m 600 "$app_dir/.env" "$rollback_env"
-              existing_volume_name="$(sed -n 's/^ASSISTANT_DATA_VOLUME=//p' "$app_dir/.env")"
+              existing_volume_name="$(sed -n 's/^ASSISTANT_DATA_VOLUME=//p' "$app_dir/.env" | head -n 1)"
             fi
+            if [ -f "$app_dir/docker-compose.yml" ]; then
+              install -m 600 "$app_dir/docker-compose.yml" "$rollback_compose"
+            fi
+
             rollback() {
+              status="$1"
+              trap - ERR
+              set +e
+              cd "$app_dir"
+              echo "deployment failed with status $status; attempting rollback"
+              if [ -f "$rollback_compose" ]; then
+                install -m 644 "$rollback_compose" "$app_dir/docker-compose.yml"
+              else
+                rm -f "$app_dir/docker-compose.yml"
+              fi
               if [ -f "$rollback_env" ]; then
                 install -m 600 "$rollback_env" "$app_dir/.env"
-                cd "$app_dir"
+                if [ -n "$old_app_image_id" ]; then
+                  sed -i '/^IMAGE_NAME=/d' "$app_dir/.env"
+                  printf 'IMAGE_NAME=%s\n' "$old_app_image_id" >> "$app_dir/.env"
+                fi
                 docker compose up -d --remove-orphans || true
+              else
+                docker compose down --remove-orphans || true
               fi
+              docker logout ghcr.io >/dev/null 2>&1 || true
+              exit "$status"
             }
-            trap rollback ERR
+            trap 'status=$?; rollback "$status"' ERR
+
+            test -f "$incoming_compose"
+            install -m 644 "$incoming_compose" "$app_dir/docker-compose.yml"
+            rm -f "$incoming_compose"
+            rmdir "$app_dir/.incoming" 2>/dev/null || true
+
             test -n "$ASSISTANT_OWNER_COOKIE_SECRET"
+            printf '%s' "$ASSISTANT_OWNER_COOKIE_SECRET" | grep -Eq '^[A-Za-z0-9._~+/=-]{32,}$'
             test -n "$ASSISTANT_ALLOWED_ORIGINS"
-            case "$ASSISTANT_ALLOWED_ORIGINS" in https://*) ;; *) echo 'ASSISTANT_ALLOWED_ORIGINS must use HTTPS' >&2; exit 1 ;; esac
+            old_ifs="$IFS"
+            IFS=','
+            for origin in $ASSISTANT_ALLOWED_ORIGINS; do
+              case "$origin" in
+                https://?*) ;;
+                *) echo 'ASSISTANT_ALLOWED_ORIGINS must contain HTTPS origins only' >&2; exit 1 ;;
+              esac
+            done
+            IFS="$old_ifs"
+
             volume_name="${existing_volume_name:-paiguangguang-ai-assistant-data}"
+            printf '%s' "$volume_name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]*$'
             backup_dir="$app_dir/backups"
             install -d -m 700 "$backup_dir"
+            chmod 700 "$backup_dir"
+
             {
               printf 'IMAGE_NAME=%s\n' "$IMAGE_NAME"
               printf 'BACKEND_IMAGE_NAME=%s\n' "$BACKEND_IMAGE_NAME"
@@ -164,18 +254,104 @@ jobs:
               printf 'ASSISTANT_DATA_VOLUME=%s\n' "$volume_name"
             } > "$app_dir/.env"
             chmod 600 "$app_dir/.env"
+
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
             cd "$app_dir"
             docker compose pull
-            if docker volume inspect "$volume_name" >/dev/null 2>&1 && docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_dir":/backup "$BACKEND_IMAGE_NAME" -c "import os,sqlite3,time; src='/data/assistant.db'; dst='/backup/assistant-' + time.strftime('%Y%m%d-%H%M%S', time.gmtime()) + '.db'; con=sqlite3.connect(src); out=sqlite3.connect(dst); con.backup(out); out.close(); con.close(); os.chmod(dst,0o600)"; then
-              echo 'sqlite backup created'
+
+            if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+              database_status=0
+              docker run --rm --entrypoint python --user 0 -v "$volume_name":/data "$BACKEND_IMAGE_NAME" -c "import os; raise SystemExit(0 if os.path.isfile('/data/assistant.db') else 3)" || database_status=$?
+              if [ "$database_status" -eq 0 ]; then
+                docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_dir":/backup "$BACKEND_IMAGE_NAME" -c 'import os, sqlite3, time; src="/data/assistant.db"; dst="/backup/assistant-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + ".db"; con=sqlite3.connect(src); out=sqlite3.connect(dst); con.backup(out); out.close(); con.close(); os.chmod(dst, 0o600)'
+                echo 'sqlite backup created'
+              elif [ "$database_status" -eq 3 ]; then
+                echo 'data volume exists without assistant.db; backup skipped'
+              else
+                echo 'unable to inspect existing SQLite volume; refusing deployment' >&2
+                exit 1
+              fi
             else
-              echo 'no existing SQLite volume/database; backup skipped'
+              echo 'no existing SQLite volume; backup skipped'
             fi
+
             docker compose up -d --remove-orphans
             docker compose ps
+
+            for _ in $(seq 1 30); do
+              backend_health="$(docker inspect --format='{{.State.Health.Status}}' paiguangguang-ai-backend 2>/dev/null || echo missing)"
+              frontend_health="$(docker inspect --format='{{.State.Health.Status}}' paiguangguang-ai-frontend 2>/dev/null || echo missing)"
+              if [ "$backend_health" = healthy ] && [ "$frontend_health" = healthy ]; then
+                break
+              fi
+              sleep 2
+            done
+
             test "$(docker inspect --format='{{.State.Health.Status}}' paiguangguang-ai-backend)" = healthy
+            test "$(docker inspect --format='{{.State.Health.Status}}' paiguangguang-ai-frontend)" = healthy
             test "$(docker inspect --format='{{.Config.Image}}' paiguangguang-ai-frontend)" = "$IMAGE_NAME"
             test "$(docker inspect --format='{{.Config.Image}}' paiguangguang-ai-backend)" = "$BACKEND_IMAGE_NAME"
+            curl -fsS http://127.0.0.1:3000/api/v1/health >/dev/null
+
+            {
+              printf 'DEPLOY_COMMIT=%s\n' "$DEPLOY_COMMIT"
+              printf 'FRONTEND_IMAGE=%s\n' "$IMAGE_NAME"
+              printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE_NAME"
+              printf 'DATA_VOLUME=%s\n' "$volume_name"
+              printf 'DEPLOYED_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            } > "$app_dir/.deployment-record"
+            chmod 600 "$app_dir/.deployment-record"
+
             trap - ERR
-            docker logout ghcr.io
+            docker logout ghcr.io || true
+
+      - name: Verify public HTTPS health
+        if: success()
+        env:
+          ASSISTANT_ALLOWED_ORIGINS: ${{ vars.ASSISTANT_ALLOWED_ORIGINS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          origin="${ASSISTANT_ALLOWED_ORIGINS%%,*}"
+          origin="${origin%/}"
+          case "$origin" in
+            https://?*) ;;
+            *) echo 'ASSISTANT_ALLOWED_ORIGINS must start with HTTPS' >&2; exit 1 ;;
+          esac
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --max-time 10 "$origin/api/v1/health"; then
+              exit 0
+            fi
+            echo "public health attempt $attempt failed; retrying"
+            sleep 5
+          done
+          echo 'public HTTPS health check did not pass' >&2
+          exit 1
+
+      - name: Roll back failed public verification
+        if: failure() && steps.deploy_production.outcome == 'success'
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -eu
+            app_dir=/opt/paiguangguang-ai
+            cd "$app_dir"
+            if [ -f "$app_dir/.docker-compose.rollback.yml" ] && [ -f "$app_dir/.env.rollback" ]; then
+              install -m 644 "$app_dir/.docker-compose.rollback.yml" "$app_dir/docker-compose.yml"
+              install -m 600 "$app_dir/.env.rollback" "$app_dir/.env"
+              if [ -s "$app_dir/.rollback-image" ]; then
+                sed -i '/^IMAGE_NAME=/d' "$app_dir/.env"
+                printf 'IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-image")" >> "$app_dir/.env"
+              fi
+              docker compose up -d --remove-orphans
+              docker compose ps
+              docker logout ghcr.io >/dev/null 2>&1 || true
+            else
+              docker compose down --remove-orphans
+              docker logout ghcr.io >/dev/null 2>&1 || true
+              echo 'no previous deployment was available for rollback' >&2
+              exit 1
+            fi

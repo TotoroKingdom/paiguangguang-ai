@@ -1,15 +1,21 @@
-name: Assistant session CI
+name: Application CI
 
 on:
   pull_request:
     branches:
+      - dev
       - main
     paths:
       - "backend/**"
       - "frontend/**"
       - "docker-compose.yml"
-      - ".github/workflows/assistant-session-ci.yml"
+      - ".env.example"
+      - ".github/workflows/**"
       - "AGENTS.md"
+  push:
+    branches:
+      - dev
+  workflow_call:
   workflow_dispatch:
 
 permissions:
@@ -23,6 +29,7 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: backend
@@ -49,6 +56,7 @@ jobs:
   frontend:
     name: Frontend tests and E2E
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: frontend
