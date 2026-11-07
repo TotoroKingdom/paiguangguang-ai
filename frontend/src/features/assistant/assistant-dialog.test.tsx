@@ -28,7 +28,7 @@ describe("AssistantDialog", () => {
     trigger.focus();
     fireEvent.click(trigger);
     const close = screen.getByRole("button", { name: "关闭弹窗" });
-    const reset = screen.getByRole("button", { name: "重置", exact: true });
+    const reset = screen.getByRole("button", { name: "重置" });
     reset.focus();
     fireEvent.keyDown(reset, { key: "Tab" });
     expect(close).toHaveFocus();
@@ -41,7 +41,7 @@ describe("AssistantDialog", () => {
   it("recovers focus when a confirmation replaces the focused content", () => {
     render(<Example />);
     fireEvent.click(screen.getByRole("button", { name: "打开设置" }));
-    const reset = screen.getByRole("button", { name: "重置", exact: true });
+    const reset = screen.getByRole("button", { name: "重置" });
     reset.focus();
     fireEvent.click(reset);
     expect(screen.getByRole("dialog", { name: "确认重置" })).toContainElement(

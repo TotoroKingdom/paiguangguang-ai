@@ -220,7 +220,7 @@ export const capabilityCatalog: Capability[] = groups.flatMap(([kind, items]) =>
 export function getCapabilities(state: DemoState): Capability[] {
   return [...capabilityCatalog, ...state.userSkills];
 }
-export function createInitialState(): DemoState {
+export function createInitialState(includeSeedConversations = true): DemoState {
   const now = "2026-01-01T09:00:00.000Z";
   const examples = [
     [
@@ -256,26 +256,28 @@ export function createInitialState(): DemoState {
   ];
   return {
     version: 1,
-    conversations: examples.map(([title, question, answer], i) => ({
-      id: `conversation-${i + 1}`,
-      title,
-      createdAt: now,
-      updatedAt: now,
-      messages: [
-        {
-          id: `seed-${i + 1}-user`,
-          role: "user" as const,
-          content: question,
-          status: "complete" as const,
-        },
-        {
-          id: `seed-${i + 1}-assistant`,
-          role: "assistant" as const,
-          content: answer,
-          status: "complete" as const,
-        },
-      ],
-    })),
+    conversations: includeSeedConversations
+      ? examples.map(([title, question, answer], i) => ({
+          id: `conversation-${i + 1}`,
+          title,
+          createdAt: now,
+          updatedAt: now,
+          messages: [
+            {
+              id: `seed-${i + 1}-user`,
+              role: "user" as const,
+              content: question,
+              status: "complete" as const,
+            },
+            {
+              id: `seed-${i + 1}-assistant`,
+              role: "assistant" as const,
+              content: answer,
+              status: "complete" as const,
+            },
+          ],
+        }))
+      : [],
     favorites: ["tool-1", "skill-2", "agent-3"],
     userSkills: [],
     connectors: capabilityCatalog
