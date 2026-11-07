@@ -274,7 +274,6 @@ class CapabilityService:
         definition.versions.append(version)
         self.session.add(definition)
         self.session.flush()
-        self.session.commit()
         return detail_view(self._get(definition.id))
 
     def update(
@@ -326,7 +325,7 @@ class CapabilityService:
         definition.category = snapshot.category
         definition.icon = snapshot.icon
         definition.updated_at = utc_now()
-        self.session.commit()
+        self.session.flush()
         return detail_view(self._get(capability_id))
 
     def publish(
@@ -363,7 +362,6 @@ class CapabilityService:
         definition.category = snapshot.category
         definition.icon = snapshot.icon
         definition.updated_at = now
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def disable(self, capability_id: str, *, actor_id: str) -> CapabilityDetail:
@@ -376,7 +374,6 @@ class CapabilityService:
         published.retired_at = now
         definition.status = "disabled"
         definition.updated_at = now
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def public_list(self, *, kind: str | None = None, query: str = "") -> list[PublicCapability]:

@@ -163,7 +163,7 @@ class AdminIdentityService:
                 AdminSession.user_id == user.id,
             )
         )
-        self.session.commit()
+        self.session.flush()
         return CreatedSession(
             principal=AdminPrincipal(user=user, session=admin_session),
             token=token,
