@@ -1,17 +1,37 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
-from app.db import init_db
+from app.db import SessionLocal, init_db
+from app.modules.capabilities.router import admin_router as capability_admin_router
+from app.modules.capabilities.router import public_router as capability_public_router
+from app.modules.capabilities.service import CapabilityService
+from app.modules.identity.router import router as admin_auth_router
+from app.modules.identity.service import AdminIdentityService
 from app.routers import conversations
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    with SessionLocal() as session:
+        AdminIdentityService(session).ensure_bootstrap_admin()
+        CapabilityService(session).ensure_demo_catalog()
+        if (
+            settings.environment.lower() in {"production", "prod"}
+            and not AdminIdentityService(session).has_active_admin()
+        ):
+            raise RuntimeError(
+                "No active administrator exists. Configure ASSISTANT_ADMIN_USERNAME "
+                "and ASSISTANT_ADMIN_PASSWORD, or create one with app.admin_cli."
+            )
+        logger.info("Assistant database initialized")
     yield
 
 
@@ -22,6 +42,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(conversations.router, prefix="/api/v1")
+app.include_router(admin_auth_router, prefix="/api/v1")
+app.include_router(capability_public_router, prefix="/api/v1")
+app.include_router(capability_admin_router, prefix="/api/v1")
 
 
 @app.middleware("http")

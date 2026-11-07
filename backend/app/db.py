@@ -42,6 +42,14 @@ def get_db() -> Generator[Session, None, None]:
 def init_db() -> None:
     # The container entrypoint runs Alembic; this fallback keeps local uvicorn usable.
     from app.models import Conversation, Message  # noqa: F401
+    from app.modules.capabilities.models import (  # noqa: F401
+        CapabilityDefinition,
+        CapabilityDependency,
+        CapabilityRun,
+        CapabilityVersion,
+    )
+    from app.modules.identity.models import AdminSession, AdminUser  # noqa: F401
+    from app.modules.observability.models import AuditEvent  # noqa: F401
 
     if settings.database_path:
         path = Path(settings.database_path)
