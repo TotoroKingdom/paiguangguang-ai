@@ -1,4 +1,5 @@
 import { chromium, defineConfig } from "@playwright/test";
+import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,13 +23,19 @@ const channel =
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
 const backendPort = Number(process.env.PLAYWRIGHT_BACKEND_PORT ?? 8001);
 const backendRoot = path.resolve(process.cwd(), "../backend");
-const venvPython = path.join(
-  backendRoot,
-  process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python",
-);
-const python = existsSync(venvPython) ? `"${venvPython}"` : "python";
+const pythonExecutable = process.platform === "win32"
+  ? ".venv/Scripts/python.exe"
+  : ".venv/bin/python";
+const venvPython = [
+  path.join(backendRoot, pythonExecutable),
+  path.resolve(process.cwd(), "..", pythonExecutable),
+].find((candidate) => existsSync(candidate));
+const python = venvPython ? `"${venvPython}"` : "python";
 const databasePath = path.join(os.tmpdir(), `paiguangguang-assistant-playwright-${process.pid}.db`);
 const databaseUrl = `sqlite:///${databasePath.replaceAll("\\", "/")}`;
+const adminUsername = process.env.ASSISTANT_ADMIN_USERNAME ?? "e2e-admin";
+const adminPassword =
+  process.env.ASSISTANT_ADMIN_PASSWORD ?? randomBytes(24).toString("base64url");
 
 export default defineConfig({
   testDir: "./e2e",
@@ -37,6 +44,7 @@ export default defineConfig({
   timeout: 45_000,
   expect: { timeout: 10_000 },
   reporter: [["list"], ["html", { open: "never" }]],
+  metadata: { adminUsername, adminPassword },
   use: {
     channel,
     baseURL: `http://127.0.0.1:${port}`,
@@ -67,6 +75,9 @@ export default defineConfig({
         ASSISTANT_DATABASE_URL: databaseUrl,
         ASSISTANT_ENVIRONMENT: "development",
         ASSISTANT_OWNER_COOKIE_SECRET: "playwright-assistant-owner-secret-32-characters",
+        ASSISTANT_ADMIN_USERNAME: adminUsername,
+        ASSISTANT_ADMIN_PASSWORD: adminPassword,
+        ASSISTANT_ADMIN_COOKIE_SECURE: "false",
       },
     },
     {

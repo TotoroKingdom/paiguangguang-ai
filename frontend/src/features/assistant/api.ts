@@ -30,6 +30,19 @@ export type ApiMessage = {
 
 export type ApiConversation = ConversationSummary & { messages: ApiMessage[] };
 
+export type ApiCapability = CapabilityRef & {
+  description: string;
+  category: string;
+  icon: string;
+  source: "system" | "managed";
+  steps: string[];
+  tools: string[];
+  content: string | null;
+  executionMode: "demo" | "simulated";
+  version: number;
+  versionId: string;
+};
+
 export class AssistantApiError extends Error {
   status: number;
   retryable: boolean;
@@ -115,6 +128,11 @@ export async function listConversations(query = ""): Promise<Conversation[]> {
     cursor = response.nextCursor;
   } while (cursor);
   return summaries.map(toConversation);
+}
+
+export async function listCapabilities(): Promise<ApiCapability[]> {
+  const response = await request<{ items: ApiCapability[] }>("/api/v1/capabilities");
+  return response.items;
 }
 
 export async function getConversation(id: string): Promise<Conversation> {

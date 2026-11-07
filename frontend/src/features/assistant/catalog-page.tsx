@@ -62,6 +62,8 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
     kind === "mcp"
       ? ["全部", "已连接", "待配置", "待授权", "失败"]
       : ["全部", ...Array.from(new Set(items.map((item) => item.category)))];
+  const sourceLabel = (item: Capability) =>
+    item.source === "personal" ? "个人导入" : item.source === "managed" ? "平台发布" : "系统示例";
   const connectorFor = (item: Capability): ConnectorConfig =>
     state.connectors.find((connector) => connector.id === item.id) ?? {
       id: item.id,
@@ -270,12 +272,10 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                     {kind === "mcp"
                       ? `${statusLabels[connector.status]} · ${item.tools?.length ?? 0} 个工具`
                       : kind === "skill"
-                        ? `${item.steps.length} 个步骤 · ${item.source === "personal" ? "个人导入" : "系统示例"}`
+                        ? `${item.steps.length} 个步骤 · ${sourceLabel(item)}`
                         : kind === "agent"
                           ? `${item.tools?.length ?? 0} 个工具 · 多步执行`
-                          : item.source === "personal"
-                            ? "个人导入"
-                            : "系统示例"}
+                            : sourceLabel(item)}
                   </span>
                   <button
                     className={styles.smallButton}
@@ -340,7 +340,7 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
         >
           <p className={styles.dialogHint}>{selected.description}</p>
           <p className={styles.muted}>
-            {selected.source === "personal" ? "个人导入" : "系统示例"} ·
+            {sourceLabel(selected)} ·
             交互原型，操作结果为模拟数据
           </p>
           <h3>使用步骤</h3>
