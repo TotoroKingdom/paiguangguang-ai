@@ -11,7 +11,10 @@ COPY --chown=app:app app ./app
 COPY --chown=app:app alembic.ini ./alembic.ini
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app docker-entrypoint.sh ./docker-entrypoint.sh
-RUN chmod 755 ./docker-entrypoint.sh && mkdir -p /data && chown app:app /data
+RUN sed -i 's/\r$//' ./docker-entrypoint.sh \
+    && chmod 755 ./docker-entrypoint.sh \
+    && mkdir -p /data \
+    && chown app:app /data
 
 USER app
 EXPOSE 8000
