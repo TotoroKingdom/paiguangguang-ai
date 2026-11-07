@@ -19,7 +19,18 @@ const navigation = [
 ];
 
 export function AssistantWorkspace({ children }: { children: ReactNode }) {
-  const { state, ready, storageNotice, dispatch, resetDemo, stopGeneration } = useAssistant();
+  const {
+    state,
+    ready,
+    storageNotice,
+    createConversation,
+    searchConversations,
+    renameConversation,
+    deleteConversation,
+    resetDemo,
+    stopGeneration,
+    dispatch,
+  } = useAssistant();
   const pathname = usePathname();
   const router = useRouter();
   const sidebar = useRef<HTMLElement>(null);
@@ -30,6 +41,12 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
   const [editing, setEditing] = useState<Conversation | null>(null);
   const [title, setTitle] = useState("");
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [searchResults, setSearchResults] = useState<Conversation[]>([]);
+  useEffect(() => {
+    if (modal !== "search") return;
+    const timer = window.setTimeout(() => void searchConversations(query).then(setSearchResults), 180);
+    return () => window.clearTimeout(timer);
+  }, [modal, query, searchConversations]);
   useEffect(() => {
     if (ready)
       dispatch({
@@ -159,8 +176,15 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
               title={item.name}
               className={`as-nav-link${pathname === item.href ? " as-nav-link--active" : ""}`}
               aria-current={pathname === item.href ? "page" : undefined}
-              onClick={() => {
+              onClick={(event) => {
                 setMobileOpen(false);
+                if (item.href === "/assistant") {
+                  event.preventDefault();
+                  void (async () => {
+                    const conversationId = await createConversation();
+                    if (conversationId) router.push(`/assistant/chat/${conversationId}`);
+                  })();
+                }
               }}
             >
               <AssistantIcon name={item.icon} size={21} />
@@ -214,7 +238,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             <span className="as-avatar">派</span>
             <span className="as-sidebar-label">
               <strong>派广广</strong>
-              <small>本地演示空间</small>
+              <small>服务端会话空间</small>
             </span>
             <AssistantIcon name="settings" size={19} />
           </button>
@@ -258,7 +282,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             children
           ) : (
             <div className="as-loading" role="status">
-              正在恢复本地演示空间…
+              正在加载会话空间…
             </div>
           )}
         </main>
@@ -276,25 +300,21 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             />
           </label>
           <div className="as-dialog-list">
-            {state.conversations
-              .filter((c) => c.title.toLowerCase().includes(query.toLowerCase()))
-              .map((c) => (
-                <Link
-                  href={`/assistant/chat/${c.id}`}
-                  key={c.id}
-                  onClick={() => {
-                    setModal(null);
-                    setMobileOpen(false);
-                  }}
-                >
-                  <AssistantIcon name="chat" size={18} />
-                  {c.title}
-                  <AssistantIcon name="arrow" size={17} />
-                </Link>
-              ))}
-            {!state.conversations.some((c) =>
-              c.title.toLowerCase().includes(query.toLowerCase()),
-            ) && <p className="as-muted">没有匹配的聊天。</p>}
+            {searchResults.map((c) => (
+              <Link
+                href={`/assistant/chat/${c.id}`}
+                key={c.id}
+                onClick={() => {
+                  setModal(null);
+                  setMobileOpen(false);
+                }}
+              >
+                <AssistantIcon name="chat" size={18} />
+                {c.title}
+                <AssistantIcon name="arrow" size={17} />
+              </Link>
+            ))}
+            {searchResults.length === 0 && <p className="as-muted">没有匹配的聊天。</p>}
           </div>
         </AssistantDialog>
       )}
@@ -303,10 +323,11 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (title.trim()) {
-                dispatch({ type: "RENAME_CONVERSATION", id: editing.id, title: title.trim() });
-                setModal(null);
-              }
+              if (!title.trim()) return;
+              void (async () => {
+                const saved = await renameConversation(editing.id, title.trim());
+                if (saved) setModal(null);
+              })();
             }}
           >
             <label className="as-field">
@@ -323,10 +344,13 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 type="button"
                 className="as-button as-button--danger"
                 onClick={() => {
-                  stopGeneration(editing.id);
-                  dispatch({ type: "DELETE_CONVERSATION", id: editing.id });
-                  if (activeConversation?.id === editing.id) router.push("/assistant");
-                  setModal(null);
+                  void (async () => {
+                    const deleted = await deleteConversation(editing.id);
+                    if (deleted) {
+                      if (activeConversation?.id === editing.id) router.push("/assistant");
+                      setModal(null);
+                    }
+                  })();
                 }}
               >
                 删除这条聊天
@@ -335,7 +359,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 保存名称
               </button>
             </div>
-            <p className="as-muted">删除后将从当前浏览器移除这条聊天记录。</p>
+            <p className="as-muted">删除后将从服务端会话库移除这条聊天记录。</p>
           </form>
         </AssistantDialog>
       )}
@@ -346,7 +370,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
         >
           {resetConfirm ? (
             <>
-              <p>确认清除本地聊天、个人技能、文件记录、常用项和连接配置，恢复初始样例？</p>
+              <p>确认清除当前浏览器中的个人技能、文件记录、常用项、连接配置和草稿，恢复初始样例？服务端会话不会被删除。</p>
               <div className="as-dialog-actions">
                 <button className="as-button" onClick={() => setResetConfirm(false)}>
                   取消
@@ -366,9 +390,9 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           ) : (
             <>
               <p>
-                这是使用模拟数据的前端交互原型。数据仅保存在当前浏览器，工具、技能、连接器和智能体不会执行真实任务。
+                会话和消息保存在服务端 SQLite 中，并按当前浏览器隔离；这不是登录认证，也不提供跨设备同步。工具、技能、连接器和智能体不会执行真实任务。
               </p>
-              <p className="as-muted">文件库保存文件元信息；技能导入保存 Markdown 文本。</p>
+              <p className="as-muted">文件库、技能、连接器和草稿仍保存在当前浏览器；会话记录保存在服务端。</p>
               <button className="as-button as-button--danger" onClick={() => setResetConfirm(true)}>
                 重置演示数据
               </button>

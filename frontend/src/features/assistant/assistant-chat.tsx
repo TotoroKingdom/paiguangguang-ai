@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAssistant } from "./provider";
 import { capabilityCatalog } from "./data";
@@ -58,8 +58,26 @@ const examples = [
   },
 ];
 export function AssistantChat({ conversationId }: { conversationId?: string }) {
-  const { state, dispatch, retryMessage } = useAssistant();
+  const { state, dispatch, retryMessage, loadConversation } = useAssistant();
   const conversation = state.conversations.find((c) => c.id === conversationId);
+  const [loadStatus, setLoadStatus] = useState<"loading" | "loaded" | "missing" | "error">(
+    conversationId ? "loading" : "loaded",
+  );
+  useEffect(() => {
+    if (!conversationId) {
+      setLoadStatus("loaded");
+      return;
+    }
+    let active = true;
+    setLoadStatus("loading");
+    void loadConversation(conversationId).then((found) => {
+      if (!active) return;
+      setLoadStatus(found);
+    });
+    return () => {
+      active = false;
+    };
+  }, [conversationId, loadConversation]);
   const end = useRef<HTMLDivElement>(null);
   const followOutput = useRef(true);
   const last = conversation?.messages[conversation.messages.length - 1];
@@ -80,15 +98,36 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
     });
     return () => cancelAnimationFrame(frame);
   }, [last?.content, last?.status, conversationId]);
-  if (conversationId && !conversation)
+  if (loadStatus === "loading")
+    return (
+      <div className="as-loading" role="status">
+        正在加载聊天…
+      </div>
+    );
+  if (conversationId && loadStatus === "missing")
     return (
       <section className="as-not-found">
         <AssistantIcon name="chat" size={45} />
-        <h1>找不到这条聊天</h1>
-        <p>这条记录可能已删除，或属于另一个浏览器。</p>
+        <h1>{loadStatus === "missing" ? "找不到这条聊天" : "聊天加载失败"}</h1>
+        <p>
+          {loadStatus === "missing"
+            ? "这条记录可能已删除，或属于另一个浏览器。"
+            : "会话服务暂时不可用，请稍后刷新重试。"}
+        </p>
         <Link className="as-button as-button--primary" href="/assistant">
           开始新聊天
         </Link>
+      </section>
+    );
+  if (conversationId && loadStatus === "error")
+    return (
+      <section className="as-not-found">
+        <AssistantIcon name="chat" size={45} />
+        <h1>聊天加载失败</h1>
+        <p>会话服务暂时不可用，请稍后刷新重试。</p>
+        <button className="as-button as-button--primary" onClick={() => window.location.reload()}>
+          刷新重试
+        </button>
       </section>
     );
   if (!conversation || conversation.messages.length === 0)
@@ -153,7 +192,7 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
   return (
     <section className="as-chat-thread" aria-label="聊天记录">
       <div className="as-thread-heading">
-        <span className="as-section-kicker">LOCAL WORKSPACE / 本地演示</span>
+        <span className="as-section-kicker">SERVER SESSION / 服务端会话</span>
         <h1>{conversation.title}</h1>
       </div>
       {conversation.messages.map((message) => (
@@ -227,7 +266,7 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
             )}
             {message.status === "error" && (
               <div className="as-message-error" role="alert">
-                <span>模拟生成失败，内容仍保留。</span>
+                <span>{message.error ?? "模拟生成失败，内容仍保留。"}</span>
                 {message.request?.capability?.kind === "mcp" &&
                   state.connectors.find((c) => c.id === message.request?.capability?.id)?.status !==
                     "connected" && (

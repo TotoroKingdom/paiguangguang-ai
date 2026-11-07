@@ -10,7 +10,7 @@ import { AssistantDialog } from "./assistant-dialog";
 import type { CapabilityRef } from "./types";
 
 export function AssistantComposer() {
-  const { state, dispatch, sendMessage, stopGeneration } = useAssistant();
+  const { state, dispatch, sendMessage, stopGeneration, sessionBusy } = useAssistant();
   const router = useRouter();
   const pathname = usePathname();
   const [picker, setPicker] = useState<"capability" | "files" | "scenario" | null>(null);
@@ -48,7 +48,7 @@ export function AssistantComposer() {
   };
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
-    if (generating || (!draft.text.trim() && attachments.length === 0)) return;
+    if (generating || sessionBusy || (!draft.text.trim() && attachments.length === 0)) return;
     if (
       draft.capability?.kind === "mcp" &&
       state.connectors.find((c) => c.id === draft.capability?.id)?.status !== "connected"
@@ -56,17 +56,20 @@ export function AssistantComposer() {
       setError("该连接器尚未完成模拟连接，请先到连接器中心配置。");
       return;
     }
-    const id = sendMessage({
-      conversationId: conversation?.id,
-      text: draft.text.trim() || "请根据这些附件的元信息整理要点。",
-      capability: draft.capability,
-      fileIds: attachments.map((file) => file.id),
-      simulateFailure,
-    });
-    dispatch({ type: "SET_DRAFT", patch: { text: "", capability: null, fileIds: [] } });
-    setSimulateFailure(false);
-    setError("");
-    router.push(`/assistant/chat/${id}`);
+    void (async () => {
+      const id = await sendMessage({
+        conversationId: conversation?.id,
+        text: draft.text.trim() || "请根据这些附件的元信息整理要点。",
+        capability: draft.capability,
+        fileIds: attachments.map((file) => file.id),
+        simulateFailure,
+      });
+      if (!id) return;
+      dispatch({ type: "SET_DRAFT", patch: { text: "", capability: null, fileIds: [] } });
+      setSimulateFailure(false);
+      setError("");
+      router.push(`/assistant/chat/${id}`);
+    })();
   };
   return (
     <footer className="as-composer-area">
@@ -187,7 +190,7 @@ export function AssistantComposer() {
               type="submit"
               className="as-send-button"
               aria-label="发送消息"
-              disabled={!draft.text.trim() && attachments.length === 0}
+              disabled={sessionBusy || (!draft.text.trim() && attachments.length === 0)}
             >
               <AssistantIcon name="send" size={23} />
             </button>
@@ -199,7 +202,7 @@ export function AssistantComposer() {
           </p>
         )}
       </form>
-      <p className="as-composer-caption">模拟回复仅供交互演示 · 数据保存在此浏览器</p>
+      <p className="as-composer-caption">回复仍为模拟内容 · 会话保存在服务端并按浏览器隔离</p>
       {picker === "capability" && (
         <AssistantDialog title="选择聊天能力" onClose={() => setPicker(null)}>
           <label className="as-field">

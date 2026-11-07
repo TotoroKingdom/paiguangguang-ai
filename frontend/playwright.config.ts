@@ -1,5 +1,6 @@
 import { chromium, defineConfig } from "@playwright/test";
 import { existsSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 const chromePaths = [
@@ -19,6 +20,15 @@ const channel =
     : undefined);
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? 3100);
+const backendPort = Number(process.env.PLAYWRIGHT_BACKEND_PORT ?? 8001);
+const backendRoot = path.resolve(process.cwd(), "../backend");
+const venvPython = path.join(
+  backendRoot,
+  process.platform === "win32" ? ".venv/Scripts/python.exe" : ".venv/bin/python",
+);
+const python = existsSync(venvPython) ? `"${venvPython}"` : "python";
+const databasePath = path.join(os.tmpdir(), `paiguangguang-assistant-playwright-${process.pid}.db`);
+const databaseUrl = `sqlite:///${databasePath.replaceAll("\\", "/")}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -45,10 +55,30 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
-    command: `npm run dev -- --hostname 127.0.0.1 --port ${port}`,
-    url: `http://127.0.0.1:${port}/assistant`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      command: `${python} -m uvicorn app.main:app --host 127.0.0.1 --port ${backendPort}`,
+      cwd: backendRoot,
+      url: `http://127.0.0.1:${backendPort}/api/v1/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        ASSISTANT_DATABASE_URL: databaseUrl,
+        ASSISTANT_ENVIRONMENT: "development",
+        ASSISTANT_OWNER_COOKIE_SECRET: "playwright-assistant-owner-secret-32-characters",
+      },
+    },
+    {
+      command: `npx next dev --hostname 127.0.0.1 --port ${port}`,
+      cwd: process.cwd(),
+      url: `http://127.0.0.1:${port}/assistant`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      env: {
+        ...process.env,
+        ASSISTANT_API_INTERNAL_URL: `http://127.0.0.1:${backendPort}`,
+      },
+    },
+  ],
 });
