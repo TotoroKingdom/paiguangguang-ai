@@ -14,3 +14,19 @@ node_modules/
 
 # DSH sandbox ACL diagnostic artifacts (keep -Out outside the workspace)
 .dsh-acl-reports/
+
+# Browser verification output
+frontend/playwright-report/
+frontend/test-results/
+frontend/*.tsbuildinfo
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.env
+*.env.*
+!*.env.example
+*.key
+*.p12
+*.pfx

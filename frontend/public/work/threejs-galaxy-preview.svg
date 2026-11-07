@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 675" role="img" aria-labelledby="title">
+  <title id="title">Particle galaxy experiment concept</title>
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0d1a33"/><stop offset="1" stop-color="#1d1637"/></linearGradient>
+    <radialGradient id="nebula"><stop stop-color="#8a81f6" stop-opacity=".52"/><stop offset=".48" stop-color="#4bb7de" stop-opacity=".2"/><stop offset="1" stop-color="#2f5cab" stop-opacity="0"/></radialGradient>
+    <radialGradient id="sun"><stop stop-color="#fff"/><stop offset=".18" stop-color="#9de7fa"/><stop offset="1" stop-color="#6885ea" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="960" height="675" fill="url(#bg)"/>
+  <circle cx="478" cy="337" r="315" fill="url(#nebula)"/>
+  <g fill="none" stroke-width="2" transform="rotate(-22 480 338)">
+    <ellipse cx="480" cy="338" rx="325" ry="116" stroke="#9ba8f6" stroke-opacity=".32"/>
+    <ellipse cx="480" cy="338" rx="250" ry="86" stroke="#79d6ee" stroke-opacity=".33" stroke-dasharray="7 10"/>
+    <ellipse cx="480" cy="338" rx="381" ry="167" stroke="#988ce8" stroke-opacity=".23"/>
+  </g>
+  <circle cx="481" cy="339" r="105" fill="url(#sun)"/>
+  <circle cx="481" cy="339" r="25" fill="#d3fcff"/>
+  <g fill="#c7d7ff"><circle cx="128" cy="80" r="3"/><circle cx="267" cy="151" r="4"/><circle cx="816" cy="108" r="3"/><circle cx="853" cy="494" r="3"/><circle cx="155" cy="549" r="4"/><circle cx="366" cy="590" r="2"/><circle cx="729" cy="610" r="4"/><circle cx="585" cy="127" r="2"/><circle cx="73" cy="350" r="2"/><circle cx="915" cy="283" r="2"/></g>
+  <g fill="#90e9f5"><circle cx="175" cy="392" r="10"/><circle cx="740" cy="222" r="11"/><circle cx="696" cy="446" r="7"/><circle cx="290" cy="264" r="5"/></g>
+  <g stroke="#9bb7f5" stroke-width="2" stroke-linecap="round" opacity=".8"><path d="M106 216h19m-9-9v19M835 317h19m-9-9v19M310 536h15m-8-7v15"/></g>
+  <text x="51" y="56" fill="#8190bd" font-family="Arial,sans-serif" font-size="15" letter-spacing="4">PARTICLES / STUDY</text>
+</svg>

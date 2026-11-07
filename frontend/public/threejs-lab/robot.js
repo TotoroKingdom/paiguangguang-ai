@@ -1,15 +1,18 @@
 import * as THREE from './vendor/three.module.js';
 
+// The gallery and homepage reuse the same procedural robot in a lightweight, non-interactive preview.
+const miniMode = document.documentElement.dataset.variant === 'mini';
 const container = document.getElementById('scene');
 const errorEl = document.getElementById('sceneError');
 let renderer;
 try {
-  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: miniMode ? 'low-power' : 'high-performance' });
 } catch (error) {
   errorEl.style.display = 'grid';
+  if (miniMode) window.parent.postMessage({type: 'mini-scene-error'}, window.location.origin);
   throw error;
 }
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.8));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, miniMode ? 1.2 : 1.8));
 renderer.setClearColor(0x000000, 0);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -19,7 +22,7 @@ container.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
 const target = new THREE.Vector3(0, 0.24, 0);
-let azimuth = 0.38, elevation = 0.13, distance = 8.3;
+let azimuth = miniMode ? 0.17 : 0.38, elevation = 0.13, distance = miniMode ? 6.7 : 8.3;
 function updateCamera() {
   camera.position.set(
     target.x + distance * Math.sin(azimuth) * Math.cos(elevation),
@@ -281,8 +284,9 @@ const pseudoRandom = n => {
   const value = Math.sin(n * 127.1 + 78.233) * 43758.5453;
   return value - Math.floor(value);
 };
-const positions = new Float32Array(450 * 3);
-for (let i = 0; i < 450; i++) {
+const particleCount = miniMode ? 120 : 450;
+const positions = new Float32Array(particleCount * 3);
+for (let i = 0; i < particleCount; i++) {
   const a = pseudoRandom(i + 1) * Math.PI * 2;
   const r = 2.8 + pseudoRandom(i + 130) * 1.9;
   positions[i * 3] = Math.cos(a) * r;
@@ -299,8 +303,9 @@ const particleMaterial = new THREE.PointsMaterial({
 const particles = new THREE.Points(particleGeometry, particleMaterial);
 scene.add(particles);
 
-const starPositions = new Float32Array(180 * 3);
-for (let i = 0; i < 180; i++) {
+const starCount = miniMode ? 60 : 180;
+const starPositions = new Float32Array(starCount * 3);
+for (let i = 0; i < starCount; i++) {
   starPositions[i * 3] = (pseudoRandom(i + 300) - 0.5) * 35;
   starPositions[i * 3 + 1] = (pseudoRandom(i + 700) - 0.5) * 22;
   starPositions[i * 3 + 2] = (pseudoRandom(i + 1100) - 0.5) * 20 - 5;
@@ -334,7 +339,7 @@ let activeTab = 'geometry';
 function updateCode() {
   document.getElementById('codeSample').textContent = codeExamples[activeTab];
 }
-updateCode();
+if (!miniMode) updateCode();
 
 function setMode(next) {
   mode = next;
@@ -348,6 +353,7 @@ function setMode(next) {
   smile.visible = next !== 'thinking';
   blinkRemaining = 0.17;
 }
+if (!miniMode) {
 document.getElementById('shapeGrid').addEventListener('click', event => {
   const btn = event.target.closest('[data-mode]');
   if (!btn) return;
@@ -443,6 +449,7 @@ renderer.domElement.addEventListener('wheel', event => {
   distance = Math.max(5.5, Math.min(14, distance + event.deltaY * 0.006));
   updateCamera();
 }, { passive: false });
+}
 
 function resize() {
   const width = container.clientWidth, height = container.clientHeight;
@@ -459,13 +466,28 @@ setTheme('cyan');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (reducedMotion) {
   paused = true;
-  document.getElementById('pause').textContent = '▶ 继续动画';
-  document.getElementById('pause').classList.remove('primary');
+  if (!miniMode) {
+    document.getElementById('pause').textContent = '▶ 继续动画';
+    document.getElementById('pause').classList.remove('primary');
+  }
 }
 
 let previous = performance.now(), sampleTime = performance.now(), frames = 0;
+let lastMiniFrame = 0;
+let firstMiniRender = true;
+if (miniMode) window.addEventListener('message', event => {
+  if (event.origin === window.location.origin && event.data?.type === 'mini-scene-status-request' && !firstMiniRender) {
+    window.parent.postMessage({type: 'mini-scene-ready'}, window.location.origin);
+  }
+});
 const objectCount = (() => { let count = 0; scene.traverse(obj => { if (obj.isMesh || obj.isPoints || obj.isSprite || obj.isLine) count++; }); return count; })();
 function animate(now) {
+  requestAnimationFrame(animate);
+  if (miniMode) {
+    if (document.hidden || (reducedMotion && !firstMiniRender)) return;
+    if (now - lastMiniFrame < 1000 / 24) return;
+    lastMiniFrame = now;
+  }
   const dt = Math.min(0.05, (now - previous) / 1000);
   previous = now;
   if (!paused) {
@@ -499,6 +521,13 @@ function animate(now) {
   antennaOrb.scale.setScalar(1 + Math.sin(elapsed * 2.5) * 0.1 + pulse * 0.35);
   keyLight.intensity = 95 + pulse * 45;
   renderer.render(scene, camera);
+  if (miniMode) {
+    if (firstMiniRender) {
+      firstMiniRender = false;
+      window.parent.postMessage({type: 'mini-scene-ready'}, window.location.origin);
+    }
+    return;
+  }
   frames++;
   if (now - sampleTime >= 1000) {
     document.getElementById('fps').textContent = Math.round(frames * 1000 / (now - sampleTime));
@@ -507,6 +536,5 @@ function animate(now) {
     frames = 0;
     sampleTime = now;
   }
-  requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
