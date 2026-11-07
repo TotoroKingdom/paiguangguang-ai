@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAssistant } from "./provider";
-import { capabilityCatalog } from "./data";
+import { getCapabilities } from "./data";
 import { AssistantIcon } from "./assistant-icon";
 
 const entries = [
@@ -169,7 +169,7 @@ export function AssistantChat({ conversationId }: { conversationId?: string }) {
               type="button"
               key={example.capabilityId}
               onClick={() => {
-                const c = capabilityCatalog.find(
+                const c = getCapabilities(state).find(
                   (capability) => capability.id === example.capabilityId,
                 );
                 dispatch({

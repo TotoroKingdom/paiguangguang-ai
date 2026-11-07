@@ -53,6 +53,14 @@ jobs:
       - name: Run backend tests
         run: python -m pytest tests -q
 
+      - name: Verify Alembic migration
+        env:
+          ASSISTANT_DATABASE_URL: sqlite:////tmp/paiguangguang-ci-migrations.db
+        run: |
+          rm -f /tmp/paiguangguang-ci-migrations.db
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+
   frontend:
     name: Frontend tests and E2E
     runs-on: ubuntu-latest
@@ -100,8 +108,8 @@ jobs:
       - name: Run production build
         run: npm run build
 
-      - name: Run assistant session E2E
-        run: npx playwright test e2e/assistant-session-v1.spec.ts --project=desktop --project=mobile
+      - name: Run Playwright route, assistant, and admin E2E
+        run: npx playwright test
 
       - name: Upload Playwright artifacts on failure
         if: failure()

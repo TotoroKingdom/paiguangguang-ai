@@ -10,6 +10,7 @@ import {
   createTurn as apiCreateTurn,
   deleteConversation as apiDeleteConversation,
   getConversation as apiGetConversation,
+  listCapabilities as apiListCapabilities,
   listConversations as apiListConversations,
   patchMessage as apiPatchMessage,
   renameConversation as apiRenameConversation,
@@ -109,9 +110,42 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [dispatch, reportError]);
 
+  const loadCatalog = useCallback(async () => {
+    try {
+      const catalog = await apiListCapabilities();
+      dispatch({
+        type: "SET_CATALOG",
+        catalog: catalog.map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          name: item.name,
+          description: item.description,
+          category: item.category,
+          icon: item.icon,
+          source: item.source,
+          steps: item.steps,
+          tools: item.tools,
+          ...(item.content !== null ? { content: item.content } : {}),
+          version: item.version,
+          versionId: item.versionId,
+          executionMode: item.executionMode,
+        })),
+      });
+    } catch (error) {
+      reportError(error, "能力目录加载失败，当前显示内置演示目录。");
+    }
+  }, [dispatch, reportError]);
+
   const importLegacy = useCallback(
     async (raw: string | null) => {
-      if (!raw || window.localStorage.getItem(MIGRATION_STORAGE_KEY) === "complete") return;
+      let migrationComplete = false;
+      try {
+        migrationComplete =
+          window.localStorage.getItem(MIGRATION_STORAGE_KEY) === "complete";
+      } catch {
+        migrationComplete = true;
+      }
+      if (!raw || migrationComplete) return;
       const legacy = restoreState(raw);
       const conversations = legacy.conversations.filter((item) => !seedIds.has(item.id));
       try {
@@ -137,7 +171,11 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             }
           }
         }
-        window.localStorage.setItem(MIGRATION_STORAGE_KEY, "complete");
+        try {
+          window.localStorage.setItem(MIGRATION_STORAGE_KEY, "complete");
+        } catch {
+          /* The in-memory session remains usable when storage is unavailable. */
+        }
       } catch (error) {
         reportError(error, "旧浏览器聊天迁移未完成，原始数据仍保留；请重试。");
       }
@@ -160,7 +198,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
     void (async () => {
       await importLegacy(legacyRaw);
-      if (mounted.current) await loadList();
+      if (mounted.current) await Promise.all([loadList(), loadCatalog()]);
       if (mounted.current) setReady(true);
     })();
     const activeTimers = timers.current;
@@ -169,7 +207,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       activeTimers.forEach(clearTimeout);
       activeTimers.clear();
     };
-  }, [importLegacy, loadList]);
+  }, [importLegacy, loadCatalog, loadList]);
 
   useEffect(() => {
     if (!ready) return;
@@ -179,6 +217,13 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       setStorageNotice("本地配置不可用，当前仅使用内存中的草稿和能力设置。");
     }
   }, [state, ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+    const refresh = () => void loadCatalog();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [loadCatalog, ready]);
 
   const persistFinal = useCallback(
     async (conversationId: string, messageId: string, message: ChatMessage) => {

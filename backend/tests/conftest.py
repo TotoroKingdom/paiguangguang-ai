@@ -13,7 +13,9 @@ os.environ["ASSISTANT_DATABASE_URL"] = f"sqlite:///{TEST_DATABASE.as_posix()}"
 os.environ["ASSISTANT_OWNER_COOKIE_SECRET"] = "test-secret-for-assistant-owner-cookie-32"
 
 from app.db import Base, engine
+from app.db import SessionLocal
 from app.main import app
+from app.modules.capabilities.service import CapabilityService
 from fastapi.testclient import TestClient
 
 client = TestClient(app)
@@ -23,5 +25,7 @@ client = TestClient(app)
 def empty_database():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    with SessionLocal() as session:
+        CapabilityService(session).ensure_demo_catalog()
     yield
     Base.metadata.drop_all(bind=engine)

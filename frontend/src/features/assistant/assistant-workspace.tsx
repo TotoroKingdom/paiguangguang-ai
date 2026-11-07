@@ -8,6 +8,7 @@ import { AssistantIcon } from "./assistant-icon";
 import { AssistantDialog } from "./assistant-dialog";
 import { AssistantComposer } from "./assistant-composer";
 import type { Conversation } from "./types";
+import { AdminApiError, getAdminSession, type AdminUser } from "@/features/admin/api";
 
 const navigation = [
   { href: "/assistant", name: "新建聊天", icon: "plus" },
@@ -34,7 +35,10 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const sidebar = useRef<HTMLElement>(null);
+  const accountMenu = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [modal, setModal] = useState<"search" | "settings" | "conversation" | null>(null);
   const [query, setQuery] = useState("");
@@ -54,6 +58,36 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
         key: pathname.startsWith("/assistant/chat/") ? pathname.split("/").pop()! : "new",
       });
   }, [pathname, ready, dispatch]);
+  useEffect(() => {
+    let active = true;
+    void getAdminSession()
+      .then((session) => {
+        if (active) setAdminUser(session.user);
+      })
+      .catch((error) => {
+        if (active && (!(error instanceof AdminApiError) || error.status !== 401)) {
+          setAdminUser(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!accountOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!accountMenu.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", keydown);
+    };
+  }, [accountOpen]);
   useEffect(() => {
     if (!mobileOpen) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -259,7 +293,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           <div className="as-topbar-end">
             <span className="as-demo-label">
               <i />
-              交互原型 · 模拟数据
+              服务端目录 · 模拟执行
             </span>
             {activeConversation && (
               <button
@@ -270,6 +304,58 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 <AssistantIcon name="more" />
               </button>
             )}
+            <div className="as-account-menu" ref={accountMenu}>
+              <button
+                className="as-account-trigger"
+                aria-label="账户菜单"
+                aria-expanded={accountOpen}
+                aria-haspopup="menu"
+                onClick={() => setAccountOpen((current) => !current)}
+              >
+                <span>{adminUser ? adminUser.username.slice(0, 1).toUpperCase() : "派"}</span>
+                <AssistantIcon name="chevron" size={14} />
+              </button>
+              {accountOpen && (
+                <div className="as-account-popover" role="menu" aria-label="账户菜单">
+                  <div className="as-account-summary">
+                    <span className="as-avatar">
+                      {adminUser ? adminUser.username.slice(0, 1).toUpperCase() : "派"}
+                    </span>
+                    <div>
+                      <strong>{adminUser ? adminUser.username : "派广广"}</strong>
+                      <small>{adminUser ? "管理员身份已登录" : "匿名浏览器会话"}</small>
+                    </div>
+                  </div>
+                  {adminUser && (
+                    <Link
+                      href="/assistant/admin"
+                      role="menuitem"
+                      onClick={() => setAccountOpen(false)}
+                    >
+                      <AssistantIcon name="settings" size={17} />
+                      管理控制台
+                      <AssistantIcon name="arrow" size={14} />
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setResetConfirm(false);
+                      setModal("settings");
+                    }}
+                  >
+                    <AssistantIcon name="settings" size={17} />
+                    演示设置
+                  </button>
+                  <Link href="/" role="menuitem" onClick={() => setAccountOpen(false)}>
+                    <AssistantIcon name="arrow" size={17} />
+                    返回网站
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         {storageNotice && (

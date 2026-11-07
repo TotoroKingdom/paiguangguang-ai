@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Conversation, Message
 from app.config import settings
+from app.modules.capabilities.service import CapabilityService
 from app.repositories import ConversationRepository, utc_now
 from app.schemas import (
     AttachmentSnapshot,
@@ -177,6 +178,16 @@ class ConversationService:
                 userMessage=message_response(existing),
                 assistantMessage=message_response(assistant),
             )
+        capability_definition = None
+        capability_version = None
+        capability_public = None
+        if request.capability is not None:
+            capability_definition, capability_version, capability_public = (
+                CapabilityService(self.session).resolve_published(
+                    request.capability.id, request.capability.kind
+                )
+            )
+            request.capability.name = capability_public.name
         seq = self.repository.next_seq(conversation_id)
         now = utc_now()
         user_message = Message(
@@ -211,6 +222,14 @@ class ConversationService:
             conversation.title = request.text.strip()[:24]
         conversation.updated_at = now
         conversation.version += 1
+        if capability_definition is not None and capability_version is not None and capability_public is not None:
+            CapabilityService(self.session).record_run(
+                definition=capability_definition,
+                version=capability_version,
+                public=capability_public,
+                conversation_id=conversation_id,
+                owner_id=owner_id,
+            )
         try:
             self.session.commit()
         except IntegrityError:

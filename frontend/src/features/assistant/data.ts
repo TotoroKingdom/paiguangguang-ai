@@ -218,7 +218,7 @@ export const capabilityCatalog: Capability[] = groups.flatMap(([kind, items]) =>
   })),
 );
 export function getCapabilities(state: DemoState): Capability[] {
-  return [...capabilityCatalog, ...state.userSkills];
+  return [...(state.catalog ?? capabilityCatalog), ...state.userSkills];
 }
 export function createInitialState(includeSeedConversations = true): DemoState {
   const now = "2026-01-01T09:00:00.000Z";
@@ -278,6 +278,7 @@ export function createInitialState(includeSeedConversations = true): DemoState {
           ],
         }))
       : [],
+    catalog: capabilityCatalog,
     favorites: ["tool-1", "skill-2", "agent-3"],
     userSkills: [],
     connectors: capabilityCatalog

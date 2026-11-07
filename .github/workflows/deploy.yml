@@ -162,11 +162,13 @@ jobs:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ASSISTANT_OWNER_COOKIE_SECRET: ${{ secrets.ASSISTANT_OWNER_COOKIE_SECRET }}
           ASSISTANT_ALLOWED_ORIGINS: ${{ vars.ASSISTANT_ALLOWED_ORIGINS }}
+          ASSISTANT_ADMIN_USERNAME: ${{ vars.ASSISTANT_ADMIN_USERNAME }}
+          ASSISTANT_ADMIN_PASSWORD: ${{ secrets.ASSISTANT_ADMIN_PASSWORD }}
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: IMAGE_NAME,BACKEND_IMAGE_NAME,DEPLOY_COMMIT,GHCR_USERNAME,GHCR_TOKEN,ASSISTANT_OWNER_COOKIE_SECRET,ASSISTANT_ALLOWED_ORIGINS
+          envs: IMAGE_NAME,BACKEND_IMAGE_NAME,DEPLOY_COMMIT,GHCR_USERNAME,GHCR_TOKEN,ASSISTANT_OWNER_COOKIE_SECRET,ASSISTANT_ALLOWED_ORIGINS,ASSISTANT_ADMIN_USERNAME,ASSISTANT_ADMIN_PASSWORD
           script: |
             set -eu
             umask 077
@@ -251,6 +253,13 @@ jobs:
               printf 'ASSISTANT_OWNER_COOKIE_SECRET=%s\n' "$ASSISTANT_OWNER_COOKIE_SECRET"
               printf 'ASSISTANT_OWNER_COOKIE_SECURE=true\n'
               printf 'ASSISTANT_ALLOWED_ORIGINS=%s\n' "$ASSISTANT_ALLOWED_ORIGINS"
+              printf 'ASSISTANT_ADMIN_COOKIE_SECURE=true\n'
+              if [ -n "${ASSISTANT_ADMIN_USERNAME:-}" ]; then
+                printf 'ASSISTANT_ADMIN_USERNAME=%s\n' "$ASSISTANT_ADMIN_USERNAME"
+              fi
+              if [ -n "${ASSISTANT_ADMIN_PASSWORD:-}" ]; then
+                printf 'ASSISTANT_ADMIN_PASSWORD=%s\n' "$ASSISTANT_ADMIN_PASSWORD"
+              fi
               printf 'ASSISTANT_DATA_VOLUME=%s\n' "$volume_name"
             } > "$app_dir/.env"
             chmod 600 "$app_dir/.env"

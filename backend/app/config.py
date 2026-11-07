@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +14,15 @@ class Settings(BaseSettings):
     orphan_generation_after_seconds: int = 30
     allowed_origins: str = ""
     environment: str = "development"
+    admin_session_cookie_name: str = "paiguangguang_admin"
+    admin_csrf_cookie_name: str = "paiguangguang_admin_csrf"
+    admin_cookie_secure: bool = False
+    admin_session_max_age_seconds: int = 60 * 60 * 8
+    admin_login_max_attempts: int = 5
+    admin_login_window_seconds: int = 300
+    admin_login_lock_seconds: int = 900
+    admin_username: str = "admin"
+    admin_password: SecretStr | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="ASSISTANT_", extra="ignore")
 
@@ -34,6 +44,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("ASSISTANT_OWNER_COOKIE_SECRET must be a strong production secret")
             if not self.owner_cookie_secure:
                 raise RuntimeError("ASSISTANT_OWNER_COOKIE_SECURE must be true in production")
+            if not self.admin_cookie_secure:
+                raise RuntimeError("ASSISTANT_ADMIN_COOKIE_SECURE must be true in production")
             if not self.database_url.startswith("sqlite:///"):
                 raise RuntimeError("ASSISTANT_DATABASE_URL must use SQLite for this release")
             if (
@@ -42,6 +54,13 @@ class Settings(BaseSettings):
                 or "your-org" in self.allowed_origins
             ):
                 raise RuntimeError("ASSISTANT_ALLOWED_ORIGINS must be set in production")
+            bootstrap_password = (
+                self.admin_password.get_secret_value()
+                if self.admin_password
+                else ""
+            )
+            if bootstrap_password and len(bootstrap_password) < 12:
+                raise RuntimeError("ASSISTANT_ADMIN_PASSWORD must contain at least 12 characters")
 
     @property
     def allowed_origin_values(self) -> set[str]:

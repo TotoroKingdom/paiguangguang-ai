@@ -4,10 +4,13 @@ export type Capability = CapabilityRef & {
   description: string;
   category: string;
   icon: string;
-  source: "system" | "personal";
+  source: "system" | "personal" | "managed";
   steps: string[];
   tools?: string[];
   content?: string;
+  version?: number;
+  versionId?: string;
+  executionMode?: "demo" | "simulated" | "real";
 };
 export type ConnectorStatus =
   "connected" | "disconnected" | "unconfigured" | "connecting" | "error" | "unauthorized";
@@ -52,6 +55,7 @@ export type Conversation = {
 export type DemoState = {
   version: 1;
   conversations: Conversation[];
+  catalog: Capability[];
   favorites: string[];
   userSkills: Capability[];
   connectors: ConnectorConfig[];
@@ -70,6 +74,7 @@ export type DemoAction =
   | { type: "ADD_FILES"; files: DemoFile[] }
   | { type: "DELETE_FILE"; id: string }
   | { type: "CREATE_CONVERSATION"; conversation: Conversation }
+  | { type: "SET_CATALOG"; catalog: Capability[] }
   | { type: "SET_CONVERSATIONS"; conversations: Conversation[] }
   | { type: "UPSERT_CONVERSATION"; conversation: Conversation }
   | { type: "RENAME_CONVERSATION"; id: string; title: string }

@@ -136,10 +136,10 @@ export function restoreState(raw: string | null): DemoState {
 }
 export function restoreLocalState(raw: string | null): DemoState {
   const restored = restoreState(raw);
-  return { ...restored, conversations: [] };
+  return { ...restored, conversations: [], catalog: createInitialState().catalog };
 }
 export function serializeLocalState(state: DemoState): string {
-  return JSON.stringify({ ...state, conversations: [] });
+  return JSON.stringify({ ...state, conversations: [], catalog: [] });
 }
 export function demoReducer(state: DemoState, action: DemoAction): DemoState {
   switch (action.type) {
@@ -211,6 +211,8 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       };
     case "SET_CONVERSATIONS":
       return { ...state, conversations: sortConversations(action.conversations) };
+    case "SET_CATALOG":
+      return { ...state, catalog: action.catalog };
     case "UPSERT_CONVERSATION": {
       const found = state.conversations.some((c) => c.id === action.conversation.id);
       return {
