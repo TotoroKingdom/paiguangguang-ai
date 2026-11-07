@@ -1,9 +1,11 @@
+import secrets
 from datetime import timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app.config import settings
+from app.config import Settings, settings
 from app.core.security import hash_password
 from app.db import SessionLocal
 from app.main import app
@@ -11,9 +13,14 @@ from app.modules.identity.service import login_limiter
 from app.modules.identity.models import AdminSession, AdminUser
 from app.repositories import utc_now
 
+TEST_ADMIN_PASSWORD = secrets.token_urlsafe(24)
+TEST_VIEWER_PASSWORD = secrets.token_urlsafe(24)
+TEST_LIMITED_PASSWORD = secrets.token_urlsafe(24)
+WRONG_PASSWORD = f"invalid-{secrets.token_urlsafe(12)}"
+
 
 def create_admin(
-    username: str = "admin", password: str = "test-admin-password-123", role: str = "admin"
+    username: str = "admin", password: str = TEST_ADMIN_PASSWORD, role: str = "admin"
 ) -> None:
     with SessionLocal() as session:
         existing = session.scalar(select(AdminUser).where(AdminUser.username == username))
@@ -32,7 +39,7 @@ def create_admin(
         session.commit()
 
 
-def login(client: TestClient, username: str = "admin", password: str = "test-admin-password-123") -> str:
+def login(client: TestClient, username: str = "admin", password: str = TEST_ADMIN_PASSWORD) -> str:
     response = client.post(
         "/api/v1/admin/auth/login",
         json={"username": username, "password": password},
@@ -76,12 +83,12 @@ def test_admin_login_session_logout_and_csrf():
 
     assert client.post(
         "/api/v1/admin/auth/login",
-        json={"username": "admin", "password": "wrong-password"},
+        json={"username": "admin", "password": WRONG_PASSWORD},
         headers={"origin": "http://testserver"},
     ).status_code == 401
     login_response = client.post(
         "/api/v1/admin/auth/login",
-        json={"username": "admin", "password": "test-admin-password-123"},
+        json={"username": "admin", "password": TEST_ADMIN_PASSWORD},
         headers={"origin": "http://testserver"},
     )
     assert login_response.status_code == 200
@@ -92,7 +99,7 @@ def test_admin_login_session_logout_and_csrf():
         stored = session.scalar(select(AdminUser).where(AdminUser.username == "admin"))
         assert stored is not None
         assert stored.password_hash.startswith("pbkdf2_sha256$")
-        assert "test-admin-password-123" not in stored.password_hash
+        assert TEST_ADMIN_PASSWORD not in stored.password_hash
     csrf = client.cookies.get(settings.admin_csrf_cookie_name)
     assert csrf
     session = client.get("/api/v1/admin/auth/session")
@@ -126,18 +133,18 @@ def test_unauthenticated_and_non_admin_are_rejected():
     assert anonymous.get("/api/v1/admin/capabilities").status_code == 401
     assert anonymous.get("/api/v1/admin/overview").status_code == 401
 
-    create_admin("viewer", "viewer-password-123", role="viewer")
+    create_admin("viewer", TEST_VIEWER_PASSWORD, role="viewer")
     viewer = TestClient(app)
     response = viewer.post(
         "/api/v1/admin/auth/login",
-        json={"username": "viewer", "password": "viewer-password-123"},
+        json={"username": "viewer", "password": TEST_VIEWER_PASSWORD},
         headers={"origin": "http://testserver"},
     )
     assert response.status_code == 403
 
 
 def test_login_rate_limit_locks_a_repeated_failure_source(monkeypatch):
-    create_admin("limited", "limited-password-123")
+    create_admin("limited", TEST_LIMITED_PASSWORD)
     login_limiter.reset("testclient:limited")
     monkeypatch.setattr(settings, "admin_login_max_attempts", 2)
     monkeypatch.setattr(settings, "admin_login_lock_seconds", 60)
@@ -145,12 +152,12 @@ def test_login_rate_limit_locks_a_repeated_failure_source(monkeypatch):
     for _ in range(2):
         assert client.post(
             "/api/v1/admin/auth/login",
-            json={"username": "limited", "password": "wrong-password"},
+            json={"username": "limited", "password": WRONG_PASSWORD},
             headers={"origin": "http://testserver"},
         ).status_code == 401
     assert client.post(
         "/api/v1/admin/auth/login",
-        json={"username": "limited", "password": "wrong-password"},
+        json={"username": "limited", "password": WRONG_PASSWORD},
         headers={"origin": "http://testserver"},
     ).status_code == 423
 
@@ -166,6 +173,29 @@ def test_expired_admin_session_is_rejected():
         session.commit()
     assert client.get("/api/v1/admin/auth/session").status_code == 401
     assert client.get("/api/v1/admin/capabilities").status_code == 401
+
+
+def test_production_requires_secure_admin_cookie():
+    insecure = Settings(
+        environment="production",
+        database_url="sqlite:///./production-check.db",
+        owner_cookie_secret="x" * 40,
+        owner_cookie_secure=True,
+        admin_cookie_secure=False,
+        allowed_origins="https://example.com",
+    )
+    with pytest.raises(RuntimeError, match="ASSISTANT_ADMIN_COOKIE_SECURE"):
+        insecure.validate_runtime()
+
+    secure = Settings(
+        environment="production",
+        database_url="sqlite:///./production-check.db",
+        owner_cookie_secret="x" * 40,
+        owner_cookie_secure=True,
+        admin_cookie_secure=True,
+        allowed_origins="https://example.com",
+    )
+    secure.validate_runtime()
 
 
 def test_capability_draft_publish_disable_and_immutable_versions():
@@ -225,6 +255,13 @@ def test_capability_draft_publish_disable_and_immutable_versions():
         if item["id"] == capability_id
     )["name"] == "财务对账 V2"
 
+    duplicate_publish = client.post(
+        f"/api/v1/admin/capabilities/{capability_id}/publish",
+        json={"versionId": edited_detail["draft"]["id"]},
+        headers=mutation_headers(csrf),
+    )
+    assert duplicate_publish.status_code == 409
+
     disabled = client.post(
         f"/api/v1/admin/capabilities/{capability_id}/disable",
         json={},
@@ -235,6 +272,7 @@ def test_capability_draft_publish_disable_and_immutable_versions():
     assert all(
         item["id"] != capability_id for item in client.get("/api/v1/capabilities").json()["items"]
     )
+    assert client.get(f"/api/v1/capabilities/{capability_id}").status_code == 404
 
     releases = client.get("/api/v1/admin/releases").json()["items"]
     assert any(
@@ -307,7 +345,7 @@ def test_admin_settings_exposes_no_secrets():
     body = response.text.lower()
     assert "password" not in body
     assert "secret" not in body
-    assert "test-admin-password-123" not in body
+    assert TEST_ADMIN_PASSWORD.lower() not in body
 
 
 def test_public_catalog_hides_admin_configuration_and_drafts():
