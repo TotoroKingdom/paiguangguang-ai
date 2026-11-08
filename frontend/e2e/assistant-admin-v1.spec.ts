@@ -84,6 +84,15 @@ test("publishes a capability, proves draft isolation, disables it, and exposes t
   await expect(page).toHaveURL(/\/assistant\/admin\/capabilities\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   const detailUrl = page.url();
+  await expect(page.locator('select option[value="system"]')).toHaveText(
+    "内置只读 Tool",
+  );
+  await expect(page.locator('select option[value="mcp"]')).toHaveText(
+    "已批准 MCP Tool",
+  );
+  await expect(page.locator('select option[value="demo"]')).toHaveText(
+    "演示执行器（仅开发）",
+  );
   await page.screenshot({
     path: screenshotPath(testInfo, "admin-capability-detail"),
     animations: "disabled",
@@ -139,6 +148,15 @@ test("publishes a capability, proves draft isolation, disables it, and exposes t
 
   await page.goto("/assistant/tools");
   await expect(page.getByText(versionTwo, { exact: true })).toHaveCount(0);
+
+  await page.goto("/assistant/admin/settings");
+  await expect(
+    page.getByText(
+      "服务端 Agent Runtime、Tool Gateway、MCP Client 与 Run/Step/Trace 已启用。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("当前未接入真实 LLM、MCP Runtime 或 Agent Loop。")).toHaveCount(0);
 });
 
 test("ordinary anonymous users do not see the admin entry", async ({ page }) => {

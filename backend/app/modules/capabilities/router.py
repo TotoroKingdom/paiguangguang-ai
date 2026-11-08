@@ -452,6 +452,10 @@ def list_audit_events(
 def get_admin_settings(
     principal: AdminPrincipal = Depends(require_admin),
 ):
+    provider = settings.llm_provider.strip().lower()
+    execution_mode = (
+        "fake" if provider in {"", "fake", "test", "fake-slow"} else provider
+    )
     return SettingsResponse(
         environment=settings.environment,
         database=settings.database_url.split("?", 1)[0],
@@ -463,11 +467,13 @@ def get_admin_settings(
             "windowSeconds": settings.admin_login_window_seconds,
             "lockSeconds": settings.admin_login_lock_seconds,
         },
-        executionMode="simulated-only",
+        executionMode=execution_mode,
         notes=[
-            "当前未接入真实 LLM、MCP Runtime 或 Agent Loop。",
-            "管理端能力发布只影响用户端目录与调用准入校验。",
-            "匿名浏览器会话继续用于普通聊天，不用于管理员鉴权。",
+            "服务端 Agent Runtime、Tool Gateway、MCP Client 与 Run/Step/Trace 已启用。",
+            "Fake Provider 只用于开发与自动化；生产必须配置真实服务端模型。",
+            "模型密钥只从服务端环境读取，不在管理页面、能力配置或 Run 记录中保存。",
+            "MCP Server 必须由平台审核批准，普通用户只能使用本人连接和个人授权。",
+            "匿名访客仍使用明确标注的本地模拟；Active 用户执行走服务端 Runtime。",
             f"当前管理员：{principal.user.username}（{principal.user.role}）",
         ],
     )

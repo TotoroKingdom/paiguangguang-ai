@@ -25,7 +25,7 @@
 
 ## 3. 验证
 
-- 后端：`72 passed`。
+- 后端：`73 passed`。
 - 前端 Vitest：`80 passed`。
 - 账号与个人资源 E2E：桌面/移动共 4 条通过。
 - 全量 Playwright：`78 passed`。

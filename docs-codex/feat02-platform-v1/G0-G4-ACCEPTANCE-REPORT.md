@@ -20,7 +20,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **72 passed** |
+| 后端 `pytest` | **73 passed** |
 | 前端 `vitest` | **80 passed** |
 | Playwright | **78 passed**（desktop + mobile） |
 | TypeScript | 通过 |
