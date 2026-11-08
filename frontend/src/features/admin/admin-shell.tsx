@@ -12,6 +12,7 @@ const navigation = [
   { href: "/assistant/admin/tools", name: "工具管理", icon: "tool" },
   { href: "/assistant/admin/skills", name: "技能管理", icon: "skill" },
   { href: "/assistant/admin/mcp", name: "MCP 连接管理", icon: "mcp" },
+    { href: "/assistant/admin/reviews", name: "审核与发布", icon: "upload" },
   { href: "/assistant/admin/agents", name: "智能体管理", icon: "agent" },
   { href: "/assistant/admin/releases", name: "发布中心", icon: "upload" },
   { href: "/assistant/admin/runs", name: "运行记录", icon: "list" },

@@ -12,7 +12,7 @@
 
 - 后端：`44 passed`（`python -m pytest tests -q`；含 MCP 协议、工具发现与 Runtime 调用）。
 - 前端：`76 passed`（`npm test`）。
-- Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环，共 68 条通过（桌面/移动）。
+- Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布，共 70 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
 - 前端 ESLint：`npm run lint` 通过。
 - 前端生产构建：`npm run build` 通过（30 个路由）。
@@ -29,10 +29,10 @@
 | F03 | PASSED（自动化） | 统一登录、`FULL/STATUS_ONLY`、RBAC 服务端守卫、CSRF/Origin、会话撤销 |
 | F04 | PARTIAL | 自助恢复码、改密、轮换、会话吊销完成；管理员辅助重置保持关闭（BLOCKED） |
 | F05 | PASSED（自动化 + 副本演练） | 旧管理员映射账号 `1`、摘要逐字复制、审核/停用/恢复/角色 API、最后管理员保护 |
-| F06 | PARTIAL | 注册/登录/成功/待审核/个人中心/用户管理页面完成；注册→待审核→管理员激活→登录→个人中心有桌面/移动 E2E；角色变更合并在用户管理页，未单列页面 |
+| F06 | PASSED（E2E） | 注册/登录/成功/待审核/个人中心/用户管理/创作中心/审核发布页面完成；账号闭环与 Creator 审核发布均有桌面/移动 E2E |
 | F07 | PASSED（自动化） | `user_id` 归属、跨浏览器读取、匿名签名认领、跨用户 404 |
 | F08 | PASSED（自动化） | 能力所有者、可见范围、`all_active/granted` ACL、停用后拒绝 |
-| F09 | PASSED（自动化） | Creator 测试→提交→Admin 审核→发布、审计、版本回滚接口 |
+| F09 | PASSED（自动化 + E2E） | Creator 测试→提交→Admin 审核→发布、审计、版本回滚接口；创作中心与审核发布页桌面/移动 E2E |
 | F10 | PARTIAL | 正式目录过滤 Demo、生产强制关闭演示、非授权不显示；开发默认保留 Demo；前端访客仍保留明确标注的模拟回复；历史 Demo 未做归档迁移 |
 | F11 | PASSED（自动化 + E2E） | 个人 Skill 服务端 CRUD、Markdown 导入、所有者隔离、Runtime 加载；服务端文件上传/下载/删除/正文校验；登录态前端已切换到服务端个人资源 |
 | F12 | PASSED（自动化 + E2E） | 平台批准 MCP Server、管理端登记/发现工具、个人连接、Token Fernet 加密、未批准拒绝、Token 不回显；登录态 UI 只显示已批准服务且无任意 URL 输入；外部真实 Server 为 NOT_RUN |
@@ -40,7 +40,7 @@
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
 | F16 | BLOCKED | 依赖 critical/high 已清除（Next 16、FastAPI/Starlette/cryptography 升级）；生产 TLS、443、Secure Cookie、密钥、部署权限仍未核验 |
-| F17 | PARTIAL | 38 场景矩阵已建立：16 PASS / 19 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 68 条通过；真实模型/真实 MCP/生产仍阻断 |
+| F17 | PARTIAL | 38 场景矩阵：19 PASS / 16 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 70 条通过；真实模型/真实 MCP/生产仍阻断 |
 
 ## 3. 数据库与 API
 
