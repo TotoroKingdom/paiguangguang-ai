@@ -373,7 +373,7 @@ test("invalid storage recovers and unavailable storage keeps the prototype usabl
     });
   });
   await page.reload();
-    await expect(page.getByRole("status")).toContainText("本地配置不可用");
+  await expect(page.getByRole("status").filter({ hasText: "本地配置不可用" })).toBeVisible();
   await send(page, "没有本地存储仍然可以聊天");
   await expect(page.getByRole("article", { name: "助手消息" }).last()).not.toBeEmpty();
 });

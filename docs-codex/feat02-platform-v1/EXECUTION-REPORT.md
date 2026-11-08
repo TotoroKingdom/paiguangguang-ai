@@ -17,6 +17,7 @@
 - 前端 ESLint：`npm run lint` 通过。
 - 前端生产构建：`npm run build` 通过（30 个路由）。
 - Alembic：`0001 → 0008`、`downgrade base`、再次 `upgrade head` 均通过；`integrity_check=ok`。
+- 依赖审计：前端生产依赖 0 critical/high；后端 `pip-audit` 无已知漏洞（详见 `DEPENDENCY-AUDIT.md`）。
 
 ## 2. 任务状态
 
@@ -38,7 +39,7 @@
 | F13 | PARTIAL | OpenAI-compatible 流式适配器、Fake Provider、SSE 端点、Run 终态持久化完成；真实模型调用 NOT_RUN |
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
-| F16 | BLOCKED | 生产 TLS、443、Secure Cookie、密钥、依赖审计、部署权限未核验 |
+| F16 | BLOCKED | 依赖 critical/high 已清除（Next 16、FastAPI/Starlette/cryptography 升级）；生产 TLS、443、Secure Cookie、密钥、部署权限仍未核验 |
 | F17 | PARTIAL | 38 场景矩阵已建立：16 PASS / 19 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 68 条通过；真实模型/真实 MCP/生产仍阻断 |
 
 ## 3. 数据库与 API
@@ -113,4 +114,4 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 2. 补齐真实模型密钥与已批准 MCP Server 后，跑 R-01～R-06 真实联调。
 3. 补齐个人 Skill 编辑/版本历史、聊天附件正文读取与 MCP 工具级权限细化。
 4. 补齐 38 个验收场景的逐条证据表与剩余 Runtime/能力页面 E2E。
-5. 生产发布前完成 TLS、Secure Cookie、Origin、依赖审计与回滚演练。
+5. 生产发布前完成 TLS、Secure Cookie、Origin、生产镜像依赖复核与回滚演练。

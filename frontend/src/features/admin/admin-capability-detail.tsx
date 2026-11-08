@@ -97,7 +97,6 @@ export function AdminCapabilityDetail({
       active = false;
     };
     // The ID is the resource boundary; other state is derived from the response.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capabilityId]);
 
   const config = useMemo(() => parseConfig(configText), [configText]);

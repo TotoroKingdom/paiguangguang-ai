@@ -31,3 +31,6 @@ frontend/*.tsbuildinfo
 *.key
 *.p12
 *.pfx
+
+frontend/.local-audit-*.json
+frontend/.local-*

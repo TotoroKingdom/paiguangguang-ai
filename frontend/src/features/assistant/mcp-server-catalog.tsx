@@ -42,7 +42,6 @@ export function McpServerCatalog() {
 
   useEffect(() => {
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const connectionFor = (server: ServerMcp) =>
