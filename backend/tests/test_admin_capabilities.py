@@ -194,6 +194,8 @@ def test_production_requires_secure_admin_cookie():
         owner_cookie_secret="x" * 40,
         owner_cookie_secure=True,
         admin_cookie_secure=True,
+            user_cookie_secure=True,
+            demo_catalog_enabled=False,
         allowed_origins="https://example.com",
     )
     secure.validate_runtime()

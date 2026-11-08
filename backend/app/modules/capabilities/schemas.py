@@ -115,11 +115,16 @@ class CapabilitySummary(BaseModel):
     category: str
     icon: str
     status: CapabilityStatus
-    source: Literal["demo", "admin"]
+    source: Literal["demo", "admin", "creator"]
     hasDraft: bool
     publishedVersion: int | None
     draftVersion: int | None
     executionMode: Literal["demo", "simulated"] | None
+    visibility: Literal["platform", "private"] = "platform"
+    accessMode: Literal["all_active", "granted"] = "all_active"
+    reviewStatus: str = "none"
+    ownerId: str | None = None
+    testStatus: str = "untested"
     updatedAt: datetime
 
 
@@ -147,6 +152,11 @@ class PublicCapability(BaseModel):
     tools: list[str]
     content: str | None
     executionMode: Literal["demo", "simulated"]
+    visibility: Literal["platform", "private"] = "platform"
+    accessMode: Literal["all_active", "granted"] = "all_active"
+    authorized: bool = True
+    ready: bool = False
+    testStatus: str = "untested"
     version: int
     versionId: str
 
@@ -232,3 +242,29 @@ class SettingsResponse(BaseModel):
     loginRateLimit: dict[str, int]
     executionMode: str
     notes: list[str]
+
+
+class ReviewActionRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(default="", max_length=255)
+
+
+class GrantRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    userId: str = Field(min_length=1, max_length=36)
+
+
+class ReviewEventView(BaseModel):
+    id: str
+    capabilityId: str
+    versionId: str
+    action: str
+    actorId: str
+    reason: str
+    createdAt: datetime
+
+
+class ReviewListResponse(BaseModel):
+    items: list[ReviewEventView]

@@ -49,6 +49,13 @@ def init_db() -> None:
         CapabilityVersion,
     )
     from app.modules.identity.models import AdminSession, AdminUser  # noqa: F401
+    from app.modules.personal.models import (  # noqa: F401
+        McpConnection,
+        McpServer,
+        PersonalSkill,
+        UserFile,
+    )
+    from app.modules.runtime.models import AgentRun, RunStep, RunTrace  # noqa: F401
     from app.modules.observability.models import AuditEvent  # noqa: F401
 
     if settings.database_path:

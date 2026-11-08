@@ -24,6 +24,18 @@ class CapabilityDefinition(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="draft")
     source: Mapped[str] = mapped_column(String(16), nullable=False, default="admin")
     created_by: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    owner_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    visibility: Mapped[str] = mapped_column(String(16), nullable=False, default="platform")
+    access_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="all_active")
+    review_status: Mapped[str] = mapped_column(String(16), nullable=False, default="none")
+    submitted_by: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_reason: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    test_status: Mapped[str] = mapped_column(String(16), nullable=False, default="untested")
+    tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    test_detail_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     versions: Mapped[list["CapabilityVersion"]] = relationship(
@@ -95,4 +107,35 @@ class CapabilityRun(Base):
     mode: Mapped[str] = mapped_column(String(16), nullable=False, default="demo")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="accepted")
     detail_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CapabilityGrant(Base):
+    __tablename__ = "capability_grants"
+    __table_args__ = (
+        UniqueConstraint("capability_id", "user_id", name="uq_capability_grants_target"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    capability_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("capability_definitions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    granted_by: Mapped[str] = mapped_column(String(36), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CapabilityReview(Base):
+    __tablename__ = "capability_reviews"
+    __table_args__ = (Index("ix_capability_reviews_capability", "capability_id", "created_at"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    capability_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    version_id: Mapped[str] = mapped_column(String(36), nullable=False, default="")
+    action: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

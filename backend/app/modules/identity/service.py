@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.security import hash_password, hash_token, new_secret, verify_password
-from app.modules.identity.models import AdminSession, AdminUser
+from app.modules.identity.models import AdminSession, AdminUser, User
 from app.repositories import utc_now
 
 logger = logging.getLogger(__name__)
@@ -105,13 +105,10 @@ class AdminIdentityService:
                     updated_at=now,
                 )
             )
-        elif not verify_password(password, user.password_hash):
-            user.password_hash = encoded
-            user.updated_at = now
         self.session.commit()
 
     def has_active_admin(self) -> bool:
-        return (
+        legacy = (
             self.session.scalar(
                 select(AdminUser.id).where(
                     AdminUser.is_active.is_(True), AdminUser.role == "admin"
@@ -119,6 +116,13 @@ class AdminIdentityService:
             )
             is not None
         )
+        unified = (
+            self.session.scalar(
+                select(User.id).where(User.status == "ACTIVE", User.role == "ADMIN")
+            )
+            is not None
+        )
+        return legacy or unified
 
     def login(
         self,

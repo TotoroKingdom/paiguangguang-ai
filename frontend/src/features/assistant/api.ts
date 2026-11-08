@@ -220,3 +220,98 @@ export function apiMessageToChatMessage(message: ApiMessage): ChatMessage {
   };
 }
 
+export type RuntimeEvent =
+  | {
+      type: "start";
+      conversation: ConversationSummary;
+      userMessage: ApiMessage;
+      assistantMessage: ApiMessage;
+    }
+  | { type: "run"; runId: string }
+  | { type: "chunk"; content: string }
+  | { type: "tool"; name: string; result: Record<string, unknown> }
+  | { type: "done"; runId: string; status: string }
+  | { type: "error"; runId?: string; code: string; message?: string };
+
+function authCsrfToken(): string {
+  if (typeof document === "undefined") return "";
+  const prefix = "paiguangguang_csrf=";
+  return (
+    document.cookie
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(prefix))
+      ?.slice(prefix.length) ?? ""
+  );
+}
+
+export async function streamRun(
+  input: {
+    conversationId: string;
+    clientTurnId: string;
+    text: string;
+    capability: CapabilityRef | null;
+    fileIds: string[];
+  },
+  onEvent: (event: RuntimeEvent) => void,
+): Promise<void> {
+  const response = await fetch("/api/v1/assistant/runs/stream", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": authCsrfToken(),
+    },
+    body: JSON.stringify({
+      conversationId: input.conversationId,
+      clientTurnId: input.clientTurnId,
+      text: input.text,
+      capabilityId: input.capability?.id ?? null,
+      capabilityKind: input.capability?.kind ?? null,
+      toolArguments: {},
+      mode: "fake",
+    }),
+  });
+  if (!response.ok || !response.body) {
+    let message = "真实执行请求失败，请重试。";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (body.error?.message) message = body.error.message;
+    } catch {
+      /* keep fallback */
+    }
+    throw new AssistantApiError(message, response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let separator = buffer.indexOf("\n\n");
+    while (separator >= 0) {
+      const block = buffer.slice(0, separator);
+      buffer = buffer.slice(separator + 2);
+      const line = block.split("\n").find((item) => item.startsWith("data:"));
+      if (line) {
+        try {
+          onEvent(JSON.parse(line.slice(5).trim()) as RuntimeEvent);
+        } catch {
+          /* ignore malformed SSE frames */
+        }
+      }
+      separator = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+export async function cancelRun(runId: string): Promise<void> {
+  await fetch(`/api/v1/assistant/runs/${runId}/cancel`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": authCsrfToken() },
+    body: "{}",
+  });
+}
+

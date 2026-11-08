@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.modules.capabilities.models import (
     CapabilityDefinition,
+    CapabilityGrant,
+    CapabilityReview,
     CapabilityRun,
     CapabilityVersion,
 )
@@ -25,8 +27,10 @@ from app.modules.capabilities.schemas import (
     PublicCapability,
 )
 from app.modules.capabilities.seed import DEMO_CAPABILITIES
+from app.modules.identity.models import User
 from app.modules.observability.models import AuditEvent
 from app.repositories import utc_now
+from app.config import settings
 
 VALID_KINDS = {"tool", "skill", "mcp", "agent"}
 
@@ -97,6 +101,11 @@ def summary_view(definition: CapabilityDefinition) -> CapabilitySummary:
         publishedVersion=published.version if published else None,
         draftVersion=draft.version if draft else None,
         executionMode=snapshot.get("executionMode"),
+        visibility=definition.visibility,
+        accessMode=definition.access_mode,
+        reviewStatus=definition.review_status,
+        ownerId=definition.owner_id,
+        testStatus=definition.test_status,
         updatedAt=aware(definition.updated_at),
     )
 
@@ -115,7 +124,12 @@ def detail_view(definition: CapabilityDefinition) -> CapabilityDetail:
     )
 
 
-def public_view(definition: CapabilityDefinition, version: CapabilityVersion) -> PublicCapability:
+def public_view(
+    definition: CapabilityDefinition,
+    version: CapabilityVersion,
+    *,
+    authorized: bool = True,
+) -> PublicCapability:
     snapshot = CapabilitySnapshot.model_validate(loads(version.snapshot_json, {}))
     return PublicCapability(
         id=definition.id,
@@ -129,6 +143,11 @@ def public_view(definition: CapabilityDefinition, version: CapabilityVersion) ->
         tools=snapshot.tools,
         content=snapshot.content,
         executionMode=snapshot.executionMode,
+        visibility=definition.visibility,
+        accessMode=definition.access_mode,
+        authorized=authorized,
+        ready=definition.test_status == "passed" and definition.status == "published",
+        testStatus=definition.test_status,
         version=version.version,
         versionId=version.id,
     )
@@ -229,11 +248,30 @@ class CapabilityService:
         )
         return [summary_view(definition) for definition in definitions]
 
+    def list_owned(self, owner_id: str) -> list[CapabilitySummary]:
+        definitions = list(
+            self.session.scalars(
+                select(CapabilityDefinition)
+                .where(CapabilityDefinition.owner_id == owner_id)
+                .options(selectinload(CapabilityDefinition.versions))
+                .order_by(CapabilityDefinition.updated_at.desc())
+            )
+        )
+        return [summary_view(definition) for definition in definitions]
+
     def detail(self, capability_id: str) -> CapabilityDetail:
         return detail_view(self._get(capability_id))
 
     def create(
-        self, payload: CapabilityCreate, *, actor_id: str
+        self,
+        payload: CapabilityCreate,
+        *,
+        actor_id: str,
+        owner_id: str | None = None,
+        visibility: str = "platform",
+        access_mode: str = "all_active",
+        review_status: str = "none",
+        source: str = "admin",
     ) -> CapabilityDetail:
         now = utc_now()
         slug = f"{payload.kind}-{uuid4().hex[:12]}"
@@ -245,8 +283,12 @@ class CapabilityService:
             category=payload.category.strip(),
             icon=payload.icon.strip(),
             status="draft",
-            source="admin",
+            source=source,
             created_by=actor_id,
+            owner_id=owner_id,
+            visibility=visibility,
+            access_mode=access_mode,
+            review_status=review_status,
             created_at=now,
             updated_at=now,
         )
@@ -337,6 +379,10 @@ class CapabilityService:
         actor_id: str,
     ) -> CapabilityDetail:
         definition = self._get(capability_id)
+        if definition.review_status == "submitted":
+            raise HTTPException(status_code=409, detail="Capability is awaiting review")
+        if definition.source == "creator" and definition.review_status != "approved":
+            raise HTTPException(status_code=409, detail="Creator capability requires approval")
         draft = next(
             (item for item in definition.versions if version_id and item.id == version_id),
             None,
@@ -362,6 +408,7 @@ class CapabilityService:
         definition.category = snapshot.category
         definition.icon = snapshot.icon
         definition.updated_at = now
+        self._record_review(definition, draft.id, "publish", actor_id, changelog)
         return detail_view(self._get(capability_id))
 
     def disable(self, capability_id: str, *, actor_id: str) -> CapabilityDetail:
@@ -374,9 +421,212 @@ class CapabilityService:
         published.retired_at = now
         definition.status = "disabled"
         definition.updated_at = now
+        self._record_review(definition, published.id, "disable", actor_id, "")
         return detail_view(self._get(capability_id))
 
-    def public_list(self, *, kind: str | None = None, query: str = "") -> list[PublicCapability]:
+    def _record_review(
+        self,
+        definition: CapabilityDefinition,
+        version_id: str,
+        action: str,
+        actor_id: str,
+        reason: str,
+    ) -> CapabilityReview:
+        event = CapabilityReview(
+            capability_id=definition.id,
+            version_id=version_id,
+            action=action,
+            actor_id=actor_id,
+            reason=(reason or "")[:255],
+            created_at=utc_now(),
+        )
+        self.session.add(event)
+        return event
+
+    def submit(
+        self, capability_id: str, *, actor_id: str, reason: str = ""
+    ) -> CapabilityDetail:
+        definition = self._get(capability_id)
+        if definition.owner_id not in {None, actor_id}:
+            raise HTTPException(status_code=403, detail="Only the owner can submit")
+        draft = latest_draft(definition.versions)
+        if draft is None:
+            raise HTTPException(status_code=409, detail="No draft to submit")
+        if definition.test_status != "passed":
+            raise HTTPException(status_code=409, detail="Capability must pass its test first")
+        definition.review_status = "submitted"
+        definition.submitted_by = actor_id
+        definition.submitted_at = utc_now()
+        definition.review_reason = reason[:255]
+        self._record_review(definition, draft.id, "submit", actor_id, reason)
+        self.session.commit()
+        return detail_view(self._get(capability_id))
+
+    def review(
+        self,
+        capability_id: str,
+        action: str,
+        *,
+        actor_id: str,
+        reason: str = "",
+    ) -> CapabilityDetail:
+        if action not in {"approve", "reject"}:
+            raise HTTPException(status_code=400, detail="Unknown review action")
+        definition = self._get(capability_id)
+        if definition.review_status != "submitted":
+            raise HTTPException(status_code=409, detail="Capability is not awaiting review")
+        draft = latest_draft(definition.versions)
+        now = utc_now()
+        definition.review_status = "approved" if action == "approve" else "rejected"
+        definition.reviewed_by = actor_id
+        definition.reviewed_at = now
+        definition.review_reason = reason[:255]
+        self._record_review(definition, draft.id if draft else "", action, actor_id, reason)
+        self.session.commit()
+        return detail_view(self._get(capability_id))
+
+    def test_capability(
+        self, capability_id: str, *, actor_id: str
+    ) -> CapabilityDetail:
+        definition = self._get(capability_id)
+        draft = latest_draft(definition.versions) or latest_published(definition.versions)
+        if draft is None:
+            raise HTTPException(status_code=409, detail="Capability has no testable version")
+        snapshot = CapabilitySnapshot.model_validate(loads(draft.snapshot_json, {}))
+        checks: list[dict[str, Any]] = []
+        checks.append({"name": "name", "ok": bool(snapshot.name.strip())})
+        executor = str(snapshot.config.get("executor", "")).strip().lower()
+        checks.append({"name": "executor", "ok": executor in {"system", "demo"}})
+        tool_name = str(snapshot.config.get("tool", "")).strip()
+        ready = False
+        if executor == "system":
+            from app.modules.runtime.tools import get_tool
+
+            tool = get_tool(tool_name)
+            ready = tool is not None and not tool.side_effect
+            checks.append({"name": "readonly-tool", "ok": ready, "detail": tool_name})
+        elif executor == "demo":
+            ready = False
+            checks.append(
+                {"name": "demo-isolation", "ok": False, "detail": "Demo cannot pass production readiness"}
+            )
+        else:
+            checks.append({"name": "executor", "ok": False, "detail": executor})
+        definition.test_status = "passed" if ready else "failed"
+        definition.tested_at = utc_now()
+        definition.test_detail_json = dumps({"checks": checks})
+        self._record_review(
+            definition,
+            draft.id,
+            "test",
+            actor_id,
+            "passed" if ready else "failed",
+        )
+        self.session.commit()
+        return detail_view(self._get(capability_id))
+
+    def rollback(
+        self, capability_id: str, version_id: str, *, actor_id: str
+    ) -> CapabilityDetail:
+        definition = self._get(capability_id)
+        target = next((item for item in definition.versions if item.id == version_id), None)
+        if target is None or target.status not in {"published", "retired"}:
+            raise HTTPException(status_code=404, detail="Rollback version not found")
+        now = utc_now()
+        for item in definition.versions:
+            if item.status == "published" and item.id != target.id:
+                item.status = "retired"
+                item.retired_at = now
+        target.status = "published"
+        target.published_at = target.published_at or now
+        definition.status = "published"
+        definition.updated_at = now
+        self._record_review(definition, target.id, "rollback", actor_id, "")
+        self.session.commit()
+        return detail_view(self._get(capability_id))
+
+    def grant(
+        self, capability_id: str, user_id: str, *, actor_id: str
+    ) -> None:
+        definition = self._get(capability_id)
+        user = self.session.get(User, user_id)
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+        existing = self.session.scalar(
+            select(CapabilityGrant).where(
+                CapabilityGrant.capability_id == definition.id,
+                CapabilityGrant.user_id == user_id,
+            )
+        )
+        if existing is None:
+            self.session.add(
+                CapabilityGrant(
+                    capability_id=definition.id,
+                    user_id=user_id,
+                    granted_by=actor_id,
+                    created_at=utc_now(),
+                )
+            )
+        self._record_review(definition, "", "grant", actor_id, user_id)
+        self.session.commit()
+
+    def revoke_grant(self, capability_id: str, user_id: str, *, actor_id: str) -> None:
+        definition = self._get(capability_id)
+        grant = self.session.scalar(
+            select(CapabilityGrant).where(
+                CapabilityGrant.capability_id == definition.id,
+                CapabilityGrant.user_id == user_id,
+            )
+        )
+        if grant is None:
+            raise HTTPException(status_code=404, detail="Grant not found")
+        self.session.delete(grant)
+        self._record_review(definition, "", "revoke-grant", actor_id, user_id)
+        self.session.commit()
+
+    def list_reviews(self, limit: int = 100) -> list[CapabilityReview]:
+        return list(
+            self.session.scalars(
+                select(CapabilityReview)
+                .order_by(CapabilityReview.created_at.desc())
+                .limit(limit)
+            )
+        )
+
+    def _user(self, user_id: str | None) -> User | None:
+        return self.session.get(User, user_id) if user_id else None
+
+    def can_execute(self, definition: CapabilityDefinition, user_id: str | None) -> bool:
+        if definition.status != "published":
+            return False
+        if definition.source == "demo":
+            return True
+        if not user_id:
+            return False
+        user = self._user(user_id)
+        if user is None or user.status != "ACTIVE":
+            return False
+        if definition.owner_id == user_id:
+            return True
+        if definition.access_mode == "all_active":
+            return True
+        return (
+            self.session.scalar(
+                select(CapabilityGrant.id).where(
+                    CapabilityGrant.capability_id == definition.id,
+                    CapabilityGrant.user_id == user_id,
+                )
+            )
+            is not None
+        )
+
+    def public_list(
+        self,
+        *,
+        kind: str | None = None,
+        query: str = "",
+        user_id: str | None = None,
+    ) -> list[PublicCapability]:
         statement = (
             select(CapabilityDefinition)
             .where(CapabilityDefinition.status == "published")
@@ -394,9 +644,16 @@ class CapabilityService:
         for definition in self.session.scalars(
             statement.order_by(CapabilityDefinition.updated_at.desc())
         ):
+            if definition.source == "demo" and not settings.demo_catalog_enabled:
+                continue
+            if definition.visibility == "private" and definition.owner_id != user_id:
+                continue
+            authorized = self.can_execute(definition, user_id)
+            if definition.access_mode == "granted" and not authorized:
+                continue
             version = latest_published(definition.versions)
             if version is not None:
-                result.append(public_view(definition, version))
+                result.append(public_view(definition, version, authorized=authorized))
         return result
 
     def resolve_published(
@@ -415,6 +672,28 @@ class CapabilityService:
         if version is None:
             raise HTTPException(status_code=422, detail="能力未发布、已停用或不存在")
         return definition, version, public_view(definition, version)
+
+    def public_capability(
+        self, capability_id: str, user_id: str | None = None
+    ) -> PublicCapability:
+        definition = self.session.scalar(
+            select(CapabilityDefinition)
+            .where(CapabilityDefinition.id == capability_id)
+            .options(selectinload(CapabilityDefinition.versions))
+        )
+        if definition is None or definition.status != "published":
+            raise HTTPException(status_code=404, detail="Capability not found")
+        if definition.source == "demo" and not settings.demo_catalog_enabled:
+            raise HTTPException(status_code=404, detail="Capability not found")
+        if definition.visibility == "private" and definition.owner_id != user_id:
+            raise HTTPException(status_code=404, detail="Capability not found")
+        authorized = self.can_execute(definition, user_id)
+        if definition.access_mode == "granted" and not authorized:
+            raise HTTPException(status_code=404, detail="Capability not found")
+        version = latest_published(definition.versions)
+        if version is None:
+            raise HTTPException(status_code=404, detail="Capability not found")
+        return public_view(definition, version, authorized=authorized)
 
     def record_run(
         self,
