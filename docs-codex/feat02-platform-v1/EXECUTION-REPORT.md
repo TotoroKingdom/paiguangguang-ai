@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`38 passed`（`python -m pytest tests -q`）。
+- 后端：`40 passed`（`python -m pytest tests -q`；登录限流只统计失败尝试）。
 - 前端：`76 passed`（`npm test`）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
 - 前端 ESLint：`npm run lint` 通过。
