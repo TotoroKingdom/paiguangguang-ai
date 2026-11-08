@@ -1650,3 +1650,33 @@ def test_concurrent_retry_only_starts_one_run():
     final = setup.get(f"/api/v1/conversations/{conversation_id}").json()
     assert final["messages"][-1]["status"] == "complete"
     assert len(final["messages"]) == 2
+
+
+def test_cancel_completed_run_is_idempotent_noop():
+    make_user("980")
+    user = new_client()
+    login(user, "980")
+    conversation_id = create_conversation(user)
+    completed = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "cancel-noop",
+            "text": "完成后取消",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert completed.status_code == 200
+    run_id = completed.json()["run"]["id"]
+    assert completed.json()["run"]["status"] == "completed"
+    cancelled = user.post(
+        f"/api/v1/assistant/runs/{run_id}/cancel",
+        json={},
+        headers=headers(user),
+    )
+    assert cancelled.status_code == 200
+    with SessionLocal() as session:
+        row = session.get(AgentRun, run_id)
+        assert row.status == "completed"
+        assert row.cancel_requested is False

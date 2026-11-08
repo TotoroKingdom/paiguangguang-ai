@@ -1,8 +1,8 @@
 # feat02 智能助手平台 V1｜连续执行报告
 
 > 日期：2026-11-08
-> 分支：`feat/feat02-platform-v1`（worktree `C:\AI\paiguangguang-ai-feat02`，从 `dev` `fd7f40b` 建立）
-> 状态：开发环境连续实现；**未合并 `dev`、未触碰 `main`、未部署生产**。
+> 分支：`dev`（worktree `C:\AI\paiguangguang-ai-feat02`，最终基线 `247e4a0` + 本轮取消幂等提交）
+> 状态：开发环境连续实现已分批合并回 `dev`；**未触碰 `main`、未部署生产**。
 
 ## 1. 交付摘要
 
@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`61 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/重试/并发重试幂等、中断流、撤权、枚举、审核状态机、Agent v1/v2、Run 配额、能力阻断优先级、安全响应头与本地 SSE 模型适配）。
+- 后端：`62 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/完成态取消幂等/重试/并发重试幂等、中断流、撤权、枚举、审核状态机、Agent v1/v2、Run 配额、能力阻断优先级、安全响应头与本地 SSE 模型适配）。
 - 前端：`79 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布 + 2× 真实重试 + 2× 运行时错误恢复，共 74 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
