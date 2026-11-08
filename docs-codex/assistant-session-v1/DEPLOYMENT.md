@@ -10,6 +10,12 @@ The GitHub Actions production job first runs the reusable application CI. Only a
 
 The deployment workflow accepts a legacy `.env` that contains only `IMAGE_NAME=...`. It preserves the previous running frontend image ID, writes a fresh mode-`600` configuration, reuses `ASSISTANT_DATA_VOLUME` when present (otherwise the default named volume), and restores the previous Compose file, environment, and image if the release fails before the health checks complete. Never commit or print the production cookie secret.
 
+## Local data
+
+Local development keeps sensitive data in the git-ignored `<repo>/.env/` directory. The database is the single file `.env/assistant.db`; SQLite also creates the runtime sidecars `assistant.db-wal` and `assistant.db-shm`. Keep all three together and never copy only the main file while the backend is running; use the SQLite backup API for a consistent snapshot. `backend/.env` (also git-ignored) sets `ASSISTANT_DATABASE_URL=sqlite:///../.env/assistant.db`, so the backend must be started from `backend/`.
+
+Production is unchanged: `/data/assistant.db` lives in the Docker named volume and is never part of the repository, the frontend build context, or the GitHub deployment payload. Do not commit databases, WAL sidecars, or local `.env` files, and do not use `docker compose down -v` in production.
+
 ## Migrations and backup
 
 The backend entrypoint runs `python -m alembic upgrade head` before Uvicorn. For an existing database, stop the backend or take a consistent SQLite backup first, for example with SQLite's backup API or `sqlite3 /data/assistant.db ".backup '/backup/assistant-$(date +%Y%m%d-%H%M%S).db'"`, then deploy. Keep the backup outside the Docker volume until the migration and health check succeed.
