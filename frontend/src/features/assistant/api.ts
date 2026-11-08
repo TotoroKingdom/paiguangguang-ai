@@ -39,6 +39,11 @@ export type ApiCapability = CapabilityRef & {
   tools: string[];
   content: string | null;
   executionMode: "demo" | "simulated";
+  visibility: "platform" | "private";
+  accessMode: "all_active" | "granted";
+  authorized: boolean;
+  ready: boolean;
+  testStatus: string;
   version: number;
   versionId: string;
 };

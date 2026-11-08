@@ -138,12 +138,21 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           version: item.version,
           versionId: item.versionId,
           executionMode: item.executionMode,
+          ready: item.ready,
+          authorized: item.authorized,
+          accessMode: item.accessMode,
+          testStatus: item.testStatus,
         })),
       });
     } catch (error) {
-      reportError(error, "能力目录加载失败，当前显示内置演示目录。");
+      if (canUseService) {
+        dispatch({ type: "SET_CATALOG", catalog: [] });
+        reportError(error, "能力目录加载失败，未启用演示目录回退。");
+      } else {
+        reportError(error, "能力目录加载失败，当前显示内置演示目录。");
+      }
     }
-  }, [dispatch, reportError]);
+  }, [canUseService, dispatch, reportError]);
 
   const refreshPersonalSkills = useCallback(async () => {
     if (!canUseService) return;

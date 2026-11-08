@@ -293,6 +293,8 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                         ? `${item.steps.length} 个步骤 · ${sourceLabel(item)}`
                         : kind === "agent"
                           ? `${item.tools?.length ?? 0} 个工具 · 多步执行`
+                          : item.source === "managed"
+                            ? `${sourceLabel(item)} · ${item.ready === false ? "未就绪" : "已就绪"}`
                             : sourceLabel(item)}
                   </span>
                   <button
@@ -359,7 +361,11 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
           <p className={styles.dialogHint}>{selected.description}</p>
           <p className={styles.muted}>
             {sourceLabel(selected)} ·
-            交互原型，操作结果为模拟数据
+            {selected.source === "managed"
+              ? selected.ready === false
+                ? "尚未通过就绪测试或依赖不可用，暂不可用于正式聊天"
+                : "已通过就绪测试，可用于登录态聊天"
+              : "交互原型，操作结果为模拟数据"}
           </p>
           <h3>使用步骤</h3>
           <ol>
@@ -439,6 +445,7 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
             )}
             <button
               className={styles.primary}
+              disabled={selected.source === "managed" && selected.ready === false}
               onClick={() => {
                 dispatch({
                   type: "SET_DRAFT",

@@ -11,6 +11,10 @@ export type Capability = CapabilityRef & {
   version?: number;
   versionId?: string;
   executionMode?: "demo" | "simulated" | "real";
+  ready?: boolean;
+  authorized?: boolean;
+  accessMode?: "all_active" | "granted";
+  testStatus?: string;
 };
 export type ConnectorStatus =
   "connected" | "disconnected" | "unconfigured" | "connecting" | "error" | "unauthorized";
