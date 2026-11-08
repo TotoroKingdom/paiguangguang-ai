@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`66 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/重试/运行中撤权/失败不自动重试、中断流、枚举、审核状态机、审计回滚、Agent v1/v2、Run 配额、Creator Run 汇总、能力阻断优先级、安全响应头与本地 SSE 模型适配）。
+- 后端：`68 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/重试/运行中撤权/失败不自动重试、中断流、枚举、审核状态机、审计回滚、Agent v1/v2、Run 配额、Creator Run 汇总、能力阻断优先级、安全响应头、认证秘密泄漏与本地 SSE 模型适配）。
 - 前端：`79 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布 + 2× 真实重试 + 2× 运行时错误恢复 + 2× 目录失败不回退 Demo，共 76 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
