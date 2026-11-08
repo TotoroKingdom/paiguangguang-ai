@@ -209,6 +209,9 @@ def test_pending_session_is_restricted_until_admin_activates():
     )
     assert activated.status_code == 200, activated.text
     assert activated.json()["user"]["status"] == "ACTIVE"
+    upgraded = user.get("/api/v1/auth/session")
+    assert upgraded.status_code == 200
+    assert upgraded.json()["session"]["scope"] == "FULL"
 
     fresh = new_client()
     full = login(fresh, created["user"]["accountNumber"])

@@ -12,6 +12,7 @@
 
 - 后端：`40 passed`（`python -m pytest tests -q`；登录限流只统计失败尝试）。
 - 前端：`76 passed`（`npm test`）。
+- Playwright：现有 64 条回归 + 新增 2 条账号闭环，均通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
 - 前端 ESLint：`npm run lint` 通过。
 - 前端生产构建：`npm run build` 通过（30 个路由）。
@@ -27,7 +28,7 @@
 | F03 | PASSED（自动化） | 统一登录、`FULL/STATUS_ONLY`、RBAC 服务端守卫、CSRF/Origin、会话撤销 |
 | F04 | PARTIAL | 自助恢复码、改密、轮换、会话吊销完成；管理员辅助重置保持关闭（BLOCKED） |
 | F05 | PASSED（自动化 + 副本演练） | 旧管理员映射账号 `1`、摘要逐字复制、审核/停用/恢复/角色 API、最后管理员保护 |
-| F06 | PARTIAL | 注册/登录/成功/待审核/个人中心/用户管理页面完成；无浏览器 E2E；角色管理独立页面未单列 |
+| F06 | PARTIAL | 注册/登录/成功/待审核/个人中心/用户管理页面完成；注册→待审核→管理员激活→登录→个人中心有桌面/移动 E2E；角色变更合并在用户管理页，未单列页面 |
 | F07 | PASSED（自动化） | `user_id` 归属、跨浏览器读取、匿名签名认领、跨用户 404 |
 | F08 | PASSED（自动化） | 能力所有者、可见范围、`all_active/granted` ACL、停用后拒绝 |
 | F09 | PASSED（自动化） | Creator 测试→提交→Admin 审核→发布、审计、版本回滚接口 |
@@ -38,7 +39,7 @@
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；真实 MCP NOT_RUN，取消/超时无 E2E |
 | F16 | BLOCKED | 生产 TLS、443、Secure Cookie、密钥、依赖审计、部署权限未核验 |
-| F17 | PARTIAL | 自动化覆盖身份/能力/个人资源/Runtime 子集；38 个验收场景未全量执行，首页/RAG/3D 未做浏览器回归 |
+| F17 | PARTIAL | 自动化覆盖身份/能力/个人资源/Runtime 子集；Playwright 66 条通过（含首页/RAG/3D 路由回归）；38 个验收场景仍未逐条冻结证据 |
 
 ## 3. 数据库与 API
 
@@ -87,7 +88,7 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 
 未验证：
 
-- 浏览器 E2E、移动端、视觉验收。
+- 38 个验收场景的逐条冻结证据与新增 Runtime/能力管理页面的完整浏览器覆盖。
 - 真实模型、真实 MCP Server、真实外部 Tool。
 - 生产恢复、TLS、依赖审计、部署回滚。
 
