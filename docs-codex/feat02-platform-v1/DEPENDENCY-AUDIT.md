@@ -39,7 +39,7 @@
 ## 4. 验证
 
 - 后端：`60 passed`
-- 前端 Vitest：`76 passed`
+- 前端 Vitest：`79 passed`
 - TypeScript check：通过
 - ESLint：通过（0 error）
 - Next production build：29 个静态/动态路由通过

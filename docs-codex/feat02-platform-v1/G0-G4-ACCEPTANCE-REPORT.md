@@ -21,7 +21,7 @@
 | 检查 | 结果 |
 |---|---|
 | 后端 `pytest` | **60 passed** |
-| 前端 `vitest` | **76 passed** |
+| 前端 `vitest` | **79 passed** |
 | Playwright | **74 passed**（desktop + mobile） |
 | TypeScript | 通过 |
 | ESLint 10 | 通过 |
@@ -57,11 +57,11 @@ F00 本地演练：
 
 | 集合 | PASS | PARTIAL | BLOCKED |
 |---|---:|---:|---:|
-| U-01～U-17 | 15 | 1 | 1 |
+| U-01～U-17 | 16 | 0 | 1 |
 | C-01～C-10 | 8 | 2 | 0 |
 | R-01～R-06 | 0 | 5 | 1 |
 | O-01～O-05 | 1 | 3 | 1 |
-| **合计** | **24** | **11** | **3** |
+| **合计** | **25** | **10** | **3** |
 
 逐条证据见 `G4-ACCEPTANCE-MATRIX.md`。
 

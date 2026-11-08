@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { useAuth } from "@/features/auth/provider";
+import { safeReturnTo } from "@/features/auth/return-to";
 import styles from "@/features/auth/auth.module.css";
 
 function LoginForm() {
@@ -22,8 +23,7 @@ function LoginForm() {
     const session = await login(accountNumber, password);
     setBusy(false);
     if (!session) return;
-    const next = params.get("next");
-    const safeNext = next && next.startsWith("/assistant") && !next.startsWith("//") ? next : null;
+    const safeNext = safeReturnTo(params.get("next"));
     if (session.user.status !== "ACTIVE" || session.session.scope !== "FULL") {
       router.replace("/assistant/pending");
       return;
