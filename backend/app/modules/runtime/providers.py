@@ -80,6 +80,7 @@ class OpenAICompatibleProvider:
         if tools:
             body["tools"] = tools
         timeout = httpx.Timeout(settings.llm_timeout_seconds)
+        completed = False
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 async with client.stream("POST", url, headers=headers, json=body) as response:
@@ -90,6 +91,7 @@ class OpenAICompatibleProvider:
                             continue
                         payload = line[5:].strip()
                         if payload == "[DONE]":
+                            completed = True
                             break
                         try:
                             data = json.loads(payload)
@@ -104,6 +106,8 @@ class OpenAICompatibleProvider:
             raise APIError(504, "LLM_TIMEOUT", "模型请求超时") from error
         except httpx.HTTPError as error:
             raise APIError(503, "LLM_UNAVAILABLE", "模型服务不可达") from error
+        if not completed:
+            raise APIError(502, "LLM_STREAM_TRUNCATED", "模型流提前中断")
         yield LLMChunk(done=True)
 
 
