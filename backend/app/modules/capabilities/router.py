@@ -540,11 +540,23 @@ def update_creator_capability(
     require_json_request(request)
     require_user_csrf(request, principal)
     definition = _owned_capability(capability_id, principal, session)
-    if definition.status != "draft" or definition.review_status == "submitted":
+    if definition.status not in {"draft", "published"} or definition.review_status == "submitted":
         raise HTTPException(status_code=409, detail="Capability is not editable")
-    return CapabilityService(session).update(
+    detail = CapabilityService(session).update(
         capability_id, payload, actor_id=principal.user.id
     )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.draft.saved",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"draftVersion": detail.draftVersion},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
 
 
 @creator_router.post(
