@@ -436,15 +436,21 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       ? stateRef.current.conversations.find((item) => item.id === input.conversationId)
       : undefined;
     if (existing?.messages.some((message) => message.status === "generating")) return null;
+    let canUseReal = false;
+    let recoveryConversationId = "";
+    let recoveryTurnId = "";
+    let streamStarted = false;
     setSessionBusy(true);
     try {
       const account = await getAccountSession().catch(() => null);
-      const canUseReal =
+      canUseReal =
         account?.user.status === "ACTIVE" && account.session.scope === "FULL";
       if (canUseReal) {
         let conversation = existing ?? (await apiCreateConversation());
         if (!existing) dispatch({ type: "CREATE_CONVERSATION", conversation });
+        recoveryConversationId = conversation.id;
         const clientTurnId = input.clientTurnId ?? makeId();
+        recoveryTurnId = clientTurnId;
         let assistantId = "";
         await apiStreamRun(
           {
@@ -460,6 +466,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               return;
             }
             if (event.type === "start") {
+              streamStarted = true;
               assistantId = event.assistantMessage.id;
               const current = stateRef.current.conversations.find(
                 (item) => item.id === conversation.id,
@@ -606,6 +613,29 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       start(conversation.id, turn.assistantMessage.id, request);
       return conversation.id;
     } catch (error) {
+      if (canUseReal && recoveryConversationId) {
+        try {
+          const recovered = await apiGetConversation(recoveryConversationId);
+          const hasRecoveredTurn = recovered.messages.some(
+            (message) => message.request?.clientTurnId === recoveryTurnId,
+          );
+          if (hasRecoveredTurn) {
+            dispatch({
+              type: "UPSERT_CONVERSATION",
+              conversation: { ...recovered, loaded: true },
+            });
+            reportError(
+              error,
+              streamStarted
+                ? "网络连接中断，已从服务端恢复当前执行状态；请刷新查看结果。"
+                : "网络连接中断，已恢复服务端接收的请求；请刷新确认是否继续执行。",
+            );
+            return recoveryConversationId;
+          }
+        } catch {
+          /* Fall through to the original network error. */
+        }
+      }
       reportError(error, "消息未保存，请检查网络后重试。");
       return null;
     } finally {
