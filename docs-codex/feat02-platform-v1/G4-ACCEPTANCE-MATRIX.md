@@ -51,7 +51,7 @@
 | C-02 | PASS | Creator 无权发布；Creator UI 测试→提交，Admin UI 审核→发布；版本快照与回滚；驳回后可编辑、重测并重提；桌面/移动 E2E | 无 |
 | C-03 | PASS | `granted` 能力未授权不可发现；直接调用 403；授权后可见；撤权后的新执行 403 | 无 |
 | C-04 | PASS | 个人 Skill 服务端 CRUD、Markdown 导入、所有者隔离、Runtime 加载 | 无编辑/版本历史 UI |
-| C-05 | PASS | 登录态仅显示 approved Server；无任意 URL 输入；E2E 断言 | 无 Creator 提交待审 Server 的 E2E |
+| C-05 | PASS | 登录态仅显示 approved Server；无任意 URL 输入；Creator UI 提交后由服务端强制 `pending`，Admin 批准后才进入用户目录（桌面/移动 E2E） | 无 |
 | C-06 | PARTIAL | 个人连接隔离、Token 加密、Runtime 通过个人连接调用 MCP Tool（MockTransport）；连接删除和 Server 停用后的新执行拒绝 | 外部真实 MCP 未联调 |
 | C-07 | PASS | Agent v1 锁定 Tool v1；发布 Tool v2、Agent v2 后新 Run 使用 v2；旧 Run 仍保存 v1；发布时校验依赖版本；回滚接口 | 无 |
 | C-08 | PASS | 停用后新目录/执行拒绝；Agent 锁定依赖停用后新 Run 失败且旧 Run 保留；版本回滚并审计 | 无 |

@@ -84,3 +84,74 @@ test("creator creates, tests and submits a tool; admin approves and releases it"
   await releaseRow.getByRole("button", { name: "发布", exact: true }).click();
   await expect(page.getByText("已发布。", { exact: false })).toBeVisible();
 });
+
+test("creator submits an MCP server and only admin can approve it", async ({
+  page,
+  request,
+}, testInfo) => {
+  const origin = testInfo.project.use.baseURL ?? "http://127.0.0.1:3100";
+  const adminLogin = await request.post("/api/v1/auth/login", {
+    data: { accountNumber: "1", password: adminPassword(testInfo) },
+    headers: { origin },
+  });
+  expect(adminLogin.status()).toBe(200);
+  const adminCookies = (await request.storageState()).cookies;
+  const adminCsrf =
+    adminCookies.find((item) => item.name === "paiguangguang_csrf")?.value ?? "";
+  const password = "creator-mcp-pass";
+  const registered = await page.request.post("/api/v1/auth/register", {
+    data: {
+      password,
+      passwordConfirm: password,
+      nickname: "MCP Creator",
+    },
+    headers: { origin, "Idempotency-Key": randomUUID() },
+  });
+  expect(registered.status()).toBe(201);
+  const creator = (await registered.json()).user;
+  await request.post(`/api/v1/admin/users/${creator.id}/activate`, {
+    data: { expectedVersion: creator.version, reason: "MCP Creator E2E" },
+    headers: { origin, "x-csrf-token": adminCsrf },
+  });
+  const refreshed = await request.get(`/api/v1/admin/users/${creator.id}`);
+  const assigned = await request.patch(`/api/v1/admin/users/${creator.id}/roles`, {
+    data: {
+      role: "CREATOR",
+      expectedVersion: (await refreshed.json()).version,
+      reason: "MCP Creator E2E",
+    },
+    headers: { origin, "x-csrf-token": adminCsrf },
+  });
+  expect(assigned.status()).toBe(200);
+  await page.request.post("/api/v1/auth/login", {
+    data: { accountNumber: creator.accountNumber, password },
+    headers: { origin },
+  });
+
+  const name = `Creator MCP ${Date.now()}`;
+  await page.goto("/assistant/creator");
+  await page.getByLabel("MCP 服务名称", { exact: true }).fill(name);
+  await page.getByLabel("MCP 说明", { exact: true }).fill("Creator 提交待审服务");
+  await page
+    .getByLabel("MCP HTTPS 地址", { exact: true })
+    .fill("https://1.1.1.1/rpc");
+  await page.getByRole("button", { name: "提交 MCP Server", exact: true }).click();
+  await expect(
+    page.getByText(`MCP Server“${name}”已提交，等待 Admin 审核。`, { exact: true }),
+  ).toBeVisible();
+
+  const pending = await request.get("/api/v1/admin/mcp/servers");
+  const server = (await pending.json()).items.find(
+    (item: { name: string }) => item.name === name,
+  );
+  expect(server.status).toBe("pending");
+  const approved = await request.post(`/api/v1/admin/mcp/servers/${server.id}/approve`, {
+    data: { reason: "Creator MCP E2E" },
+    headers: { origin, "x-csrf-token": adminCsrf },
+  });
+  expect(approved.status()).toBe(200);
+  const visible = await page.request.get("/api/v1/mcp/servers");
+  expect(
+    (await visible.json()).items.some((item: { id: string }) => item.id === server.id),
+  ).toBe(true);
+});

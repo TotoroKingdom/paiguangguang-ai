@@ -43,7 +43,7 @@
 - TypeScript check：通过
 - ESLint：通过（0 error）
 - Next production build：29 个静态/动态路由通过
-- Playwright：78 passed（桌面 + 移动）
+- Playwright：80 passed（桌面 + 移动）
 - Alembic 迁移链不受依赖升级影响
 
 ## 5. 仍未解决
