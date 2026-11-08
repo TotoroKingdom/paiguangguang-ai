@@ -386,3 +386,11 @@ def test_repeated_login_failures_are_rate_limited():
     limited = login(new_client(), "811", "wrongpass")
     assert limited.status_code == 429
     assert limited.json()["error"]["code"] == "RATE_LIMITED"
+
+
+def test_unknown_account_and_wrong_password_are_indistinguishable():
+    make_user(account="812")
+    wrong_password = login(new_client(), "812", "wrongpass")
+    unknown_account = login(new_client(), "999999", "wrongpass")
+    assert wrong_password.status_code == unknown_account.status_code == 401
+    assert wrong_password.json() == unknown_account.json()

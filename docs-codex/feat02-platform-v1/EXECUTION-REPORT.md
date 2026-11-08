@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`46 passed`（`python -m pytest tests -q`；含 MCP 协议、工具发现、Runtime 调用、超时与取消）。
+- 后端：`49 passed`（`python -m pytest tests -q`；含 MCP、Runtime、超时/取消、撤权、枚举与审核状态机）。
 - 前端：`76 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布，共 70 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
@@ -40,7 +40,7 @@
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
 | F16 | BLOCKED | 依赖 critical/high 已清除；生产 fail-fast、Secure Cookie、HTTPS Origin、真实 LLM 必需配置与文件卷路径已写入；生产 TLS/443、密钥、部署权限仍未核验（见 `F16-PRODUCTION-PREFLIGHT.md`） |
-| F17 | PARTIAL | 38 场景矩阵：19 PASS / 16 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 70 条通过；真实模型/真实 MCP/生产仍阻断 |
+| F17 | PARTIAL | 38 场景矩阵：21 PASS / 14 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 70 条通过；真实模型/真实 MCP/生产仍阻断 |
 
 ## 3. 数据库与 API
 

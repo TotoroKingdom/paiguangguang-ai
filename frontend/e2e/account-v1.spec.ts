@@ -83,4 +83,11 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
 
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page).toHaveURL(/\/assistant\/login$/);
+
+  await page.goto("/assistant/login?next=https://evil.example/steal");
+  await page.getByLabel("数字账号", { exact: true }).fill(account);
+  await page.getByLabel("密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page).toHaveURL(/\/assistant$/);
+  expect(new URL(page.url()).host).toBe(new URL(origin).host);
 });
