@@ -163,6 +163,9 @@ test("ordinary anonymous users do not see the admin entry", async ({ page }) => 
   await page.goto("/assistant");
   await expect(page.getByRole("textbox", { name: "询问任何问题" })).toBeVisible();
   const menu = await openAccountMenu(page);
+  await expect(
+    menu.getByRole("menuitem", { name: "登录 / 注册", exact: true }),
+  ).toBeVisible();
   await expect(menu.getByRole("menuitem", { name: /管理控制台/ })).toHaveCount(0);
   await expect(menu.getByRole("menuitem", { name: /演示设置/ })).toBeVisible();
 });

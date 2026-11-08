@@ -25,6 +25,16 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
   const password = "e2e-user-pass";
 
   await page.goto("/assistant/register");
+  const shortPassword = page.getByLabel("密码（至少 6 位）", { exact: true });
+  await shortPassword.fill("12345");
+  await page.getByLabel("确认密码", { exact: true }).fill("12345");
+  expect(
+    await shortPassword.evaluate(
+      (input: HTMLInputElement) => input.validity.tooShort,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "创建账号", exact: true }).click();
+  await expect(page).toHaveURL(/\/assistant\/register$/);
   await page.getByLabel("密码（至少 6 位）", { exact: true }).fill(password);
   await page.getByLabel("确认密码", { exact: true }).fill(password);
   await page.getByLabel("昵称（可选）", { exact: true }).fill("E2E 用户");
