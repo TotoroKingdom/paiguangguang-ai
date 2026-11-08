@@ -453,6 +453,12 @@ class UserIdentityService:
         user_session, user = row
         if user_session.authz_version != user.authz_version:
             return None
+        if user.status == "ACTIVE" and user_session.scope == "STATUS_ONLY":
+            user_session.scope = "FULL"
+            user_session.expires_at = now + timedelta(
+                seconds=settings.user_session_max_age_seconds
+            )
+            self.session.commit()
         if user_session.last_seen_at < now - timedelta(minutes=5):
             user_session.last_seen_at = now
             self.session.commit()

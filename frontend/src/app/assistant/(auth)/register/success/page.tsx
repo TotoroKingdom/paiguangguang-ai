@@ -1,17 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/features/auth/provider";
 import styles from "@/features/auth/auth.module.css";
 
 export default function RegisterSuccessPage() {
-  const { registration, clearRegistration } = useAuth();
+  const { registration } = useAuth();
   const [copied, setCopied] = useState("");
-
-  useEffect(() => {
-    return () => clearRegistration();
-  }, [clearRegistration]);
 
   if (!registration) {
     return (
@@ -44,7 +40,7 @@ export default function RegisterSuccessPage() {
       <dl className={styles.meta}>
         <div>
           <dt>数字账号</dt>
-          <dd>{registration.user.accountNumber}</dd>
+          <dd data-testid="account-number">{registration.user.accountNumber}</dd>
         </div>
         <div>
           <dt>状态</dt>
@@ -54,7 +50,9 @@ export default function RegisterSuccessPage() {
       {registration.recovery ? (
         <>
           <strong>一次性恢复码</strong>
-          <code className={styles.code}>{registration.recovery.code}</code>
+          <code className={styles.code} data-testid="recovery-code">
+            {registration.recovery.code}
+          </code>
           <div className={styles.actions}>
             <button
               className={styles.secondary}
