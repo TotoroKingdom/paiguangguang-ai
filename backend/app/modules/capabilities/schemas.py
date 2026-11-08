@@ -157,6 +157,24 @@ class PublicCapability(BaseModel):
     authorized: bool = True
     ready: bool = False
     testStatus: str = "untested"
+    blockedReason: Literal[
+        "none",
+        "login_required",
+        "account_inactive",
+        "no_permission",
+        "needs_mcp_connection",
+        "not_ready",
+        "budget_exhausted",
+    ] = "none"
+    primaryAction: Literal[
+        "use",
+        "login",
+        "activate",
+        "request_access",
+        "connect",
+        "unavailable",
+        "budget",
+    ] = "use"
     version: int
     versionId: str
 

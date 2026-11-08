@@ -44,6 +44,8 @@ export type ApiCapability = CapabilityRef & {
   authorized: boolean;
   ready: boolean;
   testStatus: string;
+  blockedReason: string;
+  primaryAction: string;
   version: number;
   versionId: string;
 };

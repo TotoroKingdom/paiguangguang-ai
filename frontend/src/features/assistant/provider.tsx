@@ -144,6 +144,8 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
           authorized: item.authorized,
           accessMode: item.accessMode,
           testStatus: item.testStatus,
+          blockedReason: item.blockedReason,
+          primaryAction: item.primaryAction,
         })),
       });
     } catch (error) {
