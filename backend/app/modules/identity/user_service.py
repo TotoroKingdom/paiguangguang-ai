@@ -205,6 +205,15 @@ class DbRateLimiter:
         )
         return (count or 0) < limit
 
+    def check(self, action: str, bucket_raw: str, *, limit: int, window_seconds: int) -> None:
+        if not self.allow(action, bucket_raw, limit=limit, window_seconds=window_seconds):
+            raise APIError(
+                429,
+                "RATE_LIMITED",
+                "请求过于频繁，请稍后再试",
+                retry_after_seconds=window_seconds,
+            )
+
     def record(self, action: str, bucket_raw: str) -> None:
         self.session.add(
             AuthRateEvent(action=action, bucket=self._bucket(bucket_raw), created_at=utc_now())
@@ -348,14 +357,14 @@ class UserIdentityService:
         account = account_number.strip()
         ip = (client_ip or "unknown").strip().lower()
         limiter = DbRateLimiter(self.session)
-        limiter.ensure(
-            "login_account",
+        limiter.check(
+            "login_failure",
             f"{account}:{ip}",
             limit=settings.login_rate_per_window,
             window_seconds=settings.login_rate_window_seconds,
         )
-        limiter.ensure(
-            "login_ip",
+        limiter.check(
+            "login_ip_failure",
             ip,
             limit=settings.login_ip_rate_per_window,
             window_seconds=settings.login_rate_window_seconds,
@@ -366,11 +375,11 @@ class UserIdentityService:
         encoded = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
         valid = verify_password(password, encoded)
         if user is None or not valid or user.status == "REJECTED":
-            limiter.record("login_failure", f"{account}:{ip}")
+            self._record_login_failure(limiter, account, ip)
             self.session.commit()
             raise APIError(401, "AUTH_INVALID_CREDENTIALS", "账号或密码错误")
         if user.status == "DISABLED":
-            limiter.record("login_failure", f"{account}:{ip}")
+            self._record_login_failure(limiter, account, ip)
             self.session.commit()
             raise APIError(403, "ACCOUNT_NOT_ACTIVE", "账号已停用，请联系管理员")
 
@@ -418,6 +427,12 @@ class UserIdentityService:
             token=token,
             csrf_token=csrf_token,
         )
+
+    def _record_login_failure(
+        self, limiter: DbRateLimiter, account: str, ip: str
+    ) -> None:
+        limiter.record("login_failure", f"{account}:{ip}")
+        limiter.record("login_ip_failure", ip)
 
     # ------------------------------------------------------------------- session
     def resolve_session(self, token: str | None) -> UserPrincipal | None:
@@ -497,14 +512,14 @@ class UserIdentityService:
         account = account_number.strip()
         ip = (client_ip or "unknown").strip().lower()
         limiter = DbRateLimiter(self.session)
-        limiter.ensure(
-            "recovery_hour",
+        limiter.check(
+            "recovery_failure_hour",
             f"{account}:{ip}",
             limit=settings.recovery_rate_per_hour,
             window_seconds=3600,
         )
-        limiter.ensure(
-            "recovery_day",
+        limiter.check(
+            "recovery_failure_day",
             ip,
             limit=settings.recovery_rate_per_day,
             window_seconds=86400,
@@ -515,7 +530,7 @@ class UserIdentityService:
             else None
         )
         if user is None or user.status == "REJECTED":
-            limiter.record("recovery_failure", f"{account}:{ip}")
+            self._record_recovery_failure(limiter, account, ip)
             self.session.commit()
             raise APIError(401, "RECOVERY_INVALID", "账号或恢复码无效")
         digest = recovery_hash(code)
@@ -528,7 +543,7 @@ class UserIdentityService:
             )
         )
         if record is None:
-            limiter.record("recovery_failure", f"{account}:{ip}")
+            self._record_recovery_failure(limiter, account, ip)
             self.session.commit()
             raise APIError(401, "RECOVERY_INVALID", "账号或恢复码无效")
         validate_user_password(new_password, confirm=confirm, account_number=user.account_number)
@@ -551,6 +566,12 @@ class UserIdentityService:
         )
         self.session.commit()
         return new_code
+
+    def _record_recovery_failure(
+        self, limiter: DbRateLimiter, account: str, ip: str
+    ) -> None:
+        limiter.record("recovery_failure_hour", f"{account}:{ip}")
+        limiter.record("recovery_failure_day", ip)
 
     def rotate_recovery_code(self, principal: UserPrincipal, current_password: str) -> str:
         if not verify_password(current_password, principal.user.password_hash):

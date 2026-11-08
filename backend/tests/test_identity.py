@@ -368,3 +368,18 @@ def test_admin_mutations_require_csrf_and_protect_last_admin():
     )
     assert protected.status_code == 409
     assert protected.json()["error"]["code"] == "LAST_ADMIN_PROTECTED"
+
+
+def test_successful_logins_do_not_consume_failure_limit():
+    make_user(account="810")
+    for _ in range(6):
+        assert login(new_client(), "810").status_code == 200
+
+
+def test_repeated_login_failures_are_rate_limited():
+    make_user(account="811")
+    for _ in range(5):
+        assert login(new_client(), "811", "wrongpass").status_code == 401
+    limited = login(new_client(), "811", "wrongpass")
+    assert limited.status_code == 429
+    assert limited.json()["error"]["code"] == "RATE_LIMITED"
