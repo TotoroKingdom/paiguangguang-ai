@@ -6,6 +6,7 @@ import {
   creatorCreateCapability,
   creatorListCapabilities,
   creatorRunSummary,
+  creatorSubmitMcpServer,
   creatorSubmitCapability,
   creatorTestCapability,
   type CreatorCapabilityInput,
@@ -20,6 +21,12 @@ const defaultConfig: Record<CreatorCapabilityInput["kind"], Record<string, unkno
   skill: {},
   agent: {},
 };
+const emptyMcpForm = {
+  name: "",
+  description: "",
+  endpointUrl: "https://",
+  transport: "http" as "http" | "sse",
+};
 
 export function CreatorCenter() {
   const { session } = useAuth();
@@ -32,6 +39,7 @@ export function CreatorCenter() {
   const [configText, setConfigText] = useState(
     JSON.stringify(defaultConfig.tool, null, 2),
   );
+  const [mcpForm, setMcpForm] = useState(emptyMcpForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -118,6 +126,22 @@ export function CreatorCenter() {
     setContent("");
   };
 
+  const submitMcpServer = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const submittedName = mcpForm.name.trim();
+    await run(
+      () =>
+        creatorSubmitMcpServer({
+          name: submittedName,
+          description: mcpForm.description.trim(),
+          endpointUrl: mcpForm.endpointUrl.trim(),
+          transport: mcpForm.transport,
+        }),
+      `MCP Server“${submittedName}”已提交，等待 Admin 审核。`,
+    );
+    setMcpForm(emptyMcpForm);
+  };
+
   return (
     <div className={`${styles.card} ${styles.wide}`}>
       <h1>创作中心</h1>
@@ -186,6 +210,70 @@ export function CreatorCenter() {
           </button>
         </div>
       </form>
+
+      <div className={styles.section}>
+        <h2>提交 MCP Server</h2>
+        <p className={styles.lede}>
+          Creator 只能提交待审 Server；批准权属于 Admin。普通用户不会看到 pending 或 disabled 地址。
+        </p>
+        <form className={styles.form} onSubmit={submitMcpServer}>
+          <div className={styles.filters}>
+            <label className={styles.field}>
+              MCP 服务名称
+              <input
+                value={mcpForm.name}
+                onChange={(event) =>
+                  setMcpForm({ ...mcpForm, name: event.target.value })
+                }
+                maxLength={120}
+                required
+              />
+            </label>
+            <label className={styles.field}>
+              MCP 传输
+              <select
+                value={mcpForm.transport}
+                onChange={(event) =>
+                  setMcpForm({
+                    ...mcpForm,
+                    transport: event.target.value as "http" | "sse",
+                  })
+                }
+              >
+                <option value="http">HTTP JSON-RPC</option>
+                <option value="sse">SSE</option>
+              </select>
+            </label>
+          </div>
+          <label className={styles.field}>
+            MCP 说明
+            <input
+              value={mcpForm.description}
+              onChange={(event) =>
+                setMcpForm({ ...mcpForm, description: event.target.value })
+              }
+              maxLength={1000}
+            />
+          </label>
+          <label className={styles.field}>
+            MCP HTTPS 地址
+            <input
+              type="url"
+              value={mcpForm.endpointUrl}
+              onChange={(event) =>
+                setMcpForm({ ...mcpForm, endpointUrl: event.target.value })
+              }
+              maxLength={512}
+              required
+            />
+          </label>
+          <div className={styles.actions}>
+            <button className={styles.primary} disabled={busy}>
+              提交 MCP Server
+            </button>
+          </div>
+        </form>
+      </div>
 
       <div className={styles.section}>
         <h2>我的能力草稿</h2>

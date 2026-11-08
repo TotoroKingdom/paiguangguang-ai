@@ -258,6 +258,18 @@ export function adminDiscoverMcpTools(id: string): Promise<AdminMcpServer> {
   });
 }
 
+export function creatorSubmitMcpServer(input: {
+  name: string;
+  description: string;
+  endpointUrl: string;
+  transport: "http" | "sse";
+}): Promise<AdminMcpServer> {
+  return request("/api/v1/creator/mcp/servers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export type GovernanceCapability = {
   id: string;
   kind: "tool" | "skill" | "mcp" | "agent";
