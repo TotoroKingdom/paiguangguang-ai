@@ -1495,6 +1495,17 @@ def test_retry_reuses_assistant_message_without_duplicate_user_turn():
     assert after["messages"][-1]["id"] == assistant["id"]
     assert after["messages"][-1]["status"] == "complete"
     assert "FakeProvider" in after["messages"][-1]["content"]
+    duplicate = user.post(
+        "/api/v1/assistant/runs/retry/stream",
+        json={
+            "conversationId": conversation_id,
+            "messageId": assistant["id"],
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["error"]["code"] == "RETRY_NOT_ALLOWED"
 
 
 def test_capability_blocked_reasons_follow_priority(monkeypatch):
@@ -1542,3 +1553,50 @@ def test_capability_blocked_reasons_follow_priority(monkeypatch):
     )
     assert item["blockedReason"] == "budget_exhausted"
     assert item["primaryAction"] == "budget"
+
+
+def test_concurrent_retry_only_starts_one_run():
+    make_user("964")
+    setup = new_client()
+    login(setup, "964")
+    conversation_id = create_conversation(setup)
+    failed = setup.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "retry-race-first",
+            "text": "并发重试",
+            "mode": "openai",
+        },
+        headers=headers(setup),
+    )
+    assert failed.status_code == 200
+    detail = setup.get(f"/api/v1/conversations/{conversation_id}").json()
+    message_id = detail["messages"][-1]["id"]
+    results: list[int] = []
+    lock = threading.Lock()
+
+    def retry_once() -> None:
+        client = new_client()
+        login(client, "964")
+        response = client.post(
+            "/api/v1/assistant/runs/retry/stream",
+            json={
+                "conversationId": conversation_id,
+                "messageId": message_id,
+                "mode": "fake",
+            },
+            headers=headers(client),
+        )
+        with lock:
+            results.append(response.status_code)
+
+    workers = [threading.Thread(target=retry_once) for _ in range(2)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    assert sorted(results) == [200, 409]
+    final = setup.get(f"/api/v1/conversations/{conversation_id}").json()
+    assert final["messages"][-1]["status"] == "complete"
+    assert len(final["messages"]) == 2
