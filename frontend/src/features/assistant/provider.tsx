@@ -520,6 +520,24 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               });
               return;
             }
+            if (event.type === "agent" && assistantId) {
+              dispatch({
+                type: "UPDATE_MESSAGE",
+                conversationId: conversation.id,
+                messageId: assistantId,
+                patch: {
+                  steps: [
+                    {
+                      title: "Agent 依赖版本",
+                      detail: event.dependencies
+                        .map((item) => `${item.name}@v${item.version}`)
+                        .join("、"),
+                    },
+                  ],
+                },
+              });
+              return;
+            }
             if (event.type === "done") {
               activeRuns.current.delete(conversation.id);
               const status =
