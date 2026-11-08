@@ -9,10 +9,12 @@ import { LoadingBlock } from "./admin-ui";
 
 const navigation = [
   { href: "/assistant/admin", name: "总览仪表盘", icon: "chart" },
+  { href: "/assistant/admin/users", name: "用户管理", icon: "users" },
+  { href: "/assistant/admin/roles", name: "角色管理", icon: "check" },
   { href: "/assistant/admin/tools", name: "工具管理", icon: "tool" },
   { href: "/assistant/admin/skills", name: "技能管理", icon: "skill" },
   { href: "/assistant/admin/mcp", name: "MCP 连接管理", icon: "mcp" },
-    { href: "/assistant/admin/reviews", name: "审核与发布", icon: "upload" },
+  { href: "/assistant/admin/reviews", name: "审核与发布", icon: "upload" },
   { href: "/assistant/admin/agents", name: "智能体管理", icon: "agent" },
   { href: "/assistant/admin/releases", name: "发布中心", icon: "upload" },
   { href: "/assistant/admin/runs", name: "运行记录", icon: "list" },

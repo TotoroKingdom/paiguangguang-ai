@@ -1,4 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
@@ -146,4 +147,58 @@ test("ordinary anonymous users do not see the admin entry", async ({ page }) => 
   const menu = await openAccountMenu(page);
   await expect(menu.getByRole("menuitem", { name: /管理控制台/ })).toHaveCount(0);
   await expect(menu.getByRole("menuitem", { name: /演示设置/ })).toBeVisible();
+});
+
+test("unified admin reviews the role matrix and assigns a built-in role", async ({
+  page,
+}, testInfo) => {
+  const origin = testInfo.project.use.baseURL ?? "http://127.0.0.1:3100";
+  const { password: adminPassword } = credentials(testInfo);
+  await page.goto("/assistant/login?next=/assistant/admin/roles");
+  await page.getByLabel("数字账号", { exact: true }).fill("1");
+  await page.getByLabel("密码", { exact: true }).fill(adminPassword);
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(page).toHaveURL(/\/assistant\/admin\/roles$/);
+  await expect(page.getByRole("heading", { name: "角色管理", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "内置角色权限矩阵" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "用户管理", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "角色管理", exact: true })).toBeVisible();
+
+  const rolePassword = "role-user-pass";
+  const registered = await page.request.post("/api/v1/auth/register", {
+    data: {
+      password: rolePassword,
+      passwordConfirm: rolePassword,
+      nickname: "角色 E2E 用户",
+    },
+    headers: { origin, "Idempotency-Key": randomUUID() },
+  });
+  expect(registered.status()).toBe(201);
+  const account = (await registered.json()).user.accountNumber as string;
+  const cookies = await page.context().cookies();
+  const csrf = cookies.find((item) => item.name === "paiguangguang_csrf")?.value ?? "";
+  expect(csrf).not.toBe("");
+  const pending = await page.request.get(`/api/v1/admin/users?q=${account}`, {
+    headers: { origin },
+  });
+  const pendingUser = (await pending.json()).items.find(
+    (item: { accountNumber: string }) => item.accountNumber === account,
+  );
+  expect(pendingUser).toBeTruthy();
+  const activated = await page.request.post(
+    `/api/v1/admin/users/${pendingUser.id}/activate`,
+    {
+      data: { expectedVersion: pendingUser.version, reason: "角色 E2E 激活" },
+      headers: { origin, "x-csrf-token": csrf },
+    },
+  );
+  expect(activated.status()).toBe(200);
+
+  await page.getByLabel("搜索", { exact: true }).fill(account);
+  await page.getByRole("button", { name: "查询", exact: true }).click();
+  const row = page.getByRole("row").filter({ hasText: account });
+  await expect(row).toBeVisible();
+  page.once("dialog", (dialog) => void dialog.accept("角色 E2E 分配"));
+  await row.getByLabel(`账号 ${account} 的角色`, { exact: true }).selectOption("CREATOR");
+  await expect(page.getByText(`账号 ${account} 的角色已更新。`, { exact: true })).toBeVisible();
 });
