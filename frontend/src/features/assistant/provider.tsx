@@ -14,8 +14,11 @@ import {
   listConversations as apiListConversations,
   patchMessage as apiPatchMessage,
   renameConversation as apiRenameConversation,
+  cancelRun as apiCancelRun,
+  streamRun as apiStreamRun,
   toConversation,
 } from "./api";
+import { getSession as getAccountSession } from "@/features/auth/api";
 import { createMockReply } from "./mock-service";
 import {
   demoReducer,
@@ -82,6 +85,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
   const [storageNotice, setStorageNotice] = useState<string | null>(null);
   const [sessionBusy, setSessionBusy] = useState(false);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const activeRuns = useRef(new Map<string, string>());
   const loading = useRef(new Map<string, Promise<"loaded" | "missing" | "error">>());
   const mounted = useRef(true);
 
@@ -250,6 +254,23 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
 
   const stopGeneration = useCallback(
     (conversationId: string) => {
+      const runId = activeRuns.current.get(conversationId);
+      if (runId) {
+        activeRuns.current.delete(conversationId);
+        void apiCancelRun(runId);
+        const conversation = stateRef.current.conversations.find((item) => item.id === conversationId);
+        conversation?.messages
+          .filter((message) => message.role === "assistant" && message.status === "generating")
+          .forEach((message) =>
+            dispatch({
+              type: "UPDATE_MESSAGE",
+              conversationId,
+              messageId: message.id,
+              patch: { status: "stopped" },
+            }),
+          );
+        return;
+      }
       const timer = timers.current.get(conversationId);
       if (timer) clearTimeout(timer);
       timers.current.delete(conversationId);
@@ -379,6 +400,114 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     if (existing?.messages.some((message) => message.status === "generating")) return null;
     setSessionBusy(true);
     try {
+      const account = await getAccountSession().catch(() => null);
+      const canUseReal =
+        account?.user.status === "ACTIVE" && account.session.scope === "FULL";
+      if (canUseReal) {
+        let conversation = existing ?? (await apiCreateConversation());
+        if (!existing) dispatch({ type: "CREATE_CONVERSATION", conversation });
+        const clientTurnId = input.clientTurnId ?? makeId();
+        let assistantId = "";
+        await apiStreamRun(
+          {
+            conversationId: conversation.id,
+            clientTurnId,
+            text: input.text,
+            capability: input.capability ?? null,
+            fileIds: input.fileIds,
+          },
+          (event) => {
+            if (event.type === "run") {
+              activeRuns.current.set(conversation.id, event.runId);
+              return;
+            }
+            if (event.type === "start") {
+              assistantId = event.assistantMessage.id;
+              const current = stateRef.current.conversations.find(
+                (item) => item.id === conversation.id,
+              );
+              dispatch({
+                type: "UPSERT_CONVERSATION",
+                conversation: {
+                  ...toConversation(event.conversation),
+                  loaded: true,
+                  messages: [
+                    ...(current?.messages ?? []),
+                    apiMessageToChatMessage(event.userMessage),
+                    apiMessageToChatMessage(event.assistantMessage),
+                  ],
+                },
+              });
+              return;
+            }
+            if (event.type === "chunk" && assistantId) {
+              const current = stateRef.current.conversations.find(
+                (item) => item.id === conversation.id,
+              );
+              const message = current?.messages.find((item) => item.id === assistantId);
+              dispatch({
+                type: "UPDATE_MESSAGE",
+                conversationId: conversation.id,
+                messageId: assistantId,
+                patch: { content: `${message?.content ?? ""}${event.content}`, status: "generating" },
+              });
+              return;
+            }
+            if (event.type === "tool" && assistantId) {
+              const current = stateRef.current.conversations.find(
+                (item) => item.id === conversation.id,
+              );
+              const message = current?.messages.find((item) => item.id === assistantId);
+              dispatch({
+                type: "UPDATE_MESSAGE",
+                conversationId: conversation.id,
+                messageId: assistantId,
+                patch: {
+                  steps: [
+                    ...(message?.steps ?? []),
+                    { title: `工具 ${event.name}`, detail: "服务端只读工具已执行" },
+                  ],
+                },
+              });
+              return;
+            }
+            if (event.type === "done") {
+              activeRuns.current.delete(conversation.id);
+              const status =
+                event.status === "completed"
+                  ? "complete"
+                  : event.status === "cancelled"
+                    ? "stopped"
+                    : "error";
+              if (assistantId) {
+                dispatch({
+                  type: "UPDATE_MESSAGE",
+                  conversationId: conversation.id,
+                  messageId: assistantId,
+                  patch: { status },
+                });
+              }
+              return;
+            }
+            if (event.type === "error") {
+              activeRuns.current.delete(conversation.id);
+              if (assistantId) {
+                dispatch({
+                  type: "UPDATE_MESSAGE",
+                  conversationId: conversation.id,
+                  messageId: assistantId,
+                  patch: {
+                    status: "error",
+                    content: event.message ?? "真实执行失败，请稍后重试。",
+                    error: event.code,
+                  },
+                });
+              }
+            }
+          },
+        );
+        return conversation.id;
+      }
       let conversation = existing ?? (await apiCreateConversation());
       if (!existing) dispatch({ type: "CREATE_CONVERSATION", conversation });
       if (existing && !existing.loaded) {
