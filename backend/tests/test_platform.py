@@ -32,7 +32,7 @@ from app.services import ConversationService
 
 
 @contextmanager
-def local_openai_server(*, chunks: list[str], status: int = 200):
+def local_openai_server(*, chunks: list[str], status: int = 200, done: bool = True):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.0"
 
@@ -58,7 +58,8 @@ def local_openai_server(*, chunks: list[str], status: int = 200):
                     ensure_ascii=False,
                 )
                 self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
-            self.wfile.write(b"data: [DONE]\n\n")
+            if done:
+                self.wfile.write(b"data: [DONE]\n\n")
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -1477,6 +1478,32 @@ def test_openai_provider_network_error_is_explicit(monkeypatch):
     body = response.json()
     assert body["run"]["status"] == "failed"
     assert body["run"]["errorCode"] == "LLM_UNAVAILABLE"
+
+
+def test_openai_provider_truncated_stream_is_not_success(monkeypatch):
+    make_user("965")
+    user = new_client()
+    login(user, "965")
+    conversation_id = create_conversation(user)
+    with local_openai_server(chunks=["部分输出"], done=False) as port:
+        monkeypatch.setattr(settings, "llm_provider", "openai")
+        monkeypatch.setattr(settings, "llm_base_url", f"http://127.0.0.1:{port}/v1")
+        monkeypatch.setattr(settings, "llm_model", "local-test-model")
+        monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+        response = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "openai-truncated",
+                "text": "中断流",
+                "mode": "openai",
+            },
+            headers=headers(user),
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["run"]["status"] == "failed"
+    assert body["run"]["errorCode"] == "LLM_STREAM_TRUNCATED"
 
 
 def test_retry_reuses_assistant_message_without_duplicate_user_turn():
