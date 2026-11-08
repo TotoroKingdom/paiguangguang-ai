@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.config import Settings, settings
@@ -76,6 +77,31 @@ def create_capability(client: TestClient, csrf: str, **overrides) -> dict:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_admin_settings_reflect_the_server_runtime_without_leaking_keys(monkeypatch):
+    create_admin()
+    client = TestClient(app)
+    login(client)
+
+    monkeypatch.setattr(settings, "llm_provider", "fake")
+    fake_settings = client.get("/api/v1/admin/settings")
+    assert fake_settings.status_code == 200, fake_settings.text
+    assert fake_settings.json()["executionMode"] == "fake"
+    assert any(
+        "Agent Runtime" in note for note in fake_settings.json()["notes"]
+    )
+    assert all(
+        "未接入真实 LLM" not in note for note in fake_settings.json()["notes"]
+    )
+
+    secret = "provider-key-must-not-appear"
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_api_key", SecretStr(secret))
+    real_settings = client.get("/api/v1/admin/settings")
+    assert real_settings.status_code == 200, real_settings.text
+    assert real_settings.json()["executionMode"] == "openai"
+    assert secret not in real_settings.text
 
 
 def test_admin_login_session_logout_and_csrf():
