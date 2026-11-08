@@ -39,7 +39,7 @@
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
 | F16 | BLOCKED | 生产 TLS、443、Secure Cookie、密钥、依赖审计、部署权限未核验 |
-| F17 | PARTIAL | 自动化覆盖身份/能力/个人资源/Runtime 子集；Playwright 68 条通过（含首页/RAG/3D 路由回归）；38 个验收场景仍未逐条冻结证据 |
+| F17 | PARTIAL | 38 场景矩阵已建立：16 PASS / 19 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 68 条通过；真实模型/真实 MCP/生产仍阻断 |
 
 ## 3. 数据库与 API
 
