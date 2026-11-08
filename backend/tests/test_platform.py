@@ -1680,3 +1680,81 @@ def test_cancel_completed_run_is_idempotent_noop():
         row = session.get(AgentRun, run_id)
         assert row.status == "completed"
         assert row.cancel_requested is False
+
+
+def test_inflight_run_finishes_but_revoked_user_cannot_start_another(monkeypatch):
+    capability_id, creator_id = creator_tool_flow()
+    approve_and_release(capability_id)
+    user_id = make_user("990")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+
+    started = threading.Event()
+
+    class SignalingProvider:
+        name = "signaling"
+
+        async def stream(self, messages, *, tools=None):
+            started.set()
+            for _ in range(5):
+                await asyncio.sleep(0.05)
+                yield LLMChunk(text="x")
+            yield LLMChunk(done=True)
+
+    monkeypatch.setattr(
+        "app.modules.runtime.service.build_provider",
+        lambda mode: SignalingProvider(),
+    )
+    result: dict = {}
+
+    def run_once() -> None:
+        client = new_client()
+        login(client, "990")
+        conversation_id = create_conversation(client)
+        response = client.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "inflight-revoke",
+                "text": "执行中撤权",
+                "capabilityId": capability_id,
+                "capabilityKind": "tool",
+                "mode": "fake",
+            },
+            headers=headers(client),
+        )
+        result["response"] = response
+
+    worker = threading.Thread(target=run_once)
+    worker.start()
+    assert started.wait(5)
+    revoked = admin.delete(
+        f"/api/v1/admin/capabilities/{capability_id}/grants/{user_id}",
+        headers=headers(admin),
+    )
+    assert revoked.status_code == 204
+    worker.join(timeout=10)
+    assert not worker.is_alive()
+    assert result["response"].status_code == 200
+    assert result["response"].json()["run"]["status"] == "completed"
+
+    after = new_client()
+    login(after, "990")
+    denied = after.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(after),
+            "clientTurnId": "after-revoke",
+            "text": "撤权后新执行",
+            "capabilityId": capability_id,
+            "capabilityKind": "tool",
+            "mode": "fake",
+        },
+        headers=headers(after),
+    )
+    assert denied.status_code == 403
