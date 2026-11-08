@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.db import get_db
 from app.models import Message
+from app.modules.capabilities.models import CapabilityDefinition
 from app.modules.capabilities.service import CapabilityService
 from app.modules.identity.dependencies import (
     require_active_user,
+    require_creator,
     require_unified_admin,
     require_user_csrf,
 )
@@ -25,6 +27,8 @@ from app.modules.runtime.schemas import (
     RunView,
     RunQuotaResponse,
     RetryRequest,
+    CreatorRunSummaryItem,
+    CreatorRunSummaryResponse,
 )
 from app.modules.runtime.service import RuntimeService, run_view
 from app.modules.personal.models import PersonalSkill
@@ -37,6 +41,7 @@ from app.services import ConversationService, message_response
 
 router = APIRouter(prefix="/assistant", tags=["assistant-runtime"])
 admin_router = APIRouter(prefix="/admin/assistant", tags=["admin-runtime"])
+creator_router = APIRouter(prefix="/creator/runs", tags=["creator-runs"])
 
 
 def _turn_payload(
@@ -366,6 +371,57 @@ def my_run_quota(
         used=used,
         remaining=max(limit - used, 0),
         resetsAt=(since + timedelta(days=1)).isoformat() + "Z",
+    )
+
+
+@creator_router.get("/summary", response_model=CreatorRunSummaryResponse)
+def creator_run_summary(
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    owned_ids = list(
+        session.scalars(
+            select(CapabilityDefinition.id).where(
+                CapabilityDefinition.owner_id == principal.user.id
+            )
+        )
+    )
+    if not owned_ids:
+        return CreatorRunSummaryResponse(total=0, statuses={}, recent=[])
+    statuses = {
+        status: int(count)
+        for status, count in session.execute(
+            select(AgentRun.status, func.count(AgentRun.id))
+            .where(AgentRun.capability_id.in_(owned_ids))
+            .group_by(AgentRun.status)
+        )
+    }
+    rows = list(
+        session.execute(
+            select(AgentRun, CapabilityDefinition.name)
+            .join(
+                CapabilityDefinition,
+                CapabilityDefinition.id == AgentRun.capability_id,
+            )
+            .where(AgentRun.capability_id.in_(owned_ids))
+            .order_by(AgentRun.created_at.desc())
+            .limit(10)
+        )
+    )
+    return CreatorRunSummaryResponse(
+        total=sum(statuses.values()),
+        statuses=statuses,
+        recent=[
+            CreatorRunSummaryItem(
+                id=run.id,
+                capabilityId=run.capability_id,
+                capabilityName=name,
+                status=run.status,
+                mode=run.mode,
+                createdAt=run.created_at.replace(tzinfo=timezone.utc),
+            )
+            for run, name in rows
+        ],
     )
 
 

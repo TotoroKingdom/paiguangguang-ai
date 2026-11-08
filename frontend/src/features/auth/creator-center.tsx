@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from "react";
 import {
   creatorCreateCapability,
   creatorListCapabilities,
+  creatorRunSummary,
   creatorSubmitCapability,
   creatorTestCapability,
   type CreatorCapabilityInput,
   type GovernanceCapability,
+  type CreatorRunSummary,
 } from "./api";
 import { useAuth } from "./provider";
 import styles from "./auth.module.css";
@@ -22,6 +24,7 @@ const defaultConfig: Record<CreatorCapabilityInput["kind"], Record<string, unkno
 export function CreatorCenter() {
   const { session } = useAuth();
   const [items, setItems] = useState<GovernanceCapability[]>([]);
+  const [summary, setSummary] = useState<CreatorRunSummary | null>(null);
   const [kind, setKind] = useState<CreatorCapabilityInput["kind"]>("tool");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,7 +40,12 @@ export function CreatorCenter() {
     setBusy(true);
     setError("");
     try {
-      setItems(await creatorListCapabilities());
+      const [capabilities, runSummary] = await Promise.all([
+        creatorListCapabilities(),
+        creatorRunSummary(),
+      ]);
+      setItems(capabilities);
+      setSummary(runSummary);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "创作列表加载失败。");
     } finally {
@@ -245,6 +253,50 @@ export function CreatorCenter() {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className={styles.section}>
+        <h2>运行概览</h2>
+        {summary ? (
+          <>
+            <dl className={styles.meta}>
+              <div>
+                <dt>总运行</dt>
+                <dd>{summary.total}</dd>
+              </div>
+              {Object.entries(summary.statuses).map(([status, count]) => (
+                <div key={status}>
+                  <dt>{status}</dt>
+                  <dd>{count}</dd>
+                </div>
+              ))}
+            </dl>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>能力</th>
+                  <th>状态</th>
+                  <th>模式</th>
+                  <th>时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.recent.map((run) => (
+                  <tr key={run.id}>
+                    <td>{run.capabilityName}</td>
+                    <td>
+                      <span className={styles.badge}>{run.status}</span>
+                    </td>
+                    <td>{run.mode}</td>
+                    <td>{new Date(run.createdAt).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        ) : (
+          <p className={styles.lede}>暂无运行汇总。</p>
+        )}
       </div>
     </div>
   );

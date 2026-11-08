@@ -59,6 +59,21 @@ class RunQuotaResponse(BaseModel):
     resetsAt: str
 
 
+class CreatorRunSummaryItem(BaseModel):
+    id: str
+    capabilityId: str
+    capabilityName: str
+    status: str
+    mode: str
+    createdAt: datetime
+
+
+class CreatorRunSummaryResponse(BaseModel):
+    total: int
+    statuses: dict[str, int]
+    recent: list[CreatorRunSummaryItem]
+
+
 class ExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

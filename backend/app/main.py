@@ -28,6 +28,7 @@ from app.modules.personal.router import (
     me_router as personal_me_router,
 )
 from app.modules.runtime.router import admin_router as runtime_admin_router
+from app.modules.runtime.router import creator_router as runtime_creator_router
 from app.modules.runtime.router import router as runtime_router
 from app.routers import conversations
 
@@ -72,6 +73,7 @@ app.include_router(mcp_admin_router, prefix="/api/v1")
 app.include_router(mcp_creator_router, prefix="/api/v1")
 app.include_router(runtime_router, prefix="/api/v1")
 app.include_router(runtime_admin_router, prefix="/api/v1")
+app.include_router(runtime_creator_router, prefix="/api/v1")
 app.include_router(capability_public_router, prefix="/api/v1")
 app.include_router(capability_admin_router, prefix="/api/v1")
 app.include_router(capability_creator_router, prefix="/api/v1")
