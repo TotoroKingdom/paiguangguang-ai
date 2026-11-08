@@ -1,6 +1,8 @@
 import asyncio
 import json
 import secrets
+import threading
+import time
 
 import httpx
 from fastapi.testclient import TestClient
@@ -11,9 +13,17 @@ from app.core.security import hash_user_password
 from app.db import SessionLocal
 from app.main import app
 from app.modules.identity.models import User
+from app.modules.identity.user_service import UserIdentityService
+from app.modules.runtime.models import AgentRun
+from app.modules.runtime.providers import LLMChunk
+from app.modules.runtime.service import RuntimeService
 from app.modules.personal.models import McpServer
 from app.modules.runtime.mcp_client import McpClient, set_transport_factory
+from app.models import Conversation, Message
 from app.repositories import utc_now
+from app.repositories import OwnerScope
+from app.schemas import MessageRequest, TurnCreate
+from app.services import ConversationService
 
 
 def new_client() -> TestClient:
@@ -419,6 +429,20 @@ def mcp_handler(request: httpx.Request) -> httpx.Response:
     return httpx.Response(400, json={"error": "unknown method"})
 
 
+class SlowProvider:
+    name = "slow-fake"
+
+    def __init__(self, *, delay: float = 0.05, chunks: int = 20):
+        self.delay = delay
+        self.chunks = chunks
+
+    async def stream(self, messages, *, tools=None):
+        for _ in range(self.chunks):
+            await asyncio.sleep(self.delay)
+            yield LLMChunk(text="x")
+        yield LLMChunk(done=True)
+
+
 def test_mcp_client_lists_and_calls_tools_with_bearer_token():
     captured: list[httpx.Request] = []
 
@@ -578,3 +602,102 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection():
     assert body["run"]["status"] == "completed"
     assert any(step["type"] == "mcp" for step in body["run"]["steps"])
     assert "mcp-ok" in body["run"]["outputText"]
+
+
+def test_runtime_times_out_and_persists_terminal_state(monkeypatch):
+    make_user("910")
+    client = new_client()
+    login(client, "910")
+    conversation_id = create_conversation(client)
+    monkeypatch.setattr(
+        "app.modules.runtime.service.build_provider",
+        lambda mode: SlowProvider(delay=0.2, chunks=2),
+    )
+    monkeypatch.setattr("app.config.settings.llm_timeout_seconds", 0.05)
+    response = client.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "timeout-1",
+            "text": "触发超时",
+            "mode": "fake",
+        },
+        headers=headers(client),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "timed_out"
+    assert body["run"]["errorCode"] == "RUN_TIMEOUT"
+    detail = client.get(f"/api/v1/conversations/{conversation_id}").json()
+    assert detail["messages"][-1]["status"] == "error"
+
+
+def test_runtime_cancel_is_observed_between_chunks(monkeypatch):
+    make_user("911")
+    monkeypatch.setattr(
+        "app.modules.runtime.service.build_provider",
+        lambda mode: SlowProvider(delay=0.03, chunks=40),
+    )
+    with SessionLocal() as session:
+        user = session.scalar(select(User).where(User.account_number == "911"))
+        issued = UserIdentityService(session).login(
+            "911", "userpass", client_ip="test", user_agent="test"
+        )
+        scope = OwnerScope(owner_id="", user_id=user.id)
+        conversation = ConversationService(session).create(scope, "取消测试")
+        turn = TurnCreate(
+            clientTurnId="cancel-1",
+            text="慢速执行",
+            capability=None,
+            attachments=[],
+            request=MessageRequest(
+                conversationId=conversation.id,
+                clientTurnId="cancel-1",
+                text="慢速执行",
+            ),
+        )
+        turn_result = ConversationService(session).create_turn(
+            scope, conversation.id, turn
+        )
+        service = RuntimeService(session)
+        run = service.create_run(
+            issued.principal,
+            conversation_id=conversation.id,
+            version_id="",
+            capability_id="",
+            input_text="慢速执行",
+            mode="fake",
+        )
+        run_id = run.id
+        assistant_id = turn_result.assistantMessage.id
+        conversation_id = conversation.id
+
+        def consume() -> None:
+            async def run_stream() -> None:
+                async for _ in service.stream(
+                    run,
+                    principal=issued.principal,
+                    scope=scope,
+                    assistant_message_id=assistant_id,
+                    payload=turn,
+                ):
+                    pass
+
+            asyncio.run(run_stream())
+
+        worker = threading.Thread(target=consume)
+        worker.start()
+        time.sleep(0.12)
+        with SessionLocal() as updater:
+            row = updater.get(AgentRun, run_id)
+            row.cancel_requested = True
+            updater.commit()
+        worker.join(timeout=10)
+        assert not worker.is_alive()
+
+    with SessionLocal() as check:
+        final = check.get(AgentRun, run_id)
+        message = check.get(Message, assistant_id)
+        assert final.status == "cancelled"
+        assert message.status == "stopped"
+        assert check.get(Conversation, conversation_id) is not None

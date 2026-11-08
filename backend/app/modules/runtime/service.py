@@ -340,10 +340,9 @@ class RuntimeService:
                     if len(output.encode("utf-8")) > MAX_OUTPUT_BYTES:
                         raise APIError(422, "RUN_OUTPUT_TOO_LARGE", "模型输出超过限制")
                     yield {"type": "chunk", "content": chunk.text}
-                    if len(output) % 64 < len(chunk.text):
-                        self.session.refresh(run)
-                        if run.cancel_requested:
-                            raise asyncio.CancelledError()
+                    self.session.refresh(run)
+                    if run.cancel_requested:
+                        raise asyncio.CancelledError()
             run.output_text = output
             self._step(
                 run,
