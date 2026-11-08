@@ -1846,3 +1846,47 @@ def test_audit_failure_rolls_back_account_and_review_status(monkeypatch):
     with SessionLocal() as session:
         row = session.get(CapabilityDefinition, capability_id)
         assert row.review_status == "submitted"
+
+
+def test_creator_run_summary_is_scoped_to_owned_capabilities():
+    capability_id, creator_id = creator_tool_flow()
+    approve_and_release(capability_id)
+    user_id = make_user("995")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+    user = new_client()
+    login(user, "995")
+    run = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "creator-summary-run",
+            "text": "运行创作者能力",
+            "capabilityId": capability_id,
+            "capabilityKind": "tool",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert run.status_code == 200
+    assert run.json()["run"]["status"] == "completed"
+
+    creator = new_client()
+    login(creator, "700")
+    summary = creator.get("/api/v1/creator/runs/summary")
+    assert summary.status_code == 200
+    body = summary.json()
+    assert body["total"] >= 1
+    assert body["statuses"]["completed"] >= 1
+    assert body["recent"][0]["capabilityId"] == capability_id
+    assert "outputText" not in body["recent"][0]
+
+    make_user("701", role="CREATOR")
+    other = new_client()
+    login(other, "701")
+    assert other.get("/api/v1/creator/runs/summary").json()["total"] == 0

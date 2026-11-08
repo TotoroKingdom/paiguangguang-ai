@@ -332,6 +332,23 @@ export async function governanceListCapabilities(): Promise<GovernanceCapability
   return response.items;
 }
 
+export type CreatorRunSummary = {
+  total: number;
+  statuses: Record<string, number>;
+  recent: {
+    id: string;
+    capabilityId: string;
+    capabilityName: string;
+    status: string;
+    mode: string;
+    createdAt: string;
+  }[];
+};
+
+export function creatorRunSummary(): Promise<CreatorRunSummary> {
+  return request("/api/v1/creator/runs/summary");
+}
+
 export function governanceApproveCapability(
   id: string,
   reason: string,
