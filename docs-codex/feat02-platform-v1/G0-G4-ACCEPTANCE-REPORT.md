@@ -22,7 +22,7 @@
 |---|---|
 | 后端 `pytest` | **59 passed** |
 | 前端 `vitest` | **76 passed** |
-| Playwright | **72 passed**（desktop + mobile） |
+| Playwright | **74 passed**（desktop + mobile） |
 | TypeScript | 通过 |
 | ESLint 10 | 通过 |
 | Next.js 16 production build | 通过 |
