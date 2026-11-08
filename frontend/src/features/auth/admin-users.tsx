@@ -13,10 +13,17 @@ import {
 import { useAuth } from "./provider";
 import styles from "./auth.module.css";
 
-export function AdminUsers() {
+type AdminUsersProps = {
+  mode?: "users" | "roles";
+};
+
+export function AdminUsers({ mode = "users" }: AdminUsersProps = {}) {
   const { session } = useAuth();
+  const isRoles = mode === "roles";
   const [users, setUsers] = useState<AccountUser[]>([]);
-  const [status, setStatus] = useState<AccountStatus | "">("PENDING");
+  const [status, setStatus] = useState<AccountStatus | "">(
+    isRoles ? "ACTIVE" : "PENDING",
+  );
   const [role, setRole] = useState<AccountRole | "">("");
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
@@ -47,9 +54,12 @@ export function AdminUsers() {
   if (!session || session.user.role !== "ADMIN") {
     return (
       <div className={styles.card}>
-        <h1>用户管理</h1>
+        <h1>{isRoles ? "角色管理" : "用户管理"}</h1>
         <p className={styles.lede}>需要统一管理员会话。请使用管理员数字账号登录。</p>
-        <Link className={styles.primary} href="/assistant/login?next=/assistant/admin/users">
+        <Link
+          className={styles.primary}
+          href={`/assistant/login?next=/assistant/admin/${isRoles ? "roles" : "users"}`}
+        >
           管理员登录
         </Link>
       </div>
@@ -91,10 +101,64 @@ export function AdminUsers() {
 
   return (
     <div className={`${styles.card} ${styles.wide}`}>
-      <h1>用户管理</h1>
-      <p className={styles.lede}>激活、拒绝、停用与角色变更均写入审计；最后一名有效管理员受保护。</p>
+      <h1>{isRoles ? "角色管理" : "用户管理"}</h1>
+      <p className={styles.lede}>
+        {isRoles
+          ? "V1 固定 USER、CREATOR、ADMIN 三个内置角色；角色变更由服务端校验并写入审计。"
+          : "激活、拒绝、停用与角色变更均写入审计；最后一名有效管理员受保护。"}
+      </p>
       {error && <div className={styles.alert}>{error}</div>}
       {notice && <div className={styles.info}>{notice}</div>}
+      {isRoles && (
+        <section className={styles.section} aria-label="内置角色权限矩阵">
+          <h2>内置角色权限矩阵</h2>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>能力</th>
+                <th>USER</th>
+                <th>CREATOR</th>
+                <th>ADMIN</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>使用已授权能力</td>
+                <td>允许</td>
+                <td>允许</td>
+                <td>允许</td>
+              </tr>
+              <tr>
+                <td>创建、测试、提交本人能力</td>
+                <td>—</td>
+                <td>允许</td>
+                <td>允许</td>
+              </tr>
+              <tr>
+                <td>审核、发布、停用与回滚能力</td>
+                <td>—</td>
+                <td>—</td>
+                <td>允许</td>
+              </tr>
+              <tr>
+                <td>激活账户、停用账户与分配角色</td>
+                <td>—</td>
+                <td>—</td>
+                <td>允许</td>
+              </tr>
+              <tr>
+                <td>查看 Run</td>
+                <td>仅本人</td>
+                <td>负责能力汇总</td>
+                <td>全局脱敏</td>
+              </tr>
+            </tbody>
+          </table>
+          <p className={styles.lede}>
+            Creator 不能审核或发布能力，也不能分配角色；最后一名有效管理员不能被降级。
+          </p>
+        </section>
+      )}
       <div className={styles.filters}>
         <label className={styles.field}>
           状态
@@ -148,7 +212,7 @@ export function AdminUsers() {
               <td>{user.version}</td>
               <td>
                 <div className={styles.rowActions}>
-                  {user.status === "PENDING" && (
+                  {!isRoles && user.status === "PENDING" && (
                     <>
                       <button className={styles.primary} onClick={() => void act(user, "activate")}>
                         激活
@@ -158,17 +222,18 @@ export function AdminUsers() {
                       </button>
                     </>
                   )}
-                  {user.status === "ACTIVE" && (
+                  {!isRoles && user.status === "ACTIVE" && (
                     <button className={styles.danger} onClick={() => void act(user, "disable")}>
                       停用
                     </button>
                   )}
-                  {user.status === "DISABLED" && (
+                  {!isRoles && user.status === "DISABLED" && (
                     <button className={styles.secondary} onClick={() => void act(user, "restore")}>
                       恢复
                     </button>
                   )}
                   <select
+                    aria-label={`账号 ${user.accountNumber} 的角色`}
                     value={user.role}
                     onChange={(event) => void changeRole(user, event.target.value as AccountRole)}
                   >
