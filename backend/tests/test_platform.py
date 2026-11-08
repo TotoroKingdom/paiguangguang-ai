@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import select
@@ -1783,3 +1784,65 @@ def test_failed_run_is_not_auto_retried():
     detail = user.get(f"/api/v1/conversations/{conversation_id}").json()
     assert len(detail["messages"]) == 2
     assert detail["messages"][-1]["status"] == "error"
+
+
+def test_audit_failure_rolls_back_account_and_review_status(monkeypatch):
+    make_user("1", role="ADMIN", password="adminpass123")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    pending = new_client().post(
+        "/api/v1/auth/register",
+        json={
+            "password": "pendingpass",
+            "passwordConfirm": "pendingpass",
+            "nickname": "审计回滚",
+        },
+        headers={"origin": "http://testserver", "idempotency-key": secrets.token_urlsafe(24)},
+    )
+    pending_user = pending.json()["user"]
+    monkeypatch.setattr(
+        "app.modules.identity.user_service.record_audit",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("audit failed")),
+    )
+    with pytest.raises(RuntimeError):
+        admin.post(
+            f"/api/v1/admin/users/{pending_user['id']}/activate",
+            json={"expectedVersion": pending_user["version"], "reason": "激活"},
+            headers=headers(admin),
+        )
+    with SessionLocal() as session:
+        row = session.get(User, pending_user["id"])
+        assert row.status == "PENDING"
+        assert row.version == pending_user["version"]
+    monkeypatch.undo()
+
+    capability_id, creator_id = creator_tool_flow()
+    creator = new_client()
+    login(creator, "700")
+    creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/submit",
+        json={"reason": "审核"},
+        headers=headers(creator),
+    )
+    with SessionLocal() as session:
+        assert session.get(CapabilityDefinition, capability_id).review_status == "submitted"
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    monkeypatch.setattr(
+        "app.modules.capabilities.router.record_audit",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("audit failed")),
+    )
+    with pytest.raises(RuntimeError):
+        admin.post(
+            f"/api/v1/admin/capabilities/{capability_id}/approve",
+            json={"reason": "通过"},
+            headers=headers(admin),
+        )
+    with SessionLocal() as session:
+        row = session.get(CapabilityDefinition, capability_id)
+        assert row.review_status == "submitted"

@@ -38,7 +38,7 @@
 
 ## 4. 验证
 
-- 后端：`64 passed`
+- 后端：`65 passed`
 - 前端 Vitest：`79 passed`
 - TypeScript check：通过
 - ESLint：通过（0 error）

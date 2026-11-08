@@ -522,7 +522,6 @@ class CapabilityService:
         definition.submitted_at = utc_now()
         definition.review_reason = reason[:255]
         self._record_review(definition, draft.id, "submit", actor_id, reason)
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def review(
@@ -545,7 +544,6 @@ class CapabilityService:
         definition.reviewed_at = now
         definition.review_reason = reason[:255]
         self._record_review(definition, draft.id if draft else "", action, actor_id, reason)
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def test_capability(
@@ -660,7 +658,6 @@ class CapabilityService:
             actor_id,
             "passed" if ready else "failed",
         )
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def rollback(
@@ -680,7 +677,6 @@ class CapabilityService:
         definition.status = "published"
         definition.updated_at = now
         self._record_review(definition, target.id, "rollback", actor_id, "")
-        self.session.commit()
         return detail_view(self._get(capability_id))
 
     def grant(
