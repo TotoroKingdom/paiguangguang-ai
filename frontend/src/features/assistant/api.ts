@@ -79,8 +79,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let detail = "会话服务暂时不可用，请重试。";
     try {
-      const body = (await response.json()) as { detail?: string };
-      if (body.detail) detail = body.detail;
+      const body = (await response.json()) as {
+        detail?: string;
+        error?: { message?: string };
+      };
+      if (body.error?.message) detail = body.error.message;
+      else if (body.detail) detail = body.detail;
     } catch {
       /* The server may return an empty or non-JSON error response. */
     }
