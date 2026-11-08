@@ -496,7 +496,7 @@ class CapabilityService:
         checks: list[dict[str, Any]] = []
         checks.append({"name": "name", "ok": bool(snapshot.name.strip())})
         executor = str(snapshot.config.get("executor", "")).strip().lower()
-        checks.append({"name": "executor", "ok": executor in {"system", "demo"}})
+        checks.append({"name": "executor", "ok": executor in {"system", "mcp", "demo"}})
         tool_name = str(snapshot.config.get("tool", "")).strip()
         ready = False
         if executor == "system":
@@ -505,6 +505,31 @@ class CapabilityService:
             tool = get_tool(tool_name)
             ready = tool is not None and not tool.side_effect
             checks.append({"name": "readonly-tool", "ok": ready, "detail": tool_name})
+        elif executor == "mcp":
+            from app.modules.personal.models import McpServer
+
+            server_id = str(snapshot.config.get("mcpServerId", "")).strip()
+            mcp_tool = str(snapshot.config.get("mcpTool", "")).strip()
+            server = self.session.get(McpServer, server_id) if server_id else None
+            tools = loads(server.tools_json, []) if server is not None else []
+            tool_names = {
+                str(item.get("name", "")).strip()
+                for item in tools
+                if isinstance(item, dict)
+            }
+            ready = (
+                server is not None
+                and server.status == "approved"
+                and bool(mcp_tool)
+                and mcp_tool in tool_names
+            )
+            checks.append(
+                {
+                    "name": "approved-mcp-tool",
+                    "ok": ready,
+                    "detail": f"{server_id}:{mcp_tool}",
+                }
+            )
         elif executor == "demo":
             ready = False
             checks.append(

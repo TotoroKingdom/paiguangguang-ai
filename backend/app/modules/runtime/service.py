@@ -16,8 +16,10 @@ from app.modules.capabilities.service import CapabilityService, loads
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
 from app.modules.personal.models import PersonalSkill
+from app.modules.personal.models import McpConnection, McpServer
 from app.modules.runtime.models import AgentRun, RunStep, RunTrace
 from app.modules.runtime.providers import build_provider
+from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
 from app.modules.runtime.tools import execute_tool, get_tool
 from app.repositories import OwnerScope, utc_now
 from app.schemas import ExecutionStep, MessagePatch, TurnCreate
@@ -277,6 +279,52 @@ class RuntimeService:
                         error=error.code,
                     )
                     raise
+            elif str(config.get("executor", "")).strip().lower() == "mcp":
+                mcp_started = utc_now()
+                mcp_tool = str(config.get("mcpTool", "")).strip()
+                server_id = str(config.get("mcpServerId", "")).strip()
+                self._trace(run, "mcp.started", {"serverId": server_id, "tool": mcp_tool})
+                try:
+                    mcp_result = await self._call_mcp(
+                        principal,
+                        server_id=server_id,
+                        tool_name=mcp_tool,
+                        arguments=payload.model_dump().get("toolArguments") or {},
+                    )
+                    self._step(
+                        run,
+                        "mcp",
+                        f"{server_id}:{mcp_tool}",
+                        status="completed",
+                        input_value={"tool": mcp_tool},
+                        output=mcp_result,
+                        started_at=mcp_started,
+                    )
+                    self._trace(run, "mcp.completed", {"tool": mcp_tool})
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "content": json.dumps(mcp_result, ensure_ascii=False)[:8000],
+                        }
+                    )
+                    yield {
+                        "type": "mcp",
+                        "serverId": server_id,
+                        "name": mcp_tool,
+                        "result": mcp_result,
+                    }
+                except APIError as error:
+                    self._step(
+                        run,
+                        "mcp",
+                        f"{server_id}:{mcp_tool}",
+                        status="failed",
+                        input_value={"tool": mcp_tool},
+                        output={},
+                        started_at=mcp_started,
+                        error=error.code,
+                    )
+                    raise
 
             provider = build_provider(run.mode)
             llm_started = utc_now()
@@ -401,3 +449,37 @@ class RuntimeService:
         if "query" in tool.schema.get("properties", {}):
             return {"query": text[:80], "limit": 5}
         return {}
+
+    async def _call_mcp(
+        self,
+        principal: UserPrincipal,
+        *,
+        server_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not server_id or not tool_name:
+            raise APIError(422, "MCP_CONFIG_INVALID", "MCP Server 或工具未配置")
+        server = self.session.get(McpServer, server_id)
+        if server is None or server.status != "approved":
+            raise APIError(403, "MCP_SERVER_NOT_APPROVED", "MCP Server 未获平台批准")
+        connection = self.session.scalar(
+            select(McpConnection).where(
+                McpConnection.user_id == principal.user.id,
+                McpConnection.server_id == server.id,
+                McpConnection.status == "connected",
+            )
+        )
+        if connection is None:
+            raise APIError(403, "MCP_CONNECTION_REQUIRED", "请先建立个人 MCP 授权")
+        token = (
+            decrypt_secret(connection.credential_ciphertext)
+            if connection.credential_ciphertext
+            else None
+        )
+        validate_mcp_url(server.endpoint_url)
+        client = McpClient(server.endpoint_url, token=token, timeout=20)
+        async with asyncio.timeout(25):
+            result = await client.call_tool(tool_name, arguments)
+        connection.last_used_at = utc_now()
+        return result

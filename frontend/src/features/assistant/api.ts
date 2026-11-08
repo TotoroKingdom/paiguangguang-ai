@@ -230,6 +230,7 @@ export type RuntimeEvent =
   | { type: "run"; runId: string }
   | { type: "chunk"; content: string }
   | { type: "tool"; name: string; result: Record<string, unknown> }
+  | { type: "mcp"; serverId: string; name: string; result: Record<string, unknown> }
   | { type: "done"; runId: string; status: string }
   | { type: "error"; runId?: string; code: string; message?: string };
 

@@ -29,7 +29,9 @@ from app.modules.personal.schemas import (
     SkillView,
 )
 from app.modules.personal.service import PersonalService
+from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
 from app.owner import require_json_request
+from app.repositories import utc_now
 
 me_router = APIRouter(prefix="/me", tags=["personal"])
 mcp_router = APIRouter(prefix="/mcp", tags=["mcp"])
@@ -313,6 +315,52 @@ def disable_mcp_server(
     )
     session.commit()
     return _server(item)
+
+
+@admin_router.post("/servers/{server_id}/discover", response_model=McpServerView)
+async def discover_mcp_tools(
+    server_id: str,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_user_csrf(request, principal)
+    service = PersonalService(session)
+    server = service.get_server(server_id)
+    endpoint = validate_mcp_url(server.endpoint_url)
+    try:
+        tools = await McpClient(endpoint, timeout=20).list_tools()
+    except Exception as error:
+        from app.core.errors import APIError
+
+        if isinstance(error, APIError):
+            raise
+        raise APIError(502, "MCP_DISCOVERY_FAILED", "MCP 工具发现失败") from error
+    server.tools_json = json.dumps(
+        [
+            {
+                "name": tool.name,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
+            }
+            for tool in tools
+        ],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    server.updated_at = utc_now()
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="admin.mcp.discover",
+        resource_type="mcp_server",
+        resource_id=server.id,
+        detail={"tools": len(tools)},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return _server(server)
 
 
 @me_router.get("/mcp/connections", response_model=McpConnectionListResponse)
