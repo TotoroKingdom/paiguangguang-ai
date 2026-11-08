@@ -86,12 +86,19 @@ class McpClient:
             "method": method,
             "params": params or {},
         }
-        async with httpx.AsyncClient(
-            timeout=self.timeout,
-            transport=self.transport,
-            follow_redirects=False,
-        ) as client:
-            response = await client.post(self.endpoint_url, json=body, headers=headers)
+        try:
+            async with httpx.AsyncClient(
+                timeout=self.timeout,
+                transport=self.transport,
+                follow_redirects=False,
+            ) as client:
+                response = await client.post(
+                    self.endpoint_url, json=body, headers=headers
+                )
+        except httpx.TimeoutException as error:
+            raise APIError(504, "MCP_TIMEOUT", "MCP 服务超时") from error
+        except httpx.HTTPError as error:
+            raise APIError(502, "MCP_UNAVAILABLE", "MCP 服务不可达") from error
         if response.status_code in {301, 302, 303, 307, 308}:
             raise APIError(502, "MCP_REDIRECT_BLOCKED", "MCP 服务返回重定向，已拒绝")
         if response.status_code >= 400:
