@@ -1,7 +1,7 @@
 # feat02 智能助手平台 V1｜G0–G4 验收报告
 
 > 日期：2026-11-08
-> 代码基线：`dev` `e7de102` + 本轮安全响应头与验收报告提交
+> 代码基线：`dev` `247e4a0` + 本轮取消幂等提交（PR #39）
 > 环境：local（Windows）+ GitHub Actions（ubuntu-latest）
 > 生产：**未连接、未部署、未验收**
 > 总体结论：**开发环境可执行范围已交付；完整 V1 仍为 BLOCKED**。
@@ -20,7 +20,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **61 passed** |
+| 后端 `pytest` | **62 passed** |
 | 前端 `vitest` | **79 passed** |
 | Playwright | **74 passed**（desktop + mobile） |
 | TypeScript | 通过 |

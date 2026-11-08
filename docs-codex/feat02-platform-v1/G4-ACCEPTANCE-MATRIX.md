@@ -1,7 +1,7 @@
 # feat02 G4 验收矩阵（38 场景）
 
 > 日期：2026-11-08
-> 代码基线：`dev` `c67ca55` + PR #19（MCP Runtime）验证提交 `e9f1514`
+> 代码基线：`dev` `247e4a0` + PR #39（取消幂等）
 > 证据层次：L1 API/单元、L2 浏览器 E2E、L3 可控集成；**L4 真实供应商/生产未执行**。
 
 ## 1. 汇总
@@ -66,7 +66,7 @@
 | R-02 | PARTIAL | Skill → Tool → MCP 的 L3 Agent 链；RunStep/Trace 持久化 | 真实模型与真实 MCP 未联调 |
 | R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时、取消、真实用户重试同一助手消息均有自动化；重试不重复用户消息 | 等待授权与断网恢复未 E2E |
 | R-04 | PARTIAL | 用户仅查本人 Run；Admin 列表脱敏；accepted 不改写 completed | Creator 汇总视图与 Token 用量一致性未验证 |
-| R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权以 `CAPABILITY_REVOKED` 终止；并发重试只有一次原子 claim 成功，另一次 409 | 模型流已经开始后的并发撤权未专项 E2E |
+| R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权以 `CAPABILITY_REVOKED` 终止；并发重试只有一次原子 claim 成功；完成态取消为幂等 no-op | 模型流已经开始后的并发撤权未专项 E2E |
 | R-06 | PARTIAL | 401/403/404/409/429/503、模型 503/不可达/流提前中断、Runtime MCP 不可达、能力依赖阻断均有自动化；浏览器 503 → 错误提示 → 再次发送成功且无重复用户消息 | 无限自动重试保护与真实物理断网恢复未 E2E |
 
 ## 5. 部署与全站 O-01～O-05
