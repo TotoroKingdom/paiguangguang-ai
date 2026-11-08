@@ -10,6 +10,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from app import models  # noqa: F401
 from app.modules.capabilities import models as capability_models  # noqa: F401
 from app.modules.identity import models as identity_models  # noqa: F401
+from app.modules.personal import models as personal_models  # noqa: F401
+from app.modules.runtime import models as runtime_models  # noqa: F401
 from app.modules.observability import models as observability_models  # noqa: F401
 from app.config import settings
 from app.db import Base

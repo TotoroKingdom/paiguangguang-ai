@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.owner import get_owner_id, require_json_request
+from app.config import settings
+from app.modules.identity.user_service import UserIdentityService
+from app.owner import get_owner_id, require_json_request, verified_owner_id
+from app.repositories import OwnerScope
 from app.schemas import (
     ConversationCreate,
     ConversationListResponse,
@@ -21,6 +24,31 @@ from app.services import ConversationService, decode_cursor, encode_cursor
 router = APIRouter(tags=["conversations"])
 
 
+def conversation_scope(
+    request: Request, response: Response, session: Session
+) -> OwnerScope:
+    token = request.cookies.get(settings.user_session_cookie_name)
+    principal = UserIdentityService(session).resolve_session(token)
+    if token and principal is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=401, detail="Session expired or revoked")
+    if principal is not None:
+        if principal.user.status != "ACTIVE" or principal.session.scope != "FULL":
+            from fastapi import HTTPException
+
+            raise HTTPException(status_code=403, detail="Account is not active")
+        if request.method in {"POST", "PATCH", "DELETE"}:
+            from app.modules.identity.dependencies import require_user_csrf
+
+            require_user_csrf(request, principal)
+        return OwnerScope(
+            owner_id=verified_owner_id(request) or "",
+            user_id=principal.user.id,
+        )
+    return OwnerScope(owner_id=get_owner_id(request, response))
+
+
 @router.post("/conversations", response_model=ConversationSummary, status_code=201)
 def create_conversation(
     request: Request,
@@ -29,9 +57,9 @@ def create_conversation(
     session: Session = Depends(get_db),
 ):
     require_json_request(request)
-    owner_id = get_owner_id(request, response)
+    scope = conversation_scope(request, response, session)
     return ConversationService(session).create(
-        owner_id,
+        scope,
         payload.title if payload else "新对话",
         payload.migrationKey if payload else None,
     )
@@ -46,9 +74,11 @@ def list_conversations(
     q: str = Query(default="", max_length=80),
     session: Session = Depends(get_db),
 ):
-    owner_id = get_owner_id(request, response)
+    scope = conversation_scope(request, response, session)
     cursor_time, cursor_id = decode_cursor(cursor) if cursor else (None, None)
-    items = ConversationService(session).repository.list(owner_id, limit + 1, cursor_time, cursor_id, q.strip())
+    items = ConversationService(session).repository.list(
+        scope, limit + 1, cursor_time, cursor_id, q.strip()
+    )
     next_cursor = encode_cursor(items[limit - 1]) if len(items) > limit else None
     return ConversationListResponse(
         items=[
@@ -69,8 +99,8 @@ def list_conversations(
 def get_conversation(
     conversation_id: str, request: Request, response: Response, session: Session = Depends(get_db)
 ):
-    owner_id = get_owner_id(request, response)
-    return ConversationService(session).detail(owner_id, conversation_id)
+    scope = conversation_scope(request, response, session)
+    return ConversationService(session).detail(scope, conversation_id)
 
 
 @router.patch("/conversations/{conversation_id}", response_model=ConversationSummary)
@@ -82,16 +112,18 @@ def rename_conversation(
     session: Session = Depends(get_db),
 ):
     require_json_request(request)
-    owner_id = get_owner_id(request, response)
-    return ConversationService(session).rename(owner_id, conversation_id, payload.title, payload.version)
+    scope = conversation_scope(request, response, session)
+    return ConversationService(session).rename(
+        scope, conversation_id, payload.title, payload.version
+    )
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
 def delete_conversation(
     conversation_id: str, request: Request, response: Response, session: Session = Depends(get_db)
 ):
-    owner_id = get_owner_id(request, response)
-    ConversationService(session).delete(owner_id, conversation_id)
+    scope = conversation_scope(request, response, session)
+    ConversationService(session).delete(scope, conversation_id)
 
 
 @router.post("/conversations/{conversation_id}/turns", response_model=TurnResponse, status_code=201)
@@ -103,8 +135,8 @@ def create_turn(
     session: Session = Depends(get_db),
 ):
     require_json_request(request)
-    owner_id = get_owner_id(request, response)
-    return ConversationService(session).create_turn(owner_id, conversation_id, payload)
+    scope = conversation_scope(request, response, session)
+    return ConversationService(session).create_turn(scope, conversation_id, payload)
 
 
 @router.patch(
@@ -119,6 +151,8 @@ def patch_message(
     session: Session = Depends(get_db),
 ):
     require_json_request(request)
-    owner_id = get_owner_id(request, response)
-    return ConversationService(session).patch_message(owner_id, conversation_id, message_id, payload)
+    scope = conversation_scope(request, response, session)
+    return ConversationService(session).patch_message(
+        scope, conversation_id, message_id, payload
+    )
 

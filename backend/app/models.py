@@ -20,6 +20,7 @@ class Conversation(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
     owner_id: Mapped[str] = mapped_column(String(64), index=True)
+    user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     migration_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
     title: Mapped[str] = mapped_column(String(80), default="新对话")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
