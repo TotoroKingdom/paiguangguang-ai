@@ -3,9 +3,12 @@ import json
 import secrets
 import threading
 import time
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.config import settings
@@ -26,6 +29,45 @@ from app.repositories import utc_now
 from app.repositories import OwnerScope
 from app.schemas import CapabilityRef, MessageRequest, TurnCreate
 from app.services import ConversationService
+
+
+@contextmanager
+def local_openai_server(*, chunks: list[str], status: int = 200):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def log_message(self, *args) -> None:
+            return
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("content-length", "0"))
+            if length:
+                self.rfile.read(length)
+            if status >= 400:
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(b'{"error":"upstream unavailable"}')
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for chunk in chunks:
+                payload = json.dumps(
+                    {"choices": [{"delta": {"content": chunk}}]},
+                    ensure_ascii=False,
+                )
+                self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
+            self.wfile.write(b"data: [DONE]\n\n")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1]
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def new_client() -> TestClient:
@@ -1246,3 +1288,56 @@ def test_agent_v2_uses_new_dependency_but_old_run_keeps_v1():
         assert json.loads(old_step.output_json)["dependencies"][0][
             "versionId"
         ] == tool_v1.id
+
+
+def test_openai_compatible_provider_streams_from_local_server(monkeypatch):
+    make_user("960")
+    user = new_client()
+    login(user, "960")
+    conversation_id = create_conversation(user)
+    with local_openai_server(chunks=["真实", "适配"]) as port:
+        monkeypatch.setattr(settings, "llm_provider", "openai")
+        monkeypatch.setattr(settings, "llm_base_url", f"http://127.0.0.1:{port}/v1")
+        monkeypatch.setattr(settings, "llm_model", "local-test-model")
+        monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+        response = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "openai-local-1",
+                "text": "本地 SSE 模型",
+                "mode": "openai",
+            },
+            headers=headers(user),
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "completed"
+    assert body["run"]["outputText"] == "真实适配"
+    assert body["run"]["provider"] == "openai"
+
+
+def test_openai_compatible_provider_surfaces_upstream_error(monkeypatch):
+    make_user("961")
+    user = new_client()
+    login(user, "961")
+    conversation_id = create_conversation(user)
+    with local_openai_server(chunks=[], status=503) as port:
+        monkeypatch.setattr(settings, "llm_provider", "openai")
+        monkeypatch.setattr(settings, "llm_base_url", f"http://127.0.0.1:{port}/v1")
+        monkeypatch.setattr(settings, "llm_model", "local-test-model")
+        monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+        response = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "openai-local-2",
+                "text": "上游错误",
+                "mode": "openai",
+            },
+            headers=headers(user),
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "failed"
+    assert body["run"]["errorCode"] == "LLM_UPSTREAM_ERROR"
