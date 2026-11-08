@@ -55,7 +55,7 @@
 | C-06 | PARTIAL | 个人连接隔离、Token 加密、Runtime 通过个人连接调用 MCP Tool（MockTransport） | 外部真实 MCP、过期/撤销后调用拒绝未 L4 |
 | C-07 | PASS | Agent v1 锁定 Tool v1；发布 Tool v2、Agent v2 后新 Run 使用 v2；旧 Run 仍保存 v1；发布时校验依赖版本；回滚接口 | 无 |
 | C-08 | PASS | 停用后新目录/执行拒绝；版本回滚并审计 | 依赖停用级联检查未覆盖 |
-| C-09 | PASS | 正式目录过滤 Demo；Active 用户目录 503 时显示错误与空目录，不出现 Demo 卡片（桌面/移动 E2E）；未就绪能力禁用聊天；Provider 未配置返回失败 Run | 无 |
+| C-09 | PASS | 正式目录过滤 Demo；生产关闭演示时启动归档存量 Demo，保留版本并写审计；Active 用户目录 503 时显示错误与空目录，不出现 Demo 卡片（桌面/移动 E2E）；未就绪能力禁用聊天；Provider 未配置返回失败 Run | 生产首次归档实跑为 NOT_RUN，归入 F16/F17 |
 | C-10 | PASS | 服务端按“无权限 → 需 MCP 授权 → 未就绪 → 预算不足 → 可执行”返回唯一 `blockedReason/primaryAction`；前端显示对应禁用按钮或连接/登录入口；未授权 granted 能力对 Active 用户可见但不可执行 | 无 |
 
 ## 4. Runtime R-01～R-06

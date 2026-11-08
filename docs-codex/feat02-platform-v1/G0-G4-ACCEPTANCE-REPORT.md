@@ -12,7 +12,7 @@
 |---|---|---|
 | G0 安全与迁移 | PARTIAL | 本地副本恢复/迁移/回退演练通过；生产盘点与恢复未执行 |
 | G1 身份与权限 | PASS（开发环境） | 账户、会话、RBAC、恢复码、审核、匿名认领自动化与 E2E 通过；人工恢复单独 BLOCKED |
-| G2 能力治理 | PASS（开发环境） | 四类能力 ACL、审核发布、版本回滚、个人 Skill/文件、MCP 授权通过 |
+| G2 能力治理 | PASS（开发环境） | 四类能力 ACL、审核发布、版本回滚、个人 Skill/文件、MCP 授权通过；生产关闭演示时归档存量 Demo 并保留历史 |
 | G3 Runtime | PARTIAL / BLOCKED | Fake、Tool、MCP、Agent、Run/Trace 自动化通过；真实模型与外部 MCP 未联调 |
 | G4 生产与全量回归 | BLOCKED | 生产 TLS/密钥/恢复未核验；38 场景为 23 PASS / 12 PARTIAL / 3 BLOCKED |
 
@@ -20,7 +20,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **68 passed** |
+| 后端 `pytest` | **70 passed** |
 | 前端 `vitest` | **79 passed** |
 | Playwright | **76 passed**（desktop + mobile） |
 | TypeScript | 通过 |

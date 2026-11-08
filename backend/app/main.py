@@ -43,6 +43,10 @@ async def lifespan(_: FastAPI):
         UserIdentityService(session).ensure_unified_admin()
         if settings.demo_catalog_enabled:
             CapabilityService(session).ensure_demo_catalog()
+        else:
+            archived = CapabilityService(session).archive_existing_demo_catalog()
+            if archived:
+                logger.info("Archived %s legacy demo capabilities", len(archived))
         if (
             settings.environment.lower() in {"production", "prod"}
             and not AdminIdentityService(session).has_active_admin()
