@@ -12,6 +12,7 @@ from app.config import settings
 from app.core.errors import APIError
 from app.models import Message
 from app.modules.capabilities.schemas import CapabilitySnapshot
+from app.modules.capabilities.models import CapabilityDefinition
 from app.modules.capabilities.service import CapabilityService, loads
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
@@ -179,6 +180,7 @@ class RuntimeService:
         output = ""
         capability_snapshot: CapabilitySnapshot | None = None
         yield {"type": "run", "runId": run.id}
+        self._ensure_capability_allowed(run, principal)
         if run.capability_id:
             try:
                 definition, version, _ = CapabilityService(self.session).resolve_published(
@@ -327,6 +329,7 @@ class RuntimeService:
                     raise
 
             provider = build_provider(run.mode)
+            self._ensure_capability_allowed(run, principal)
             llm_started = utc_now()
             self._trace(run, "llm.started", {"provider": provider.name})
             self.session.commit()
@@ -448,6 +451,29 @@ class RuntimeService:
         if "query" in tool.schema.get("properties", {}):
             return {"query": text[:80], "limit": 5}
         return {}
+
+    def _ensure_capability_allowed(
+        self, run: AgentRun, principal: UserPrincipal
+    ) -> None:
+        if not run.capability_id:
+            return
+        personal = self.session.scalar(
+            select(PersonalSkill).where(
+                PersonalSkill.id == run.capability_id,
+                PersonalSkill.user_id == principal.user.id,
+            )
+        )
+        if personal is not None:
+            return
+        definition = self.session.get(CapabilityDefinition, run.capability_id)
+        if definition is None or not CapabilityService(self.session).can_execute(
+            definition, principal.user.id
+        ):
+            raise APIError(
+                403,
+                "CAPABILITY_REVOKED",
+                "能力已停用、未发布或授权已撤销",
+            )
 
     async def _call_mcp(
         self,

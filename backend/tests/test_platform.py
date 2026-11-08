@@ -19,6 +19,7 @@ from app.modules.runtime.providers import LLMChunk
 from app.modules.runtime.service import RuntimeService
 from app.modules.personal.models import McpServer
 from app.modules.runtime.mcp_client import McpClient, set_transport_factory
+from app.modules.observability.models import AuditEvent
 from app.models import Conversation, Message
 from app.repositories import utc_now
 from app.repositories import OwnerScope
@@ -184,6 +185,33 @@ def test_creator_capability_requires_test_review_release_and_grant():
     assert granted.status_code == 204
     catalog = user.get("/api/v1/capabilities").json()["items"]
     assert any(item["id"] == capability_id and item["authorized"] for item in catalog)
+
+    revoked = admin.delete(
+        f"/api/v1/admin/capabilities/{capability_id}/grants/{user_id}",
+        headers=headers(admin),
+    )
+    assert revoked.status_code == 204
+    catalog = user.get("/api/v1/capabilities").json()["items"]
+    assert all(item["id"] != capability_id for item in catalog)
+    denied = user.post(
+        f"/api/v1/conversations/{create_conversation(user)}/turns",
+        json={
+            "clientTurnId": "turn-revoked",
+            "text": "撤权后继续调用",
+            "capability": {"id": capability_id, "kind": "tool", "name": "服务器时间"},
+            "attachments": [],
+            "request": {
+                "conversationId": None,
+                "clientTurnId": "turn-revoked",
+                "text": "撤权后继续调用",
+                "capability": {"id": capability_id, "kind": "tool", "name": "服务器时间"},
+                "fileIds": [],
+                "simulateFailure": False,
+            },
+        },
+        headers=headers(user),
+    )
+    assert denied.status_code == 403
 
 
 def test_runtime_executes_readonly_tool_and_persists_run_and_steps():
@@ -603,6 +631,53 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection():
     assert any(step["type"] == "mcp" for step in body["run"]["steps"])
     assert "mcp-ok" in body["run"]["outputText"]
 
+    removed = user.delete(
+        f"/api/v1/me/mcp/connections/{connected.json()['id']}",
+        headers=headers(user),
+    )
+    assert removed.status_code == 204
+    no_connection = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "mcp-runtime-2",
+            "text": "断开后调用",
+            "capabilityId": capability_id,
+            "capabilityKind": "tool",
+            "toolArguments": {},
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert no_connection.json()["run"]["status"] == "failed"
+    assert no_connection.json()["run"]["errorCode"] == "MCP_CONNECTION_REQUIRED"
+
+    user.post(
+        "/api/v1/me/mcp/connections",
+        json={"serverId": server_id, "token": "runtime-token"},
+        headers=headers(user),
+    )
+    admin.post(
+        f"/api/v1/admin/mcp/servers/{server_id}/disable",
+        json={"reason": "E2E 停用"},
+        headers=headers(admin),
+    )
+    disabled_server = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "mcp-runtime-3",
+            "text": "Server 停用后调用",
+            "capabilityId": capability_id,
+            "capabilityKind": "tool",
+            "toolArguments": {},
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert disabled_server.json()["run"]["status"] == "failed"
+    assert disabled_server.json()["run"]["errorCode"] == "MCP_SERVER_NOT_APPROVED"
+
 
 def test_runtime_times_out_and_persists_terminal_state(monkeypatch):
     make_user("910")
@@ -701,3 +776,85 @@ def test_runtime_cancel_is_observed_between_chunks(monkeypatch):
         assert final.status == "cancelled"
         assert message.status == "stopped"
         assert check.get(Conversation, conversation_id) is not None
+
+
+def test_reject_disable_restore_transitions_and_audit():
+    make_user("1", role="ADMIN", password="adminpass123")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    pending = new_client().post(
+        "/api/v1/auth/register",
+        json={
+            "password": "pendingpass",
+            "passwordConfirm": "pendingpass",
+            "nickname": "待拒绝用户",
+        },
+        headers={"origin": "http://testserver", "idempotency-key": secrets.token_urlsafe(24)},
+    )
+    assert pending.status_code == 201
+    pending_user = pending.json()["user"]
+    rejected = admin.post(
+        f"/api/v1/admin/users/{pending_user['id']}/reject",
+        json={"expectedVersion": pending_user["version"], "reason": "资料不完整"},
+        headers=headers(admin),
+    )
+    assert rejected.status_code == 200
+    assert rejected.json()["user"]["status"] == "REJECTED"
+    rejected_login = new_client().post(
+        "/api/v1/auth/login",
+        json={
+            "accountNumber": pending_user["accountNumber"],
+            "password": "pendingpass",
+        },
+        headers={"origin": "http://testserver"},
+    )
+    assert rejected_login.status_code == 401
+
+    active_id = make_user("921")
+    current = admin.get(f"/api/v1/admin/users/{active_id}").json()
+    disabled = admin.post(
+        f"/api/v1/admin/users/{active_id}/disable",
+        json={"expectedVersion": current["version"], "reason": "临时停用"},
+        headers=headers(admin),
+    )
+    assert disabled.status_code == 200
+    assert disabled.json()["user"]["status"] == "DISABLED"
+    disabled_login = new_client().post(
+        "/api/v1/auth/login",
+        json={"accountNumber": "921", "password": "userpass"},
+        headers={"origin": "http://testserver"},
+    )
+    assert disabled_login.status_code == 403
+    assert disabled_login.json()["error"]["code"] == "ACCOUNT_NOT_ACTIVE"
+
+    current = admin.get(f"/api/v1/admin/users/{active_id}").json()
+    restored = admin.post(
+        f"/api/v1/admin/users/{active_id}/restore",
+        json={"expectedVersion": current["version"], "reason": "恢复使用"},
+        headers=headers(admin),
+    )
+    assert restored.status_code == 200
+    assert restored.json()["user"]["status"] == "ACTIVE"
+    restored_login = new_client().post(
+        "/api/v1/auth/login",
+        json={"accountNumber": "921", "password": "userpass"},
+        headers={"origin": "http://testserver"},
+    )
+    assert restored_login.status_code == 200
+
+    with SessionLocal() as session:
+        actions = {
+            item.action
+            for item in session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.action.in_(
+                        ("admin.user.reject", "admin.user.disable", "admin.user.restore")
+                    )
+                )
+            )
+        }
+    assert actions == {
+        "admin.user.reject",
+        "admin.user.disable",
+        "admin.user.restore",
+    }
