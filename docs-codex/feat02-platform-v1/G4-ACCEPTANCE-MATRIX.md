@@ -75,7 +75,7 @@
 |---|---|---|---|
 | O-01 | BLOCKED | 生产配置校验代码要求 HTTPS/Strong secret/Secure Cookie | 生产 443、TLS 证书、反代、GitHub secrets 未实时核验 |
 | O-02 | PASS | 账户激活与能力审核在审计写入失败时回滚，状态/版本不变；发布、审核与审计同事务 | 无 |
-| O-03 | PARTIAL | 密码/恢复码/Token 只存摘要或密文；Admin 不返回私人正文 | 日志扫描、浏览器缓存与链接参数抽查未系统执行 |
+| O-03 | PARTIAL | 密码/恢复码/Token 只存摘要或密文；Admin 不返回私人正文；所有 API 响应禁止缓存；后端日志/错误响应与桌面/移动浏览器 URL、Cookie、LocalStorage、SessionStorage 自动化抽查通过（详见 `O-03-SECRET-LEAKAGE-AUDIT.md`） | 生产容器日志、反向代理缓存与生产浏览器样本 **NOT_RUN**，需生产只读访问 |
 | O-04 | PASS | Playwright 路由回归 `/`、`/rag`、`/lab/3d`、`/threejs`、`/assistant/*`，桌面/移动；旧会话测试通过 | 无生产回归 |
 | O-05 | PARTIAL | F00 本地快照/恢复/迁移/回退演练；旧 Admin 摘要逐字复制 | 生产盘点、生产备份恢复、真实旧管理员登录未验证 |
 

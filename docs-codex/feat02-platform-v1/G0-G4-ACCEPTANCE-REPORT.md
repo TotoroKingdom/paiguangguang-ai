@@ -20,7 +20,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **66 passed** |
+| 后端 `pytest` | **68 passed** |
 | 前端 `vitest` | **79 passed** |
 | Playwright | **76 passed**（desktop + mobile） |
 | TypeScript | 通过 |
@@ -84,6 +84,9 @@ F00 本地演练：
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+- 所有 `/api/v1/` 响应：`Cache-Control: no-store, max-age=0`、`Pragma: no-cache`、`Expires: 0`
+
+O-03 本地自动化已覆盖认证错误响应、后端日志、URL、Cookie、LocalStorage 与 SessionStorage 的秘密泄漏检查；生产日志与代理缓存仍未核验，详见 `O-03-SECRET-LEAKAGE-AUDIT.md`。
 
 TLS/HSTS 仍由生产反向代理负责，未在生产核验。
 

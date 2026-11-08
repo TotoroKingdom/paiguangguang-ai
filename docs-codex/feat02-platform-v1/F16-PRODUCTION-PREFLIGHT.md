@@ -15,6 +15,7 @@
 | 生产 Origin 必须 HTTPS | PASS（代码） | 非 `https://` 的 `ASSISTANT_ALLOWED_ORIGINS` 启动失败 |
 | CSRF + Origin | PASS（代码 + L1） | 登录态写操作校验 `X-CSRF-Token` 与 Origin |
 | 恢复码/密码/Token 摘要或密文 | PASS（代码 + L1） | PBKDF2、HMAC、Fernet；无明文响应 |
+| 动态 API 响应缓存 | PASS（代码 + L1/E2E） | `/api/v1/` 统一 `Cache-Control: no-store`、`Pragma: no-cache`、`Expires: 0` |
 | 文件正文持久化路径 | PASS（Compose） | `ASSISTANT_FILE_STORAGE_DIR=/data/user-files`，位于 `assistant_data` 卷 |
 | SQLite 备份 API | PASS（工作流代码） | `deploy.yml` 使用 `sqlite3.backup()` |
 | 发布失败回滚旧镜像 | PASS（工作流代码） | 保存旧 Compose/镜像并回滚 |

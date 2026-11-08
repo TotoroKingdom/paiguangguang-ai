@@ -28,7 +28,15 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
   await page.getByLabel("密码（至少 6 位）", { exact: true }).fill(password);
   await page.getByLabel("确认密码", { exact: true }).fill(password);
   await page.getByLabel("昵称（可选）", { exact: true }).fill("E2E 用户");
+  const registerResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/v1/auth/register") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
+  const registerResponse = await registerResponsePromise;
+  expect(registerResponse.headers()["cache-control"]).toBe("no-store, max-age=0");
+  expect(registerResponse.headers()["pragma"]).toBe("no-cache");
   await expect(page).toHaveURL(/\/assistant\/register\/success$/);
   await expect(page.getByRole("heading", { name: "账号已创建", exact: true })).toBeVisible();
 
@@ -36,6 +44,19 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
   const recovery = (await page.getByTestId("recovery-code").innerText()).trim();
   expect(Number(account)).toBeGreaterThanOrEqual(100);
   expect(recovery).toMatch(/^PGG-/);
+  const browserState = await page.evaluate(() => ({
+    url: window.location.href,
+    local: JSON.stringify(window.localStorage),
+    session: JSON.stringify(window.sessionStorage),
+    cookies: document.cookie,
+  }));
+  const successUrl = new URL(browserState.url);
+  expect(successUrl.pathname).toBe("/assistant/register/success");
+  expect(successUrl.search).toBe("");
+  expect(successUrl.hash).toBe("");
+  expect(browserState.local).not.toContain(recovery);
+  expect(browserState.session).not.toContain(recovery);
+  expect(browserState.cookies).not.toContain(recovery);
   await page.screenshot({
     path: screenshotPath(testInfo, "register-success"),
     animations: "disabled",
