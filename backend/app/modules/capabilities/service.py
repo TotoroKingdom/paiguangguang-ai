@@ -130,6 +130,8 @@ def public_view(
     version: CapabilityVersion,
     *,
     authorized: bool = True,
+    blocked_reason: str = "none",
+    primary_action: str = "use",
 ) -> PublicCapability:
     snapshot = CapabilitySnapshot.model_validate(loads(version.snapshot_json, {}))
     return PublicCapability(
@@ -149,6 +151,8 @@ def public_view(
         authorized=authorized,
         ready=definition.test_status == "passed" and definition.status == "published",
         testStatus=definition.test_status,
+        blockedReason=blocked_reason,
+        primaryAction=primary_action,
         version=version.version,
         versionId=version.id,
     )
@@ -754,6 +758,68 @@ class CapabilityService:
             is not None
         )
 
+    def _runs_today(self, user_id: str | None) -> bool:
+        if not user_id:
+            return False
+        from app.modules.runtime.models import AgentRun
+
+        since = utc_now().replace(hour=0, minute=0, second=0, microsecond=0)
+        used = self.session.scalar(
+            select(func.count(AgentRun.id)).where(
+                AgentRun.user_id == user_id,
+                AgentRun.created_at >= since,
+            )
+        )
+        return (used or 0) >= settings.llm_daily_request_limit
+
+    def _has_mcp_connection(self, user_id: str | None, server_id: str) -> bool:
+        if not user_id or not server_id:
+            return True
+        from app.modules.personal.models import McpConnection
+
+        return (
+            self.session.scalar(
+                select(McpConnection.id).where(
+                    McpConnection.user_id == user_id,
+                    McpConnection.server_id == server_id,
+                    McpConnection.status == "connected",
+                )
+            )
+            is not None
+        )
+
+    def _availability(
+        self,
+        definition: CapabilityDefinition,
+        user_id: str | None,
+        *,
+        authorized: bool,
+        budget_exhausted: bool,
+    ) -> tuple[str, str]:
+        if definition.source == "demo":
+            return "none", "use"
+        if not user_id:
+            return "login_required", "login"
+        user = self._user(user_id)
+        if user is None or user.status != "ACTIVE":
+            return "account_inactive", "activate"
+        if not authorized:
+            return "no_permission", "request_access"
+        version = latest_published(definition.versions)
+        config = (
+            CapabilitySnapshot.model_validate(loads(version.snapshot_json, {})).config
+            if version is not None
+            else {}
+        )
+        server_id = str(config.get("mcpServerId", "")).strip()
+        if server_id and not self._has_mcp_connection(user_id, server_id):
+            return "needs_mcp_connection", "connect"
+        if definition.test_status != "passed":
+            return "not_ready", "unavailable"
+        if budget_exhausted:
+            return "budget_exhausted", "budget"
+        return "none", "use"
+
     def public_list(
         self,
         *,
@@ -775,6 +841,7 @@ class CapabilityService:
                 | CapabilityDefinition.description.ilike(value)
             )
         result: list[PublicCapability] = []
+        budget_exhausted = self._runs_today(user_id)
         for definition in self.session.scalars(
             statement.order_by(CapabilityDefinition.updated_at.desc())
         ):
@@ -784,10 +851,26 @@ class CapabilityService:
                 continue
             authorized = self.can_execute(definition, user_id)
             if definition.access_mode == "granted" and not authorized:
-                continue
+                user = self._user(user_id)
+                if user is None or user.status != "ACTIVE":
+                    continue
+            reason, action = self._availability(
+                definition,
+                user_id,
+                authorized=authorized,
+                budget_exhausted=budget_exhausted,
+            )
             version = latest_published(definition.versions)
             if version is not None:
-                result.append(public_view(definition, version, authorized=authorized))
+                result.append(
+                    public_view(
+                        definition,
+                        version,
+                        authorized=authorized,
+                        blocked_reason=reason,
+                        primary_action=action,
+                    )
+                )
         return result
 
     def resolve_published(
@@ -823,11 +906,25 @@ class CapabilityService:
             raise HTTPException(status_code=404, detail="Capability not found")
         authorized = self.can_execute(definition, user_id)
         if definition.access_mode == "granted" and not authorized:
-            raise HTTPException(status_code=404, detail="Capability not found")
+            user = self._user(user_id)
+            if user is None or user.status != "ACTIVE":
+                raise HTTPException(status_code=404, detail="Capability not found")
+        reason, action = self._availability(
+            definition,
+            user_id,
+            authorized=authorized,
+            budget_exhausted=self._runs_today(user_id),
+        )
         version = latest_published(definition.versions)
         if version is None:
             raise HTTPException(status_code=404, detail="Capability not found")
-        return public_view(definition, version, authorized=authorized)
+        return public_view(
+            definition,
+            version,
+            authorized=authorized,
+            blocked_reason=reason,
+            primary_action=action,
+        )
 
     def record_run(
         self,

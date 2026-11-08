@@ -249,7 +249,10 @@ def test_creator_capability_requires_test_review_release_and_grant():
     user = new_client()
     login(user, "800")
     catalog = user.get("/api/v1/capabilities").json()["items"]
-    assert all(item["id"] != capability_id for item in catalog)
+    hidden = next(item for item in catalog if item["id"] == capability_id)
+    assert hidden["authorized"] is False
+    assert hidden["blockedReason"] == "no_permission"
+    assert hidden["primaryAction"] == "request_access"
     blocked = user.post(
         f"/api/v1/conversations/{create_conversation(user)}/turns",
         json={
@@ -279,7 +282,10 @@ def test_creator_capability_requires_test_review_release_and_grant():
     )
     assert granted.status_code == 204
     catalog = user.get("/api/v1/capabilities").json()["items"]
-    assert any(item["id"] == capability_id and item["authorized"] for item in catalog)
+    granted = next(item for item in catalog if item["id"] == capability_id)
+    assert granted["authorized"] is True
+    assert granted["blockedReason"] == "none"
+    assert granted["primaryAction"] == "use"
 
     revoked = admin.delete(
         f"/api/v1/admin/capabilities/{capability_id}/grants/{user_id}",
@@ -287,7 +293,9 @@ def test_creator_capability_requires_test_review_release_and_grant():
     )
     assert revoked.status_code == 204
     catalog = user.get("/api/v1/capabilities").json()["items"]
-    assert all(item["id"] != capability_id for item in catalog)
+    revoked_item = next(item for item in catalog if item["id"] == capability_id)
+    assert revoked_item["authorized"] is False
+    assert revoked_item["blockedReason"] == "no_permission"
     denied = user.post(
         f"/api/v1/conversations/{create_conversation(user)}/turns",
         json={
@@ -700,12 +708,26 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection():
     )
     user = new_client()
     login(user, "901")
+    before_connection = next(
+        item
+        for item in user.get("/api/v1/capabilities").json()["items"]
+        if item["id"] == capability_id
+    )
+    assert before_connection["blockedReason"] == "needs_mcp_connection"
+    assert before_connection["primaryAction"] == "connect"
     connected = user.post(
         "/api/v1/me/mcp/connections",
         json={"serverId": server_id, "token": "runtime-token"},
         headers=headers(user),
     )
     assert connected.status_code == 201, connected.text
+    after_connection = next(
+        item
+        for item in user.get("/api/v1/capabilities").json()["items"]
+        if item["id"] == capability_id
+    )
+    assert after_connection["blockedReason"] == "none"
+    assert after_connection["primaryAction"] == "use"
     conversation_id = create_conversation(user)
     set_transport_factory(lambda: httpx.MockTransport(mcp_handler))
     try:
@@ -1473,3 +1495,50 @@ def test_retry_reuses_assistant_message_without_duplicate_user_turn():
     assert after["messages"][-1]["id"] == assistant["id"]
     assert after["messages"][-1]["status"] == "complete"
     assert "FakeProvider" in after["messages"][-1]["content"]
+
+
+def test_capability_blocked_reasons_follow_priority(monkeypatch):
+    capability_id, creator_id = creator_tool_flow()
+    approve_and_release(capability_id)
+    user_id = make_user("970")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+    user = new_client()
+    login(user, "970")
+    item = next(
+        item
+        for item in user.get("/api/v1/capabilities").json()["items"]
+        if item["id"] == capability_id
+    )
+    assert item["blockedReason"] == "none"
+    assert item["primaryAction"] == "use"
+
+    with SessionLocal() as session:
+        definition = session.get(CapabilityDefinition, capability_id)
+        definition.test_status = "failed"
+        session.commit()
+    item = next(
+        item
+        for item in user.get("/api/v1/capabilities").json()["items"]
+        if item["id"] == capability_id
+    )
+    assert item["blockedReason"] == "not_ready"
+    assert item["primaryAction"] == "unavailable"
+
+    with SessionLocal() as session:
+        definition = session.get(CapabilityDefinition, capability_id)
+        definition.test_status = "passed"
+        session.commit()
+    monkeypatch.setattr(settings, "llm_daily_request_limit", 0)
+    item = next(
+        item
+        for item in user.get("/api/v1/capabilities").json()["items"]
+        if item["id"] == capability_id
+    )
+    assert item["blockedReason"] == "budget_exhausted"
+    assert item["primaryAction"] == "budget"

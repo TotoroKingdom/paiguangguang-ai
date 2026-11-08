@@ -15,6 +15,8 @@ export type Capability = CapabilityRef & {
   authorized?: boolean;
   accessMode?: "all_active" | "granted";
   testStatus?: string;
+  blockedReason?: string;
+  primaryAction?: string;
 };
 export type ConnectorStatus =
   "connected" | "disconnected" | "unconfigured" | "connecting" | "error" | "unauthorized";

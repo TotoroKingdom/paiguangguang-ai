@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDialog } from "./assistant-dialog";
 import { AssistantIcon } from "./assistant-icon";
@@ -33,6 +34,14 @@ const statusLabels: Record<ConnectorStatus, string> = {
   connecting: "连接中",
   error: "失败",
   unauthorized: "待授权",
+};
+const availabilityLabels: Record<string, string> = {
+  login_required: "登录后使用",
+  account_inactive: "账号未激活",
+  no_permission: "无使用权限",
+  needs_mcp_connection: "需连接 MCP",
+  not_ready: "暂不可用",
+  budget_exhausted: "今日额度不足",
 };
 const makeId = () => `skill-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -294,7 +303,11 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                         : kind === "agent"
                           ? `${item.tools?.length ?? 0} 个工具 · 多步执行`
                           : item.source === "managed"
-                            ? `${sourceLabel(item)} · ${item.ready === false ? "未就绪" : "已就绪"}`
+                            ? `${sourceLabel(item)} · ${
+                                item.blockedReason && item.blockedReason !== "none"
+                                  ? availabilityLabels[item.blockedReason] ?? "暂不可用"
+                                  : "已就绪"
+                              }`
                             : sourceLabel(item)}
                   </span>
                   <button
@@ -361,11 +374,12 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
           <p className={styles.dialogHint}>{selected.description}</p>
           <p className={styles.muted}>
             {sourceLabel(selected)} ·
-            {selected.source === "managed"
-              ? selected.ready === false
-                ? "尚未通过就绪测试或依赖不可用，暂不可用于正式聊天"
-                : "已通过就绪测试，可用于登录态聊天"
-              : "交互原型，操作结果为模拟数据"}
+            {selected.source === "managed" && selected.blockedReason !== "none"
+              ? availabilityLabels[selected.blockedReason ?? ""] ??
+                "当前不可用于正式聊天"
+              : selected.source === "managed"
+                ? "已通过就绪测试，可用于登录态聊天"
+                : "交互原型，操作结果为模拟数据"}
           </p>
           <h3>使用步骤</h3>
           <ol>
@@ -443,26 +457,50 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                 删除技能
               </button>
             )}
-            <button
-              className={styles.primary}
-              disabled={selected.source === "managed" && selected.ready === false}
-              onClick={() => {
-                dispatch({
-                  type: "SET_DRAFT",
-                  patch: {
-                    capability: {
-                      id: selected.id,
-                      kind: selected.kind,
-                      name: kind === "mcp" ? connectorFor(selected).name : selected.name,
+            {selected.primaryAction === "connect" ? (
+              <Link className={styles.primary} href="/assistant/mcp">
+                连接 MCP
+              </Link>
+            ) : selected.primaryAction === "login" ? (
+              <Link
+                className={styles.primary}
+                href={`/assistant/login?next=/assistant/${kind === "agent" ? "agents" : kind === "tool" ? "tools" : kind === "mcp" ? "mcp" : "skills"}`}
+              >
+                登录后使用
+              </Link>
+            ) : selected.primaryAction === "activate" ? (
+              <Link className={styles.primary} href="/assistant/pending">
+                查看账号状态
+              </Link>
+            ) : (
+              <button
+                className={styles.primary}
+                disabled={
+                  selected.source === "managed" &&
+                  Boolean(selected.blockedReason && selected.blockedReason !== "none")
+                }
+                onClick={() => {
+                  dispatch({
+                    type: "SET_DRAFT",
+                    patch: {
+                      capability: {
+                        id: selected.id,
+                        kind: selected.kind,
+                        name: kind === "mcp" ? connectorFor(selected).name : selected.name,
+                      },
                     },
-                  },
-                });
-                setSelected(null);
-                setNotice("已选择，可在下方输入框中使用。");
-              }}
-            >
-              用于聊天
-            </button>
+                  });
+                  setSelected(null);
+                  setNotice("已选择，可在下方输入框中使用。");
+                }}
+              >
+                {selected.source === "managed" &&
+                selected.blockedReason &&
+                selected.blockedReason !== "none"
+                  ? availabilityLabels[selected.blockedReason] ?? "暂不可用"
+                  : "用于聊天"}
+              </button>
+            )}
           </div>
         </AssistantDialog>
       )}
