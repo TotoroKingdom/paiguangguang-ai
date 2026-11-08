@@ -631,7 +631,7 @@ def test_admin_discovers_mcp_tools_into_the_approved_server():
     assert discovered.json()["tools"][0]["name"] == "search"
 
 
-def test_runtime_executes_approved_mcp_tool_with_personal_connection():
+def test_runtime_executes_approved_mcp_tool_with_personal_connection(monkeypatch):
     make_user("1", role="ADMIN", password="adminpass123")
     with SessionLocal() as session:
         server = McpServer(
@@ -778,6 +778,29 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection():
         json={"serverId": server_id, "token": "runtime-token"},
         headers=headers(user),
     )
+    with SessionLocal() as session:
+        server = session.get(McpServer, server_id)
+        server.endpoint_url = "http://127.0.0.1:1/rpc"
+        session.commit()
+    monkeypatch.setattr(
+        "app.modules.runtime.service.validate_mcp_url", lambda value: value
+    )
+    network_failure = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "mcp-runtime-network",
+            "text": "MCP 网络不可达",
+            "capabilityId": capability_id,
+            "capabilityKind": "tool",
+            "toolArguments": {},
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert network_failure.json()["run"]["status"] == "failed"
+    assert network_failure.json()["run"]["errorCode"] == "MCP_UNAVAILABLE"
+
     admin.post(
         f"/api/v1/admin/mcp/servers/{server_id}/disable",
         json={"reason": "E2E 停用"},

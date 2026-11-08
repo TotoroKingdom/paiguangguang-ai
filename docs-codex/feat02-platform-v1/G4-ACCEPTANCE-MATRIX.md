@@ -67,7 +67,7 @@
 | R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时、取消、真实用户重试同一助手消息均有自动化；重试不重复用户消息 | 等待授权与断网恢复未 E2E |
 | R-04 | PARTIAL | 用户仅查本人 Run；Admin 列表脱敏；accepted 不改写 completed | Creator 汇总视图与 Token 用量一致性未验证 |
 | R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权以 `CAPABILITY_REVOKED` 终止；并发重试只有一次原子 claim 成功，另一次 409 | 模型流已经开始后的并发撤权未专项 E2E |
-| R-06 | PARTIAL | 401/403/404/409/429/503、`REAL_PROVIDER_NOT_CONFIGURED`、上游 503、网络不可达均有自动化；浏览器 503 → 错误提示 → 再次发送成功且无重复用户消息 | MCP 故障端到端、无限重试保护与真实断网恢复未 E2E |
+| R-06 | PARTIAL | 401/403/404/409/429/503、模型 503/不可达、Runtime MCP 不可达、能力依赖阻断均有自动化；浏览器 503 → 错误提示 → 再次发送成功且无重复用户消息 | 无限自动重试保护与真实物理断网恢复未 E2E |
 
 ## 5. 部署与全站 O-01～O-05
 
