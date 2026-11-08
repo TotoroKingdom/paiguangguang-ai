@@ -64,7 +64,7 @@
 |---|---|---|---|
 | R-01 | BLOCKED | SSE + Fake Provider 流式、消息持久化、刷新恢复；无真实模型密钥 | **真实模型 NOT_RUN**；真实调用证据缺失 |
 | R-02 | PARTIAL | Skill → Tool → MCP 的 L3 Agent 链；RunStep/Trace 持久化 | 真实模型与真实 MCP 未联调 |
-| R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时与跨分块取消有确定性测试；真实 Provider 未配置失败 | 等待授权、断网恢复与浏览器端取消状态未 E2E |
+| R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时、取消、真实用户重试同一助手消息均有自动化；重试不重复用户消息 | 等待授权与断网恢复未 E2E |
 | R-04 | PARTIAL | 用户仅查本人 Run；Admin 列表脱敏；accepted 不改写 completed | Creator 汇总视图与 Token 用量一致性未验证 |
 | R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权会以 `CAPABILITY_REVOKED` 终止；撤权后新调用拒绝 | 模型流已经开始后的并发撤权未专项 E2E |
 | R-06 | PARTIAL | 401/403/404/409/429/503、`REAL_PROVIDER_NOT_CONFIGURED`、上游 503→`LLM_UPSTREAM_ERROR`、网络不可达→`LLM_UNAVAILABLE` 均有自动化 | MCP 故障端到端、无限重试保护与浏览器断网恢复未 E2E |

@@ -292,6 +292,40 @@ export async function streamRun(
     }
     throw new AssistantApiError(message, response.status);
   }
+  await consumeSse(response, onEvent);
+}
+
+export async function retryRunStream(
+  input: { conversationId: string; messageId: string },
+  onEvent: (event: RuntimeEvent) => void,
+): Promise<void> {
+  const response = await fetch("/api/v1/assistant/runs/retry/stream", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": authCsrfToken(),
+    },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok || !response.body) {
+    let message = "重试请求失败，请稍后再试。";
+    try {
+      const body = (await response.json()) as { error?: { message?: string } };
+      if (body.error?.message) message = body.error.message;
+    } catch {
+      /* keep fallback */
+    }
+    throw new AssistantApiError(message, response.status);
+  }
+  await consumeSse(response, onEvent);
+}
+
+async function consumeSse(
+  response: Response,
+  onEvent: (event: RuntimeEvent) => void,
+): Promise<void> {
+  if (!response.body) return;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
