@@ -1758,3 +1758,28 @@ def test_inflight_run_finishes_but_revoked_user_cannot_start_another(monkeypatch
         headers=headers(after),
     )
     assert denied.status_code == 403
+
+
+def test_failed_run_is_not_auto_retried():
+    make_user("991")
+    user = new_client()
+    login(user, "991")
+    conversation_id = create_conversation(user)
+    failed = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "no-auto-retry",
+            "text": "失败后不得自动重试",
+            "mode": "openai",
+        },
+        headers=headers(user),
+    )
+    assert failed.status_code == 200
+    assert failed.json()["run"]["status"] == "failed"
+    time.sleep(0.2)
+    runs = user.get("/api/v1/assistant/runs").json()["items"]
+    assert len(runs) == 1
+    detail = user.get(f"/api/v1/conversations/{conversation_id}").json()
+    assert len(detail["messages"]) == 2
+    assert detail["messages"][-1]["status"] == "error"
