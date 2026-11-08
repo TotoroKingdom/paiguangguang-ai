@@ -52,6 +52,13 @@ class CancelResponse(BaseModel):
     cancelRequested: bool = True
 
 
+class RunQuotaResponse(BaseModel):
+    limit: int
+    used: int
+    remaining: int
+    resetsAt: str
+
+
 class ExecuteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

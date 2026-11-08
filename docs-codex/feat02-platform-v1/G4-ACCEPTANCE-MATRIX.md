@@ -8,11 +8,11 @@
 
 | Gate | 用例数 | PASS | PARTIAL | BLOCKED | NOT_RUN |
 |---|---:|---:|---:|---:|---:|
-| G1 身份 U-01～U-17 | 17 | 14 | 2 | 1 | 0 |
+| G1 身份 U-01～U-17 | 17 | 15 | 1 | 1 | 0 |
 | G2 能力 C-01～C-10 | 10 | 6 | 4 | 0 | 0 |
 | G3 Runtime R-01～R-06 | 6 | 0 | 5 | 1 | 0 |
 | G4 上线 O-01～O-05 | 5 | 1 | 3 | 1 | 0 |
-| **合计** | **38** | **21** | **14** | **3** | **0** |
+| **合计** | **38** | **22** | **13** | **3** | **0** |
 
 判定说明：
 
@@ -41,7 +41,7 @@
 | U-14 | PASS | 认领需登录用户 + 旧 Owner 签名；伪造请求 400 | 重复认领幂等与冲突规模未压测 |
 | U-15 | PARTIAL | 登录 `next` 外部 URL 被拒绝（E2E）；服务端 Origin 校验；越权 403/404 | 私有信息闪现与编码绕过矩阵未完整覆盖 |
 | U-16 | PASS | 登录失败限流、注册限流、未知账号与错误密码同响应、最后 Admin 保护、审计 | 计时侧信道与 NAT 共享 IP 策略未专项压测 |
-| U-17 | PARTIAL | 桌面/移动账号、个人资源 E2E 通过；导航支持键盘/移动抽屉 | 管理审核与所有状态页未逐页移动验收 |
+| U-17 | PASS | 桌面/移动账号、个人资源、Creator→Admin 审核发布 E2E 通过；导航支持键盘/移动抽屉 | 无 |
 
 ## 3. 能力治理 C-01～C-10
 
@@ -66,7 +66,7 @@
 | R-02 | PARTIAL | Skill → Tool → MCP 的 L3 Agent 链；RunStep/Trace 持久化 | 真实模型与真实 MCP 未联调 |
 | R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时与跨分块取消有确定性测试；真实 Provider 未配置失败 | 等待授权、断网恢复与浏览器端取消状态未 E2E |
 | R-04 | PARTIAL | 用户仅查本人 Run；Admin 列表脱敏；accepted 不改写 completed | Creator 汇总视图与 Token 用量一致性未验证 |
-| R-05 | PARTIAL | 执行前检查能力/Server/Connection 权限；撤权后新 Run 拒绝 | 运行中撤权、重复点击与敏感 Tool 前二次校验未并发测试 |
+| R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权会以 `CAPABILITY_REVOKED` 终止；撤权后新调用拒绝 | 模型流已经开始后的并发撤权未专项 E2E |
 | R-06 | PARTIAL | 401/403/404/409/429/503 与 `REAL_PROVIDER_NOT_CONFIGURED` | 网络断开、MCP 故障、无限重试保护未 E2E |
 
 ## 5. 部署与全站 O-01～O-05
