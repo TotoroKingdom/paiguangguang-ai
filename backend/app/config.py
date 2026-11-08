@@ -26,13 +26,13 @@ class Settings(BaseSettings):
 
     user_session_cookie_name: str = "paiguangguang_session"
     user_csrf_cookie_name: str = "paiguangguang_csrf"
-    user_cookie_secure: bool = True
+    user_cookie_secure: bool = False
     user_session_max_age_seconds: int = 60 * 60 * 24 * 7
     status_session_max_age_seconds: int = 60 * 60
     registration_enabled: bool = True
     user_password_min_length: int = 6
     recovery_code_secret: SecretStr | None = None
-    demo_catalog_enabled: bool = False
+    demo_catalog_enabled: bool = True
     encryption_key: SecretStr | None = None
     file_storage_dir: str = ""
 

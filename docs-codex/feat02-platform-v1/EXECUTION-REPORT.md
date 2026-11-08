@@ -31,7 +31,7 @@
 | F07 | PASSED（自动化） | `user_id` 归属、跨浏览器读取、匿名签名认领、跨用户 404 |
 | F08 | PASSED（自动化） | 能力所有者、可见范围、`all_active/granted` ACL、停用后拒绝 |
 | F09 | PASSED（自动化） | Creator 测试→提交→Admin 审核→发布、审计、版本回滚接口 |
-| F10 | PARTIAL | 演示目录默认关闭、正式目录过滤 Demo、非授权不显示；前端访客仍保留明确标注的模拟回复；历史 Demo 未做归档迁移 |
+| F10 | PARTIAL | 正式目录过滤 Demo、生产强制关闭演示、非授权不显示；开发默认保留 Demo；前端访客仍保留明确标注的模拟回复；历史 Demo 未做归档迁移 |
 | F11 | PARTIAL | 个人 Skill、文件上传/下载/删除与所有者隔离完成；前端 Skill/文件页仍主要使用本地演示状态，未接入后端持久化 |
 | F12 | PARTIAL | 平台批准 MCP Server、用户连接、Token Fernet 加密、未批准拒绝、Token 不回显；工具发现与真实调用 NOT_RUN |
 | F13 | PARTIAL | OpenAI-compatible 流式适配器、Fake Provider、SSE 端点、Run 终态持久化完成；真实模型调用 NOT_RUN |

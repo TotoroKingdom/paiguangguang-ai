@@ -24,7 +24,7 @@
 | D-14 | 启动时不再用环境变量覆盖已有管理员密码 | `AdminIdentityService.ensure_bootstrap_admin` |
 | D-15 | `owner_id` 保留；新增可空 `conversations.user_id`；认领必须同时具备登录用户与旧 Owner 签名 Cookie | `0005`、`/me/legacy-conversations/claim` |
 | D-16 | 普通用户只能连接 `approved` MCP Server；服务端无“用户提交任意 URL”接口 | `personal/router.py`、`mcp_client.validate_mcp_url` |
-| D-17 | Demo 目录默认不在生产自动发布；`demo_catalog_enabled` 默认 false，生产为 true 时启动失败 | `config.py`、`capabilities/service.py` |
+| D-17 | 开发环境默认保留 Demo 目录；生产要求 `demo_catalog_enabled=false`，生产为 true 时启动失败 | `config.py`、`capabilities/service.py` |
 | D-18 | 执行额度默认每用户每日 20 次 Run、单 Run 120 秒、最多 6 步 | `config.py`、`RuntimeService` |
 
 ## 2. 限流默认值
