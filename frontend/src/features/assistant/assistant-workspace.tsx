@@ -356,15 +356,25 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                     </Link>
                   )}
                   {(adminUser || session?.user.role === "ADMIN") && (
-                    <Link
-                      href="/assistant/admin/users"
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                    >
-                      <AssistantIcon name="settings" size={17} />
-                      用户管理
-                      <AssistantIcon name="arrow" size={14} />
-                    </Link>
+                    <>
+                      <Link
+                        href="/assistant/admin"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="settings" size={17} />
+                        管理控制台
+                        <AssistantIcon name="arrow" size={14} />
+                      </Link>
+                      <Link
+                        href="/assistant/admin/users"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="skill" size={17} />
+                        用户管理
+                      </Link>
+                    </>
                   )}
                   <button
                     type="button"
