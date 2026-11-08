@@ -39,7 +39,7 @@
 | F13 | PARTIAL | OpenAI-compatible 流式适配器、Fake Provider、SSE 端点、Run 终态持久化完成；真实模型调用 NOT_RUN |
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
 | F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
-| F16 | BLOCKED | 依赖 critical/high 已清除（Next 16、FastAPI/Starlette/cryptography 升级）；生产 TLS、443、Secure Cookie、密钥、部署权限仍未核验 |
+| F16 | BLOCKED | 依赖 critical/high 已清除；生产 fail-fast、Secure Cookie、HTTPS Origin、真实 LLM 必需配置与文件卷路径已写入；生产 TLS/443、密钥、部署权限仍未核验（见 `F16-PRODUCTION-PREFLIGHT.md`） |
 | F17 | PARTIAL | 38 场景矩阵：19 PASS / 16 PARTIAL / 3 BLOCKED（`G4-ACCEPTANCE-MATRIX.md`）；Playwright 70 条通过；真实模型/真实 MCP/生产仍阻断 |
 
 ## 3. 数据库与 API

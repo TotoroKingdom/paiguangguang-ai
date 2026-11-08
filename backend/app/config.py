@@ -86,6 +86,21 @@ class Settings(BaseSettings):
                 raise RuntimeError("ASSISTANT_USER_COOKIE_SECURE must be true in production")
             if self.demo_catalog_enabled:
                 raise RuntimeError("ASSISTANT_DEMO_CATALOG_ENABLED must be false in production")
+            origins = [
+                item.strip()
+                for item in self.allowed_origins.split(",")
+                if item.strip()
+            ]
+            if any(not item.startswith("https://") for item in origins):
+                raise RuntimeError("ASSISTANT_ALLOWED_ORIGINS must contain HTTPS origins only")
+            provider = self.llm_provider.strip().lower()
+            if provider in {"", "fake", "test", "fake-slow"}:
+                raise RuntimeError("ASSISTANT_LLM_PROVIDER must be a real provider in production")
+            if not self.llm_base_url.strip() or not self.llm_model.strip() or self.llm_api_key is None:
+                raise RuntimeError(
+                    "ASSISTANT_LLM_BASE_URL, ASSISTANT_LLM_MODEL and "
+                    "ASSISTANT_LLM_API_KEY are required in production"
+                )
             bootstrap_password = (
                 self.admin_password.get_secret_value()
                 if self.admin_password

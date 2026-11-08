@@ -196,9 +196,41 @@ def test_production_requires_secure_admin_cookie():
         admin_cookie_secure=True,
             user_cookie_secure=True,
             demo_catalog_enabled=False,
+            llm_provider="openai",
+            llm_base_url="https://llm.example.com/v1",
+            llm_model="approved-test-model",
+            llm_api_key="test-key",
         allowed_origins="https://example.com",
     )
     secure.validate_runtime()
+
+
+def test_production_rejects_fake_llm_and_http_origins():
+    base = dict(
+        environment="production",
+        database_url="sqlite:///./production-check.db",
+        owner_cookie_secret="x" * 40,
+        owner_cookie_secure=True,
+        admin_cookie_secure=True,
+        user_cookie_secure=True,
+        demo_catalog_enabled=False,
+        llm_provider="openai",
+        llm_base_url="https://llm.example.com/v1",
+        llm_model="approved-test-model",
+        llm_api_key="test-key",
+        allowed_origins="https://example.com",
+    )
+    fake = Settings(**{**base, "llm_provider": "fake"})
+    with pytest.raises(RuntimeError, match="ASSISTANT_LLM_PROVIDER"):
+        fake.validate_runtime()
+
+    http_origin = Settings(**{**base, "allowed_origins": "http://example.com"})
+    with pytest.raises(RuntimeError, match="HTTPS origins only"):
+        http_origin.validate_runtime()
+
+    missing_key = Settings(**{**base, "llm_api_key": None})
+    with pytest.raises(RuntimeError, match="ASSISTANT_LLM_API_KEY"):
+        missing_key.validate_runtime()
 
 
 def test_capability_draft_publish_disable_and_immutable_versions():
