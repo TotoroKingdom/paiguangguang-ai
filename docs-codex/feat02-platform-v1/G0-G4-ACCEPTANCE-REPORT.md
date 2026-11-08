@@ -21,7 +21,7 @@
 | 检查 | 结果 |
 |---|---|
 | 后端 `pytest` | **70 passed** |
-| 前端 `vitest` | **79 passed** |
+| 前端 `vitest` | **80 passed** |
 | Playwright | **78 passed**（desktop + mobile） |
 | TypeScript | 通过 |
 | ESLint 10 | 通过 |
@@ -97,7 +97,7 @@ TLS/HSTS 仍由生产反向代理负责，未在生产核验。
 3. 真实外部 MCP Server：无批准测试服务。
 4. 生产 HTTPS/443、证书、反代、Secure Cookie、GitHub secrets、部署权限。
 5. 生产备份恢复、旧管理员真实登录、容器重启数据保留。
-6. R-05 模型流开始后的并发撤权、R-06 断网恢复未专项 E2E。
+6. 断网后恢复服务端已接收 turn 已有单元自动化；完整浏览器断网注入仍未执行，等待授权 Run 状态仍缺少产品协议。
 7. C-10 预算不足/外部授权的精确前端优先级未完整覆盖。
 
 ## 8. 发布判定
