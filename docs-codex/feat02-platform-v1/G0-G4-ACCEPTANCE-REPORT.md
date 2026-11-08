@@ -20,9 +20,9 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **57 passed** |
+| 后端 `pytest` | **58 passed** |
 | 前端 `vitest` | **76 passed** |
-| Playwright | **70 passed**（desktop + mobile） |
+| Playwright | **72 passed**（desktop + mobile） |
 | TypeScript | 通过 |
 | ESLint 10 | 通过 |
 | Next.js 16 production build | 通过 |

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
 from app.db import get_db
+from app.models import Message
 from app.modules.capabilities.service import CapabilityService
 from app.modules.identity.dependencies import (
     require_active_user,
@@ -23,6 +24,7 @@ from app.modules.runtime.schemas import (
     RunListResponse,
     RunView,
     RunQuotaResponse,
+    RetryRequest,
 )
 from app.modules.runtime.service import RuntimeService, run_view
 from app.modules.personal.models import PersonalSkill
@@ -30,7 +32,7 @@ from app.core.errors import APIError
 from app.owner import require_json_request
 from app.repositories import utc_now
 from app.repositories import OwnerScope
-from app.schemas import CapabilityRef, MessageRequest, TurnCreate
+from app.schemas import CapabilityRef, MessagePatch, MessageRequest, TurnCreate
 from app.services import ConversationService, message_response
 
 router = APIRouter(prefix="/assistant", tags=["assistant-runtime"])
@@ -196,6 +198,91 @@ async def stream_run(
                 version_id,
                 payload.mode,
                 turn_result.assistantMessage.id,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as error:
+            yield (
+                "data: "
+                + json.dumps(
+                    {
+                        "type": "error",
+                        "code": getattr(error, "code", "RUN_START_FAILED"),
+                        "message": str(error),
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n\n"
+            )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/runs/retry/stream")
+async def retry_run_stream(
+    payload: RetryRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    scope = OwnerScope(owner_id="", user_id=principal.user.id)
+    ConversationService(session).detail(scope, payload.conversationId)
+    message = session.scalar(
+        select(Message).where(
+            Message.id == payload.messageId,
+            Message.conversation_id == payload.conversationId,
+        )
+    )
+    if (
+        message is None
+        or message.role != "assistant"
+        or message.status not in {"error", "stopped"}
+    ):
+        raise APIError(409, "RETRY_NOT_ALLOWED", "当前消息不可重试")
+    stored = json.loads(message.request_json or "{}")
+    text = str(stored.get("text", "")).strip()
+    if not text:
+        raise APIError(422, "RETRY_REQUEST_INVALID", "原请求缺少消息文本")
+    capability_data = json.loads(message.capability_json or "null")
+    capability = (
+        CapabilityRef.model_validate(capability_data)
+        if isinstance(capability_data, dict)
+        else None
+    )
+    execute = ExecuteRequest(
+        conversationId=payload.conversationId,
+        clientTurnId=stored.get("clientTurnId") or f"retry:{message.id}",
+        text=text,
+        capabilityId=capability.id if capability else None,
+        capabilityKind=capability.kind if capability else None,
+        mode=payload.mode,
+    )
+    turn, capability_id, version_id = _turn_payload(
+        execute, session, principal.user.id
+    )
+    ConversationService(session).patch_message(
+        scope,
+        payload.conversationId,
+        payload.messageId,
+        MessagePatch(content="", status="generating", steps=[]),
+    )
+
+    async def events():
+        try:
+            async for event in _stream_events(
+                session,
+                principal,
+                scope,
+                turn,
+                capability_id,
+                version_id,
+                payload.mode,
+                message.id,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as error:

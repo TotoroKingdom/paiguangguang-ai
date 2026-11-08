@@ -69,3 +69,11 @@ class ExecuteRequest(BaseModel):
     capabilityKind: str | None = Field(default=None, max_length=16)
     toolArguments: dict[str, Any] = Field(default_factory=dict)
     mode: str = Field(default="fake", max_length=16)
+
+
+class RetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    conversationId: str = Field(min_length=1, max_length=36)
+    messageId: str = Field(min_length=1, max_length=36)
+    mode: str = Field(default="fake", max_length=16)

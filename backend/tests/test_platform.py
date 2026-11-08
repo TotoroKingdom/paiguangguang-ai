@@ -1432,3 +1432,44 @@ def test_openai_provider_network_error_is_explicit(monkeypatch):
     body = response.json()
     assert body["run"]["status"] == "failed"
     assert body["run"]["errorCode"] == "LLM_UNAVAILABLE"
+
+
+def test_retry_reuses_assistant_message_without_duplicate_user_turn():
+    make_user("963")
+    user = new_client()
+    login(user, "963")
+    conversation_id = create_conversation(user)
+    first = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "retry-first",
+            "text": "第一次失败",
+            "mode": "openai",
+        },
+        headers=headers(user),
+    )
+    assert first.status_code == 200
+    assert first.json()["run"]["status"] == "failed"
+    detail = user.get(f"/api/v1/conversations/{conversation_id}").json()
+    assert len(detail["messages"]) == 2
+    assistant = detail["messages"][-1]
+    assert assistant["role"] == "assistant"
+    assert assistant["status"] == "error"
+
+    retried = user.post(
+        "/api/v1/assistant/runs/retry/stream",
+        json={
+            "conversationId": conversation_id,
+            "messageId": assistant["id"],
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert retried.status_code == 200
+    assert '"type": "done"' in retried.text
+    after = user.get(f"/api/v1/conversations/{conversation_id}").json()
+    assert len(after["messages"]) == 2
+    assert after["messages"][-1]["id"] == assistant["id"]
+    assert after["messages"][-1]["status"] == "complete"
+    assert "FakeProvider" in after["messages"][-1]["content"]

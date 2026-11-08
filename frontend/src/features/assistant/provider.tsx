@@ -16,7 +16,9 @@ import {
   renameConversation as apiRenameConversation,
   cancelRun as apiCancelRun,
   streamRun as apiStreamRun,
+  retryRunStream as apiRetryRunStream,
   toConversation,
+  type RuntimeEvent,
 } from "./api";
 import { getSession as getAccountSession } from "@/features/auth/api";
 import { createMockReply } from "./mock-service";
@@ -606,6 +608,87 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     }
   }, [dispatch, reportError, start]);
 
+  const applyRuntimeEvent = useCallback(
+    (conversationId: string, assistantId: string, event: RuntimeEvent) => {
+      if (event.type === "run") {
+        activeRuns.current.set(conversationId, event.runId);
+        return;
+      }
+      if (event.type === "start") return;
+      const conversation = stateRef.current.conversations.find(
+        (item) => item.id === conversationId,
+      );
+      const message = conversation?.messages.find((item) => item.id === assistantId);
+      if (event.type === "chunk") {
+        dispatch({
+          type: "UPDATE_MESSAGE",
+          conversationId,
+          messageId: assistantId,
+          patch: {
+            content: `${message?.content ?? ""}${event.content}`,
+            status: "generating",
+          },
+        });
+        return;
+      }
+      if (event.type === "tool" || event.type === "mcp" || event.type === "agent") {
+        const detail =
+          event.type === "agent"
+            ? event.dependencies
+                .map((item) => `${item.name}@v${item.version}`)
+                .join("、")
+            : event.type === "mcp"
+              ? "已通过个人授权调用已批准 MCP 工具"
+              : "服务端只读工具已执行";
+        const title =
+          event.type === "agent"
+            ? "Agent 依赖版本"
+            : event.type === "mcp"
+              ? `MCP ${event.name}`
+              : `工具 ${event.name}`;
+        dispatch({
+          type: "UPDATE_MESSAGE",
+          conversationId,
+          messageId: assistantId,
+          patch: {
+            steps: [...(message?.steps ?? []), { title, detail }],
+          },
+        });
+        return;
+      }
+      if (event.type === "done") {
+        activeRuns.current.delete(conversationId);
+        const status =
+          event.status === "completed"
+            ? "complete"
+            : event.status === "cancelled"
+              ? "stopped"
+              : "error";
+        dispatch({
+          type: "UPDATE_MESSAGE",
+          conversationId,
+          messageId: assistantId,
+          patch: { status },
+        });
+        return;
+      }
+      if (event.type === "error") {
+        activeRuns.current.delete(conversationId);
+        dispatch({
+          type: "UPDATE_MESSAGE",
+          conversationId,
+          messageId: assistantId,
+          patch: {
+            status: "error",
+            content: event.message ?? "执行失败，请稍后重试。",
+            error: event.code,
+          },
+        });
+      }
+    },
+    [dispatch],
+  );
+
   const retryMessage = useCallback((conversationId: string, messageId?: string) => {
     const conversation = stateRef.current.conversations.find((item) => item.id === conversationId);
     if (!conversation || conversation.messages.some((message) => message.status === "generating")) return;
@@ -615,30 +698,56 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     );
     if (!message?.request) return;
     const original = message.request;
-    if (original.capability?.kind === "mcp" && !stateRef.current.connectors.some(
-      (connector) => connector.id === original.capability?.id && connector.status === "connected",
-    )) {
-      dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { status: "error", content: "连接器未完成模拟连接，请先配置", steps: [] } });
-      return;
-    }
-    const capability = original.capability && getCapabilities(stateRef.current).find(
-      (item) => item.id === original.capability?.id && item.kind === original.capability?.kind,
-    );
-    const fileIds = original.fileIds.filter((fileId) => stateRef.current.files.some((file) => file.id === fileId));
-    const notices = [
-      original.capability && !capability ? "原能力已不可用，本次使用普通对话模拟。" : "",
-      fileIds.length !== original.fileIds.length ? "部分原附件已删除，本次仅使用仍可用的附件元信息。" : "",
-    ].filter(Boolean);
-    const request = { ...original, capability: capability ? { id: capability.id, kind: capability.kind, name: capability.name } : null, fileIds, simulateFailure: false };
-    const generating = { ...message, content: "", status: "generating" as const, steps: [], request };
-    dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { content: "", status: "generating", steps: [], request } });
-    void apiPatchMessage(conversationId, message.id, patchFor(generating))
-      .then(() => start(conversationId, message.id, request, notices.join(" ")))
-      .catch((error) => {
-        reportError(error, "无法重新开始生成，请重试。");
-        dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { status: "error", error: "重试状态保存失败，请再次重试。" } });
-      });
-  }, [dispatch, reportError, start]);
+    void (async () => {
+      const account = await getAccountSession().catch(() => null);
+      if (account?.user.status === "ACTIVE" && account.session.scope === "FULL") {
+        dispatch({
+          type: "UPDATE_MESSAGE",
+          conversationId,
+          messageId: message.id,
+          patch: { content: "", status: "generating", steps: [], request: original },
+        });
+        try {
+          await apiRetryRunStream(
+            { conversationId, messageId: message.id },
+            (event) => applyRuntimeEvent(conversationId, message.id, event),
+          );
+        } catch (error) {
+          reportError(error, "无法重新开始生成，请重试。");
+          dispatch({
+            type: "UPDATE_MESSAGE",
+            conversationId,
+            messageId: message.id,
+            patch: { status: "error", error: "重试请求失败，请再次重试。" },
+          });
+        }
+        return;
+      }
+      if (original.capability?.kind === "mcp" && !stateRef.current.connectors.some(
+        (connector) => connector.id === original.capability?.id && connector.status === "connected",
+      )) {
+        dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { status: "error", content: "连接器未完成模拟连接，请先配置", steps: [] } });
+        return;
+      }
+      const capability = original.capability && getCapabilities(stateRef.current).find(
+        (item) => item.id === original.capability?.id && item.kind === original.capability?.kind,
+      );
+      const fileIds = original.fileIds.filter((fileId) => stateRef.current.files.some((file) => file.id === fileId));
+      const notices = [
+        original.capability && !capability ? "原能力已不可用，本次使用普通对话模拟。" : "",
+        fileIds.length !== original.fileIds.length ? "部分原附件已删除，本次仅使用仍可用的附件元信息。" : "",
+      ].filter(Boolean);
+      const request = { ...original, capability: capability ? { id: capability.id, kind: capability.kind, name: capability.name } : null, fileIds, simulateFailure: false };
+      const generating = { ...message, content: "", status: "generating" as const, steps: [], request };
+      dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { content: "", status: "generating", steps: [], request } });
+      void apiPatchMessage(conversationId, message.id, patchFor(generating))
+        .then(() => start(conversationId, message.id, request, notices.join(" ")))
+        .catch((error) => {
+          reportError(error, "无法重新开始生成，请重试。");
+          dispatch({ type: "UPDATE_MESSAGE", conversationId, messageId: message.id, patch: { status: "error", error: "重试状态保存失败，请再次重试。" } });
+        });
+    })();
+  }, [applyRuntimeEvent, dispatch, reportError, start]);
 
   const resetDemo = useCallback(() => {
     timers.current.forEach(clearTimeout);
