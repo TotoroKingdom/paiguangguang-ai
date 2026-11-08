@@ -17,3 +17,11 @@ def test_removed_business_api_is_not_found() -> None:
     response = client.get("/api/v1/auth/me")
 
     assert response.status_code == 404
+
+
+def test_security_headers_are_present() -> None:
+    response = client.get("/api/v1/health")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
+    assert "camera=()" in response.headers["Permissions-Policy"]

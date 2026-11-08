@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`52 passed`（`python -m pytest tests -q`；含 MCP、Runtime、超时/取消、撤权、枚举、审核状态机、Agent v1/v2 依赖切换与 Run 配额）。
+- 后端：`53 passed`（`python -m pytest tests -q`；含 MCP、Runtime、超时/取消、撤权、枚举、审核状态机、Agent v1/v2 依赖切换、Run 配额与安全响应头）。
 - 前端：`76 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布，共 70 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
@@ -18,6 +18,7 @@
 - 前端生产构建：`npm run build` 通过（30 个路由）。
 - Alembic：`0001 → 0008`、`downgrade base`、再次 `upgrade head` 均通过；`integrity_check=ok`。
 - 依赖审计：前端生产依赖 0 critical/high；后端 `pip-audit` 无已知漏洞（详见 `DEPENDENCY-AUDIT.md`）。
+- 最终验收报告：`G0-G4-ACCEPTANCE-REPORT.md`。
 
 ## 2. 任务状态
 
