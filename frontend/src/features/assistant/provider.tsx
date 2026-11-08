@@ -20,6 +20,8 @@ import {
 } from "./api";
 import { getSession as getAccountSession } from "@/features/auth/api";
 import { createMockReply } from "./mock-service";
+import { listSkills as apiListSkills, skillToCapability } from "./personal-api";
+import { useOptionalAuth } from "@/features/auth/provider";
 import {
   demoReducer,
   LOCAL_STORAGE_KEY,
@@ -45,6 +47,7 @@ type AssistantContextValue = {
   sendMessage: (input: SendMessageInput) => Promise<string | null>;
   stopGeneration: (conversationId: string) => void;
   retryMessage: (conversationId: string, messageId?: string) => void;
+  refreshPersonalSkills: () => Promise<void>;
   resetDemo: () => void;
 };
 const AssistantContext = createContext<AssistantContextValue | null>(null);
@@ -79,6 +82,8 @@ function legacyRequest(message: ChatMessage, conversationId: string): SendMessag
 }
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
+  const auth = useOptionalAuth();
+  const canUseService = auth?.canUseService ?? false;
   const [state, setState] = useState<DemoState>(() => createInitialState(false));
   const stateRef = useRef(state);
   const [ready, setReady] = useState(false);
@@ -139,6 +144,19 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       reportError(error, "能力目录加载失败，当前显示内置演示目录。");
     }
   }, [dispatch, reportError]);
+
+  const refreshPersonalSkills = useCallback(async () => {
+    if (!canUseService) return;
+    try {
+      const skills = await apiListSkills();
+      dispatch({
+        type: "SET_SKILLS",
+        skills: skills.map(skillToCapability),
+      });
+    } catch (error) {
+      reportError(error, "个人技能加载失败，请刷新后重试。");
+    }
+  }, [canUseService, dispatch, reportError]);
 
   const importLegacy = useCallback(
     async (raw: string | null) => {
@@ -212,6 +230,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       activeTimers.clear();
     };
   }, [importLegacy, loadCatalog, loadList]);
+
+  useEffect(() => {
+    if (ready) void refreshPersonalSkills();
+  }, [ready, refreshPersonalSkills]);
 
   useEffect(() => {
     if (!ready) return;
@@ -580,7 +602,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
     void loadList();
   }, [dispatch, loadList]);
 
-  return <AssistantContext.Provider value={{ state, ready, storageNotice, sessionBusy, dispatch, createConversation, loadConversation, searchConversations, renameConversation, deleteConversation, sendMessage, stopGeneration, retryMessage, resetDemo }}>{children}</AssistantContext.Provider>;
+  return <AssistantContext.Provider value={{ state, ready, storageNotice, sessionBusy, dispatch, createConversation, loadConversation, searchConversations, renameConversation, deleteConversation, sendMessage, stopGeneration, retryMessage, refreshPersonalSkills, resetDemo }}>{children}</AssistantContext.Provider>;
 }
 
 export function useAssistant(): AssistantContextValue {

@@ -22,6 +22,8 @@ from app.modules.runtime.schemas import (
     RunView,
 )
 from app.modules.runtime.service import RuntimeService, run_view
+from app.modules.personal.models import PersonalSkill
+from app.core.errors import APIError
 from app.owner import require_json_request
 from app.repositories import OwnerScope
 from app.schemas import CapabilityRef, MessageRequest, TurnCreate
@@ -32,18 +34,34 @@ admin_router = APIRouter(prefix="/admin/assistant", tags=["admin-runtime"])
 
 
 def _turn_payload(
-    payload: ExecuteRequest, session: Session
+    payload: ExecuteRequest, session: Session, user_id: str
 ) -> tuple[TurnCreate, str, str]:
     capability = None
     version_id = ""
     capability_id = ""
     if payload.capabilityId:
-        definition, version, public = CapabilityService(session).resolve_published(
-            payload.capabilityId, payload.capabilityKind
-        )
-        capability = CapabilityRef(id=definition.id, kind=definition.kind, name=public.name)
-        capability_id = definition.id
-        version_id = version.id
+        try:
+            definition, version, public = CapabilityService(session).resolve_published(
+                payload.capabilityId, payload.capabilityKind
+            )
+            capability = CapabilityRef(id=definition.id, kind=definition.kind, name=public.name)
+            capability_id = definition.id
+            version_id = version.id
+        except APIError:
+            raise
+        except Exception as error:
+            if payload.capabilityKind != "skill":
+                raise
+            personal = session.scalar(
+                select(PersonalSkill).where(
+                    PersonalSkill.id == payload.capabilityId,
+                    PersonalSkill.user_id == user_id,
+                )
+            )
+            if personal is None:
+                raise APIError(404, "NOT_FOUND", "个人技能不存在") from error
+            capability = CapabilityRef(id=personal.id, kind="skill", name=personal.name)
+            capability_id = personal.id
     turn = TurnCreate(
         clientTurnId=payload.clientTurnId,
         text=payload.text,
@@ -108,7 +126,7 @@ async def execute_run(
     require_json_request(request)
     require_user_csrf(request, principal)
     scope = OwnerScope(owner_id="", user_id=principal.user.id)
-    turn, capability_id, version_id = _turn_payload(payload, session)
+    turn, capability_id, version_id = _turn_payload(payload, session, principal.user.id)
     turn_result = ConversationService(session).create_turn(
         scope, payload.conversationId, turn
     )
@@ -145,7 +163,7 @@ async def stream_run(
     require_json_request(request)
     require_user_csrf(request, principal)
     scope = OwnerScope(owner_id="", user_id=principal.user.id)
-    turn, capability_id, version_id = _turn_payload(payload, session)
+    turn, capability_id, version_id = _turn_payload(payload, session, principal.user.id)
     turn_result = ConversationService(session).create_turn(
         scope, payload.conversationId, turn
     )

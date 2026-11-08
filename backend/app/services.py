@@ -191,17 +191,30 @@ class ConversationService:
         capability_definition = None
         capability_version = None
         capability_public = None
+        personal_skill = None
         if request.capability is not None:
-            capability_definition, capability_version, capability_public = (
-                CapabilityService(self.session).resolve_published(
-                    request.capability.id, request.capability.kind
+            if request.capability.kind == "skill" and scope.user_id:
+                from app.modules.personal.models import PersonalSkill
+
+                personal_skill = self.session.scalar(
+                    select(PersonalSkill).where(
+                        PersonalSkill.id == request.capability.id,
+                        PersonalSkill.user_id == scope.user_id,
+                    )
                 )
-            )
-            if not CapabilityService(self.session).can_execute(
-                capability_definition, scope.user_id
-            ):
-                raise HTTPException(status_code=403, detail="Capability access denied")
-            request.capability.name = capability_public.name
+            if personal_skill is not None:
+                request.capability.name = personal_skill.name
+            else:
+                capability_definition, capability_version, capability_public = (
+                    CapabilityService(self.session).resolve_published(
+                        request.capability.id, request.capability.kind
+                    )
+                )
+                if not CapabilityService(self.session).can_execute(
+                    capability_definition, scope.user_id
+                ):
+                    raise HTTPException(status_code=403, detail="Capability access denied")
+                request.capability.name = capability_public.name
         seq = self.repository.next_seq(conversation_id)
         now = utc_now()
         user_message = Message(

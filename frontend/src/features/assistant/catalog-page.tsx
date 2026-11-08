@@ -6,6 +6,9 @@ import { AssistantIcon } from "./assistant-icon";
 import { getCapabilities } from "./data";
 import { testConnection } from "./mock-service";
 import { useAssistant } from "./provider";
+import { useOptionalAuth } from "@/features/auth/provider";
+import { McpServerCatalog } from "./mcp-server-catalog";
+import { createSkill, deleteSkill } from "./personal-api";
 import type { Capability, CapabilityKind, ConnectorConfig, ConnectorStatus } from "./types";
 import styles from "./catalog.module.css";
 
@@ -34,7 +37,9 @@ const statusLabels: Record<ConnectorStatus, string> = {
 const makeId = () => `skill-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 export function CatalogPage({ kind }: { kind: CapabilityKind }) {
-  const { state, dispatch } = useAssistant();
+  const { state, dispatch, refreshPersonalSkills } = useAssistant();
+  const auth = useOptionalAuth();
+  const canUseService = auth?.canUseService ?? false;
   const latestState = useRef(state);
   latestState.current = state;
   const mounted = useRef(false);
@@ -114,6 +119,12 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
           .trim()
           .replace(/\s+/g, " ")
           .slice(0, 120) || "个人导入的技能示例。";
+      if (canUseService) {
+        await createSkill({ name: title, description, contentMd: content });
+        await refreshPersonalSkills();
+        setNotice(`技能“${title}”已保存到服务端个人空间。`);
+        return;
+      }
       dispatch({
         type: "IMPORT_SKILL",
         skill: {
@@ -174,13 +185,20 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
       result.status === "connected" ? "模拟连接成功。" : result.lastError || "模拟连接失败。",
     );
   };
+  if (kind === "mcp" && canUseService) return <McpServerCatalog />;
   return (
     <section className={styles.page}>
       <div className={styles.heading}>
         <div>
-          <p className={styles.eyebrow}>交互原型 · 模拟数据</p>
+          <p className={styles.eyebrow}>
+            {canUseService && kind === "skill" ? "服务端持久化 · 仅本人可见" : "交互原型 · 模拟数据"}
+          </p>
           <h1>{labels[kind].title}</h1>
-          <p>{labels[kind].description}</p>
+          <p>
+            {canUseService && kind === "skill"
+              ? "个人技能保存在服务端，仅本人可见；登录后可直接用于 Agent Runtime。"
+              : labels[kind].description}
+          </p>
         </div>
         <div className={styles.headingActions}>
           {kind === "skill" && (
@@ -495,9 +513,20 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
             <button
               className={styles.danger}
               onClick={() => {
-                dispatch({ type: "DELETE_SKILL", id: confirmDelete.id });
-                setConfirmDelete(null);
-                setNotice("个人技能已删除。");
+                void (async () => {
+                  try {
+                    if (canUseService) {
+                      await deleteSkill(confirmDelete.id);
+                      await refreshPersonalSkills();
+                    } else {
+                      dispatch({ type: "DELETE_SKILL", id: confirmDelete.id });
+                    }
+                    setConfirmDelete(null);
+                    setNotice("个人技能已删除。");
+                  } catch (cause) {
+                    setError(cause instanceof Error ? cause.message : "技能删除失败。");
+                  }
+                })();
               }}
             >
               确认删除
