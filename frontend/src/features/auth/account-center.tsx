@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { changePassword, claimLegacyConversations, rotateRecovery } from "./api";
 import { useAuth } from "./provider";
 import styles from "./auth.module.css";
+import { getRunQuota, type RunQuota } from "@/features/assistant/personal-api";
 
 export function AccountCenter() {
   const { session, status, logout, refresh } = useAuth();
@@ -17,6 +18,22 @@ export function AccountCenter() {
   const [error, setError] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [quota, setQuota] = useState<RunQuota | null>(null);
+
+  useEffect(() => {
+    if (!session || session.user.status !== "ACTIVE") return;
+    let active = true;
+    void getRunQuota()
+      .then((value) => {
+        if (active) setQuota(value);
+      })
+      .catch(() => {
+        if (active) setQuota(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [session]);
 
   if (status === "loading") return <div className={styles.card}>正在加载个人中心…</div>;
   if (!session) {
@@ -107,6 +124,10 @@ export function AccountCenter() {
         <div>
           <dt>状态</dt>
           <dd>{session.user.status}</dd>
+        </div>
+        <div>
+          <dt>今日 Run 配额</dt>
+          <dd>{quota ? `${quota.used} / ${quota.limit}` : "—"}</dd>
         </div>
       </dl>
       {!active && (

@@ -1,11 +1,13 @@
 import json
+from datetime import timedelta
 from datetime import timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import settings
 from app.db import get_db
 from app.modules.capabilities.service import CapabilityService
 from app.modules.identity.dependencies import (
@@ -20,11 +22,13 @@ from app.modules.runtime.schemas import (
     ExecuteRequest,
     RunListResponse,
     RunView,
+    RunQuotaResponse,
 )
 from app.modules.runtime.service import RuntimeService, run_view
 from app.modules.personal.models import PersonalSkill
 from app.core.errors import APIError
 from app.owner import require_json_request
+from app.repositories import utc_now
 from app.repositories import OwnerScope
 from app.schemas import CapabilityRef, MessageRequest, TurnCreate
 from app.services import ConversationService, message_response
@@ -230,6 +234,31 @@ def list_my_runs(
         )
     )
     return RunListResponse(items=[RunView.model_validate(run_view(run)) for run in runs])
+
+
+@router.get("/runs/quota", response_model=RunQuotaResponse)
+def my_run_quota(
+    principal: UserPrincipal = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    now = utc_now()
+    since = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    used = int(
+        session.scalar(
+            select(func.count(AgentRun.id)).where(
+                AgentRun.user_id == principal.user.id,
+                AgentRun.created_at >= since,
+            )
+        )
+        or 0
+    )
+    limit = settings.llm_daily_request_limit
+    return RunQuotaResponse(
+        limit=limit,
+        used=used,
+        remaining=max(limit - used, 0),
+        resetsAt=(since + timedelta(days=1)).isoformat() + "Z",
+    )
 
 
 @router.get("/runs/{run_id}", response_model=RunView)

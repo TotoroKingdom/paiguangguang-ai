@@ -174,3 +174,14 @@ export function disconnectMcp(connectionId: string): Promise<void> {
     method: "DELETE",
   });
 }
+
+export type RunQuota = {
+  limit: number;
+  used: number;
+  remaining: number;
+  resetsAt: string;
+};
+
+export function getRunQuota(): Promise<RunQuota> {
+  return request<RunQuota>("/api/v1/assistant/runs/quota");
+}

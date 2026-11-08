@@ -24,7 +24,7 @@ from app.modules.observability.models import AuditEvent
 from app.models import Conversation, Message
 from app.repositories import utc_now
 from app.repositories import OwnerScope
-from app.schemas import MessageRequest, TurnCreate
+from app.schemas import CapabilityRef, MessageRequest, TurnCreate
 from app.services import ConversationService
 
 
@@ -251,6 +251,10 @@ def test_runtime_executes_readonly_tool_and_persists_run_and_steps():
     detail = user.get(f"/api/v1/conversations/{conversation_id}").json()
     assert detail["messages"][-1]["status"] == "complete"
     assert "FakeProvider" in detail["messages"][-1]["content"]
+    quota = user.get("/api/v1/assistant/runs/quota").json()
+    assert quota["limit"] >= 1
+    assert quota["used"] >= 1
+    assert quota["remaining"] == max(quota["limit"] - quota["used"], 0)
 
     other = new_client()
     make_user("802")
@@ -978,3 +982,79 @@ def test_agent_locks_dependency_versions_across_draft_changes():
         step for step in second.json()["run"]["steps"] if step["type"] == "agent"
     )
     assert second_step["output"]["dependencies"][0]["versionId"] == tool_version_id
+
+
+def test_revocation_after_turn_creation_blocks_execution():
+    capability_id, creator_id = creator_tool_flow()
+    approve_and_release(capability_id)
+    user_id = make_user("940")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+
+    with SessionLocal() as session:
+        user = session.get(User, user_id)
+        issued = UserIdentityService(session).login(
+            "940", "userpass", client_ip="test", user_agent="test"
+        )
+        scope = OwnerScope(owner_id="", user_id=user_id)
+        conversation = ConversationService(session).create(scope, "撤权执行")
+        turn = TurnCreate(
+            clientTurnId="revoke-1",
+            text="撤权后执行",
+            capability=CapabilityRef(
+                id=capability_id, kind="tool", name="服务器时间"
+            ),
+            attachments=[],
+            request=MessageRequest(
+                conversationId=conversation.id,
+                clientTurnId="revoke-1",
+                text="撤权后执行",
+                capability=CapabilityRef(
+                    id=capability_id, kind="tool", name="服务器时间"
+                ),
+            ),
+        )
+        turn_result = ConversationService(session).create_turn(
+            scope, conversation.id, turn
+        )
+        service = RuntimeService(session)
+        run = service.create_run(
+            issued.principal,
+            conversation_id=conversation.id,
+            version_id="",
+            capability_id=capability_id,
+            input_text="撤权后执行",
+            mode="fake",
+        )
+        run_id = run.id
+
+        revoked = admin.delete(
+            f"/api/v1/admin/capabilities/{capability_id}/grants/{user_id}",
+            headers=headers(admin),
+        )
+        assert revoked.status_code == 204
+
+        async def consume() -> list[dict]:
+            events = []
+            async for event in service.stream(
+                run,
+                principal=issued.principal,
+                scope=scope,
+                assistant_message_id=turn_result.assistantMessage.id,
+                payload=turn,
+            ):
+                events.append(event)
+            return events
+
+        events = asyncio.run(consume())
+
+    with SessionLocal() as check:
+        final = check.get(AgentRun, run_id)
+        assert final.status == "failed"
+        assert final.error_code == "CAPABILITY_REVOKED"
+        assert any(event.get("code") == "CAPABILITY_REVOKED" for event in events)

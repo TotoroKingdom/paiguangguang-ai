@@ -184,93 +184,21 @@ class RuntimeService:
         output = ""
         capability_snapshot: CapabilitySnapshot | None = None
         yield {"type": "run", "runId": run.id}
-        self._ensure_capability_allowed(run, principal)
-        if run.capability_id:
-            try:
-                definition, version, _ = CapabilityService(self.session).resolve_published(
-                    run.capability_id, payload.capability.kind if payload.capability else None
-                )
-                capability_snapshot = CapabilitySnapshot.model_validate(
-                    loads(version.snapshot_json, {})
-                )
-                run.version_id = version.id
-            except Exception:
-                personal = self.session.scalar(
-                    select(PersonalSkill).where(
-                        PersonalSkill.id == run.capability_id,
-                        PersonalSkill.user_id == principal.user.id,
-                    )
-                )
-                if personal is not None:
-                    capability_snapshot = CapabilitySnapshot(
-                        kind="skill",
-                        name=personal.name,
-                        description=personal.description,
-                        category="个人技能",
-                        icon="skill",
-                        steps=[],
-                        tools=[],
-                        content=personal.content_md,
-                        config={},
-                        executionMode="simulated",
-                        source="managed",
-                    )
-                else:
-                    capability_snapshot = None
-        dependency_step_started = utc_now()
-        if capability_snapshot is not None and capability_snapshot.kind == "agent":
-            dependencies = list(
-                self.session.scalars(
-                    select(CapabilityDependency).where(
-                        CapabilityDependency.version_id == run.version_id
-                    )
-                )
+        try:
+            capability_snapshot, agent_event = self._prepare_run(
+                run, principal, payload
             )
-            if not dependencies:
-                raise APIError(
-                    409,
-                    "AGENT_DEPENDENCY_MISSING",
-                    "Agent 未锁定任何依赖版本",
-                )
-            resolved: list[dict[str, Any]] = []
-            for dependency in dependencies:
-                target = self.session.get(
-                    CapabilityVersion, dependency.dependency_version_id
-                )
-                target_definition = self.session.get(
-                    CapabilityDefinition, dependency.dependency_id
-                )
-                if (
-                    target is None
-                    or target.status != "published"
-                    or target_definition is None
-                    or target_definition.status != "published"
-                ):
-                    raise APIError(
-                        409,
-                        "AGENT_DEPENDENCY_UNAVAILABLE",
-                        "Agent 锁定依赖不可用",
-                    )
-                resolved.append(
-                    {
-                        "id": dependency.dependency_id,
-                        "kind": dependency.dependency_kind,
-                        "versionId": dependency.dependency_version_id,
-                        "version": target.version,
-                        "name": target_definition.name,
-                    }
-                )
-            self._step(
-                run,
-                "agent",
-                "dependencies",
-                status="completed",
-                input_value={"versionId": run.version_id},
-                output={"dependencies": resolved},
-                started_at=dependency_step_started,
-            )
-            self._trace(run, "agent.dependencies", {"dependencies": resolved})
-            yield {"type": "agent", "dependencies": resolved}
+        except APIError as error:
+            self._fail_run(run, scope, assistant_message_id, error)
+            yield {
+                "type": "error",
+                "runId": run.id,
+                "code": error.code,
+                "message": error.message,
+            }
+            return
+        if agent_event is not None:
+            yield agent_event
         try:
             messages: list[dict[str, str]] = []
             if capability_snapshot is not None:
@@ -462,25 +390,7 @@ class RuntimeService:
             self.session.commit()
             yield {"type": "error", "runId": run.id, "code": "RUN_TIMEOUT"}
         except APIError as error:
-            run.status = "failed"
-            run.error_code = error.code
-            run.error_message = error.message[:500]
-            run.finished_at = utc_now()
-            self._trace(run, "run.failed", {"code": error.code})
-            try:
-                ConversationService(self.session).patch_message(
-                    scope,
-                    run.conversation_id,
-                    assistant_message_id,
-                    MessagePatch(
-                        content=f"执行失败：{error.message}",
-                        status="error",
-                        steps=[],
-                    ),
-                )
-            except Exception:
-                pass
-            self.session.commit()
+            self._fail_run(run, scope, assistant_message_id, error)
             yield {
                 "type": "error",
                 "runId": run.id,
@@ -501,6 +411,127 @@ class RuntimeService:
                 "runId": run.id if run else "",
                 "code": "RUN_INTERNAL_ERROR",
             }
+
+    def _prepare_run(
+        self,
+        run: AgentRun,
+        principal: UserPrincipal,
+        payload: TurnCreate,
+    ) -> tuple[CapabilitySnapshot | None, dict[str, Any] | None]:
+        self._ensure_capability_allowed(run, principal)
+        capability_snapshot: CapabilitySnapshot | None = None
+        if run.capability_id:
+            try:
+                definition, version, _ = CapabilityService(self.session).resolve_published(
+                    run.capability_id,
+                    payload.capability.kind if payload.capability else None,
+                )
+                capability_snapshot = CapabilitySnapshot.model_validate(
+                    loads(version.snapshot_json, {})
+                )
+                run.version_id = version.id
+            except Exception:
+                personal = self.session.scalar(
+                    select(PersonalSkill).where(
+                        PersonalSkill.id == run.capability_id,
+                        PersonalSkill.user_id == principal.user.id,
+                    )
+                )
+                if personal is not None:
+                    capability_snapshot = CapabilitySnapshot(
+                        kind="skill",
+                        name=personal.name,
+                        description=personal.description,
+                        category="个人技能",
+                        icon="skill",
+                        steps=[],
+                        tools=[],
+                        content=personal.content_md,
+                        config={},
+                        executionMode="simulated",
+                        source="managed",
+                    )
+        if capability_snapshot is None or capability_snapshot.kind != "agent":
+            return capability_snapshot, None
+        dependencies = list(
+            self.session.scalars(
+                select(CapabilityDependency).where(
+                    CapabilityDependency.version_id == run.version_id
+                )
+            )
+        )
+        if not dependencies:
+            raise APIError(
+                409,
+                "AGENT_DEPENDENCY_MISSING",
+                "Agent 未锁定任何依赖版本",
+            )
+        resolved: list[dict[str, Any]] = []
+        for dependency in dependencies:
+            target = self.session.get(
+                CapabilityVersion, dependency.dependency_version_id
+            )
+            target_definition = self.session.get(
+                CapabilityDefinition, dependency.dependency_id
+            )
+            if (
+                target is None
+                or target.status != "published"
+                or target_definition is None
+                or target_definition.status != "published"
+            ):
+                raise APIError(
+                    409,
+                    "AGENT_DEPENDENCY_UNAVAILABLE",
+                    "Agent 锁定依赖不可用",
+                )
+            resolved.append(
+                {
+                    "id": dependency.dependency_id,
+                    "kind": dependency.dependency_kind,
+                    "versionId": dependency.dependency_version_id,
+                    "version": target.version,
+                    "name": target_definition.name,
+                }
+            )
+        self._step(
+            run,
+            "agent",
+            "dependencies",
+            status="completed",
+            input_value={"versionId": run.version_id},
+            output={"dependencies": resolved},
+            started_at=utc_now(),
+        )
+        self._trace(run, "agent.dependencies", {"dependencies": resolved})
+        return capability_snapshot, {"type": "agent", "dependencies": resolved}
+
+    def _fail_run(
+        self,
+        run: AgentRun,
+        scope: OwnerScope,
+        assistant_message_id: str,
+        error: APIError,
+    ) -> None:
+        run.status = "failed"
+        run.error_code = error.code
+        run.error_message = error.message[:500]
+        run.finished_at = utc_now()
+        self._trace(run, "run.failed", {"code": error.code})
+        try:
+            ConversationService(self.session).patch_message(
+                scope,
+                run.conversation_id,
+                assistant_message_id,
+                MessagePatch(
+                    content=f"执行失败：{error.message}",
+                    status="error",
+                    steps=[],
+                ),
+            )
+        except Exception:
+            pass
+        self.session.commit()
 
     def _default_tool_arguments(self, tool_name: str, text: str) -> dict[str, Any]:
         tool = get_tool(tool_name)
