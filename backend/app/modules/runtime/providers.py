@@ -80,25 +80,30 @@ class OpenAICompatibleProvider:
         if tools:
             body["tools"] = tools
         timeout = httpx.Timeout(settings.llm_timeout_seconds)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("POST", url, headers=headers, json=body) as response:
-                if response.status_code >= 400:
-                    raise APIError(502, "LLM_UPSTREAM_ERROR", "模型服务返回错误")
-                async for line in response.aiter_lines():
-                    if not line.startswith("data:"):
-                        continue
-                    payload = line[5:].strip()
-                    if payload == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-                    choice = (data.get("choices") or [{}])[0]
-                    delta = choice.get("delta") or {}
-                    text = delta.get("content") or ""
-                    if text:
-                        yield LLMChunk(text=text)
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                async with client.stream("POST", url, headers=headers, json=body) as response:
+                    if response.status_code >= 400:
+                        raise APIError(502, "LLM_UPSTREAM_ERROR", "模型服务返回错误")
+                    async for line in response.aiter_lines():
+                        if not line.startswith("data:"):
+                            continue
+                        payload = line[5:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            data = json.loads(payload)
+                        except json.JSONDecodeError:
+                            continue
+                        choice = (data.get("choices") or [{}])[0]
+                        delta = choice.get("delta") or {}
+                        text = delta.get("content") or ""
+                        if text:
+                            yield LLMChunk(text=text)
+        except httpx.TimeoutException as error:
+            raise APIError(504, "LLM_TIMEOUT", "模型请求超时") from error
+        except httpx.HTTPError as error:
+            raise APIError(503, "LLM_UNAVAILABLE", "模型服务不可达") from error
         yield LLMChunk(done=True)
 
 

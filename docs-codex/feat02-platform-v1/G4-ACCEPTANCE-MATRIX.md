@@ -67,7 +67,7 @@
 | R-03 | PARTIAL | completed/failed/timed_out/cancelled 均持久化终态；超时与跨分块取消有确定性测试；真实 Provider 未配置失败 | 等待授权、断网恢复与浏览器端取消状态未 E2E |
 | R-04 | PARTIAL | 用户仅查本人 Run；Admin 列表脱敏；accepted 不改写 completed | Creator 汇总视图与 Token 用量一致性未验证 |
 | R-05 | PARTIAL | 执行开始和 Tool/MCP 后二次校验能力授权；turn 创建后撤权会以 `CAPABILITY_REVOKED` 终止；撤权后新调用拒绝 | 模型流已经开始后的并发撤权未专项 E2E |
-| R-06 | PARTIAL | 401/403/404/409/429/503、`REAL_PROVIDER_NOT_CONFIGURED`、上游 503→`LLM_UPSTREAM_ERROR` 均有自动化 | 网络断开、MCP 故障与无限重试保护未 E2E |
+| R-06 | PARTIAL | 401/403/404/409/429/503、`REAL_PROVIDER_NOT_CONFIGURED`、上游 503→`LLM_UPSTREAM_ERROR`、网络不可达→`LLM_UNAVAILABLE` 均有自动化 | MCP 故障端到端、无限重试保护与浏览器断网恢复未 E2E |
 
 ## 5. 部署与全站 O-01～O-05
 

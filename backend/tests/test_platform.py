@@ -70,6 +70,58 @@ def local_openai_server(*, chunks: list[str], status: int = 200):
         server.server_close()
 
 
+@contextmanager
+def local_mcp_server():
+    seen_headers: list[str] = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.0"
+
+        def log_message(self, *args) -> None:
+            return
+
+        def do_POST(self) -> None:
+            length = int(self.headers.get("content-length", "0"))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            seen_headers.append(self.headers.get("authorization", ""))
+            method = body.get("method")
+            if method == "tools/list":
+                result = {
+                    "tools": [
+                        {
+                            "name": "http-search",
+                            "description": "HTTP MCP search",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"query": {"type": "string"}},
+                            },
+                        }
+                    ]
+                }
+            else:
+                result = {
+                    "content": [{"type": "text", "text": "http-mcp-ok"}],
+                    "isError": False,
+                }
+            payload = json.dumps(
+                {"jsonrpc": "2.0", "id": body.get("id"), "result": result}
+            ).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server.server_address[1], seen_headers
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def new_client() -> TestClient:
     return TestClient(app)
 
@@ -1341,3 +1393,42 @@ def test_openai_compatible_provider_surfaces_upstream_error(monkeypatch):
     body = response.json()
     assert body["run"]["status"] == "failed"
     assert body["run"]["errorCode"] == "LLM_UPSTREAM_ERROR"
+
+
+def test_mcp_client_over_real_local_http():
+    with local_mcp_server() as (port, seen_headers):
+        client = McpClient(
+            f"http://127.0.0.1:{port}/rpc",
+            token="http-private-token",
+            timeout=5,
+        )
+        tools = asyncio.run(client.list_tools())
+        result = asyncio.run(client.call_tool("http-search", {"query": "policy"}))
+    assert tools[0].name == "http-search"
+    assert result["content"][0]["text"] == "http-mcp-ok"
+    assert seen_headers == ["Bearer http-private-token"] * 2
+
+
+def test_openai_provider_network_error_is_explicit(monkeypatch):
+    make_user("962")
+    user = new_client()
+    login(user, "962")
+    conversation_id = create_conversation(user)
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "http://127.0.0.1:1/v1")
+    monkeypatch.setattr(settings, "llm_model", "unreachable-model")
+    monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+    response = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "openai-network-error",
+            "text": "不可达模型",
+            "mode": "openai",
+        },
+        headers=headers(user),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "failed"
+    assert body["run"]["errorCode"] == "LLM_UNAVAILABLE"

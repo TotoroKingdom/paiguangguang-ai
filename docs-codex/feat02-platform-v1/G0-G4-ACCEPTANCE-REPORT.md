@@ -20,7 +20,7 @@
 
 | 检查 | 结果 |
 |---|---|
-| 后端 `pytest` | **55 passed** |
+| 后端 `pytest` | **57 passed** |
 | 前端 `vitest` | **76 passed** |
 | Playwright | **70 passed**（desktop + mobile） |
 | TypeScript | 通过 |
@@ -72,7 +72,7 @@ F00 本地演练：
 | Fake LLM | PASS（L3） | `[FakeProvider]` 输出、持久化终态、SSE |
 | 真实 OpenAI-compatible 模型 | PARTIAL（本地适配器）/ BLOCKED（真实供应商） | 本地 SSE 成功流与 503 失败已验证；真实供应商无密钥、未调用 |
 | Tool Gateway | PASS（L3） | 只读工具、JSON Schema、参数/结果上限 |
-| MCP Client / 发现 / Runtime 调用 | PASS（L3，MockTransport） | `tools/list`、`tools/call`、个人 Token、RunStep(type=mcp) |
+| MCP Client / 发现 / Runtime 调用 | PASS（L3） | MockTransport 与真实 loopback HTTP 均验证 `tools/list`、`tools/call`、Bearer、RunStep(type=mcp) |
 | 外部真实 MCP Server | NOT_RUN | 未获批准外部服务，不访问未知地址 |
 | 生产 HTTPS/部署 | BLOCKED | 未连接生产 |
 
