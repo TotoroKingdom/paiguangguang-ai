@@ -30,6 +30,7 @@ from app.modules.capabilities.schemas import (
 from app.modules.capabilities.seed import DEMO_CAPABILITIES
 from app.modules.identity.models import User
 from app.modules.observability.models import AuditEvent
+from app.modules.observability.service import record_audit
 from app.repositories import utc_now
 from app.config import settings
 
@@ -212,6 +213,35 @@ class CapabilityService:
             created = True
         if created:
             self.session.commit()
+
+    def archive_existing_demo_catalog(self, *, actor_id: str = "system") -> list[str]:
+        definitions = list(
+            self.session.scalars(
+                select(CapabilityDefinition).where(
+                    CapabilityDefinition.source == "demo",
+                    CapabilityDefinition.status != "disabled",
+                )
+            )
+        )
+        if not definitions:
+            return []
+        now = utc_now()
+        archived_ids: list[str] = []
+        for definition in definitions:
+            definition.status = "disabled"
+            definition.updated_at = now
+            record_audit(
+                self.session,
+                actor_type="system",
+                actor_id=actor_id,
+                action="capability.demo.archived",
+                resource_type="capability",
+                resource_id=definition.id,
+                detail={"reason": "demo_catalog_disabled"},
+            )
+            archived_ids.append(definition.id)
+        self.session.commit()
+        return archived_ids
 
     def _get(self, capability_id: str, *, with_versions: bool = True) -> CapabilityDefinition:
         statement = select(CapabilityDefinition).where(CapabilityDefinition.id == capability_id)
