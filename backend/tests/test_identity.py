@@ -351,6 +351,14 @@ def test_anonymous_history_requires_signed_owner_and_explicit_claim():
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["claimed"] == 1
     assert guest_owner.get(f"/api/v1/conversations/{conversation['id']}").status_code == 200
+    repeated = guest_owner.post(
+        "/api/v1/me/legacy-conversations/claim",
+        json={"conversationIds": [conversation["id"]]},
+        headers=headers(guest_owner),
+    )
+    assert repeated.status_code == 200
+    assert repeated.json()["claimed"] == 0
+    assert repeated.json()["conversationIds"] == []
 
 
 def test_admin_mutations_require_csrf_and_protect_last_admin():

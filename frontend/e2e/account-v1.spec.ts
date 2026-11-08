@@ -61,6 +61,11 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
     path: screenshotPath(testInfo, "register-success"),
     animations: "disabled",
   });
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "恢复码已不可再次查看", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId("recovery-code")).toHaveCount(0);
 
   await page.goto("/assistant/login");
   await page.getByLabel("数字账号", { exact: true }).fill(account);
@@ -101,6 +106,24 @@ test("registers from 100+, waits for approval, activates, logs in and opens acco
     path: screenshotPath(testInfo, "account-center"),
     animations: "disabled",
   });
+  await page.getByLabel("当前密码", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "轮换恢复码", exact: true }).click();
+  await expect(page.getByText("恢复码已轮换，旧恢复码立即失效。", { exact: true })).toBeVisible();
+  const rotatedCode = (
+    await page.getByTestId("rotated-recovery-code").innerText()
+  ).trim();
+  expect(rotatedCode).toMatch(/^PGG-/);
+  const accountStorage = await page.evaluate(() => ({
+    local: JSON.stringify(window.localStorage),
+    session: JSON.stringify(window.sessionStorage),
+    cookies: document.cookie,
+  }));
+  expect(accountStorage.local).not.toContain(rotatedCode);
+  expect(accountStorage.session).not.toContain(rotatedCode);
+  expect(accountStorage.cookies).not.toContain(rotatedCode);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "个人中心", exact: true })).toBeVisible();
+  await expect(page.getByTestId("rotated-recovery-code")).toHaveCount(0);
 
   await page.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(page).toHaveURL(/\/assistant\/login$/);

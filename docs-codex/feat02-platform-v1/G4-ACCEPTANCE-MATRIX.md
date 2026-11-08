@@ -29,16 +29,16 @@
 | U-02 | PASS | `test_password_policy_keeps_six_character_minimum...`：5 位拒绝、6 位通过、弱口令拒绝、无邮箱字段 | 无 5 位密码的浏览器 UI 断言 |
 | U-03 | PASS | `test_register_starts_at_100...`、`test_register_crosses_decimal_boundaries...`：100/101/999→1000/9999→10000 | 无生产迁移后的真实号段核对 |
 | U-04 | PASS | 6 线程并发注册唯一；同幂等键重试不重复发号；不同请求体 409 | 无网络超时/断连重试的浏览器注入 |
-| U-05 | PASS | 注册响应仅首次含恢复码；幂等重放不再返回；账号 E2E 显示真实账号与一次性恢复码 | 未在 E2E 中刷新成功页验证不可恢复 |
+| U-05 | PASS | 注册响应仅首次含恢复码；幂等重放不再返回；账号 E2E 显示真实账号与一次性恢复码；刷新成功页后恢复码不再存在 | 无 |
 | U-06 | PASS | Pending 登录 `STATUS_ONLY`；聊天/能力 API 403；账号 E2E 到达 Pending 页 | 无 |
 | U-07 | PASS | 账号 E2E：Admin API 激活 → 用户刷新 → 进入工作台；审计与状态同事务代码路径 | E2E 未直接查询审计事件 |
 | U-08 | PASS | 拒绝/停用/恢复状态机、停用旧会话 401、恢复后重新登录、审计事件均有 L1；管理 UI 提供对应操作 | 无 |
 | U-09 | PASS | 统一角色守卫、用户审核/角色 API；Creator 创作中心与 Admin 审核页可见；Creator→Admin 审核发布 E2E；User 无管理入口；统一 Admin 可查看内置角色矩阵并通过 UI 完成真实角色分配（桌面/移动） | 无 |
-| U-10 | PASS | 恢复码一次性、旧会话撤销、旧密码失效、旧码重放 401 | 新码“只显示一次”的浏览器刷新断言缺失 |
+| U-10 | PASS | 恢复码一次性、旧会话撤销、旧密码失效、旧码重放 401；轮换后的新码仅存在内存，刷新后不可再次查看 | 无 |
 | U-11 | BLOCKED | 可信人工核验 SOP 未批准；管理员辅助重置 API/UI 不存在 | 需产品/安全/运营冻结核验、双人复核与票据交付 |
-| U-12 | PASS | 跨浏览器同账号会话可见；个人 Skill/文件 E2E 服务端持久化 | 文件正文跨浏览器下载未单独 E2E |
+| U-12 | PASS | 跨浏览器同账号会话可见；个人 Skill/文件 E2E 服务端持久化；独立浏览器上下文可恢复并下载文件正文 | 无 |
 | U-13 | PASS | 第二用户会话 404；Skill/文件/MCP 连接隔离；Token 不回显 | Run/MCP 凭据跨用户调用仅 L1 |
-| U-14 | PASS | 认领需登录用户 + 旧 Owner 签名；伪造请求 400 | 重复认领幂等与冲突规模未压测 |
+| U-14 | PASS | 认领需登录用户 + 旧 Owner 签名；伪造请求 400；重复认领返回 `claimed=0` | 大规模冲突压力测试未执行 |
 | U-15 | PASS | `returnTo` 专用校验仅允许 `/assistant` 站内路径，拒绝外站、协议相对、反斜杠、控制字符；外站 `next` E2E 被拒绝；游客后台重定向与越权 403/404 已覆盖 | 无 |
 | U-16 | PASS | 登录失败限流、注册限流、未知账号与错误密码同响应、最后 Admin 保护、审计 | 计时侧信道与 NAT 共享 IP 策略未专项压测 |
 | U-17 | PASS | 桌面/移动账号、个人资源、Creator→Admin 审核发布 E2E 通过；导航支持键盘/移动抽屉 | 无 |
@@ -48,13 +48,13 @@
 | ID | 状态 | 证据 | 缺口 |
 |---|---|---|---|
 | C-01 | PASS | Creator 创建 Tool → `/test` 校验 executor/只读工具 → 提交；审计 | 无独立 Tool Schema 编辑 UI |
-| C-02 | PASS | Creator 无权发布；Creator UI 测试→提交，Admin UI 审核→发布；版本快照与回滚；桌面/移动 E2E | 驳回→重提未单测 |
-| C-03 | PASS | `granted` 能力未授权不可发现；直接调用 403；授权后可见 | 撤权后立即拒绝未单测 |
+| C-02 | PASS | Creator 无权发布；Creator UI 测试→提交，Admin UI 审核→发布；版本快照与回滚；驳回后可编辑、重测并重提；桌面/移动 E2E | 无 |
+| C-03 | PASS | `granted` 能力未授权不可发现；直接调用 403；授权后可见；撤权后的新执行 403 | 无 |
 | C-04 | PASS | 个人 Skill 服务端 CRUD、Markdown 导入、所有者隔离、Runtime 加载 | 无编辑/版本历史 UI |
 | C-05 | PASS | 登录态仅显示 approved Server；无任意 URL 输入；E2E 断言 | 无 Creator 提交待审 Server 的 E2E |
-| C-06 | PARTIAL | 个人连接隔离、Token 加密、Runtime 通过个人连接调用 MCP Tool（MockTransport） | 外部真实 MCP、过期/撤销后调用拒绝未 L4 |
+| C-06 | PARTIAL | 个人连接隔离、Token 加密、Runtime 通过个人连接调用 MCP Tool（MockTransport）；连接删除和 Server 停用后的新执行拒绝 | 外部真实 MCP 未联调 |
 | C-07 | PASS | Agent v1 锁定 Tool v1；发布 Tool v2、Agent v2 后新 Run 使用 v2；旧 Run 仍保存 v1；发布时校验依赖版本；回滚接口 | 无 |
-| C-08 | PASS | 停用后新目录/执行拒绝；版本回滚并审计 | 依赖停用级联检查未覆盖 |
+| C-08 | PASS | 停用后新目录/执行拒绝；Agent 锁定依赖停用后新 Run 失败且旧 Run 保留；版本回滚并审计 | 无 |
 | C-09 | PASS | 正式目录过滤 Demo；生产关闭演示时启动归档存量 Demo，保留版本并写审计；Active 用户目录 503 时显示错误与空目录，不出现 Demo 卡片（桌面/移动 E2E）；未就绪能力禁用聊天；Provider 未配置返回失败 Run | 生产首次归档实跑为 NOT_RUN，归入 F16/F17 |
 | C-10 | PASS | 服务端按“无权限 → 需 MCP 授权 → 未就绪 → 预算不足 → 可执行”返回唯一 `blockedReason/primaryAction`；前端显示对应禁用按钮或连接/登录入口；未授权 granted 能力对 Active 用户可见但不可执行 | 无 |
 

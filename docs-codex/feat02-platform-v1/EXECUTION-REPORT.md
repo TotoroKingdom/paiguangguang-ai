@@ -10,12 +10,12 @@
 
 自动化结果：
 
-- 后端：`70 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/重试/运行中撤权/失败不自动重试、中断流、枚举、审核状态机、审计回滚、Agent v1/v2、Run 配额、Creator Run 汇总、能力阻断优先级、安全响应头、认证秘密泄漏、Demo 归档与本地 SSE 模型适配）。
+- 后端：`72 passed`（`python -m pytest tests -q`；含 MCP 真实本地 HTTP、Runtime、超时/取消/重试/运行中撤权/失败不自动重试、中断流、枚举、审核状态机、驳回重提、依赖停用、匿名认领幂等、审计回滚、Agent v1/v2、Run 配额、Creator Run 汇总、能力阻断优先级、安全响应头、认证秘密泄漏、Demo 归档与本地 SSE 模型适配）。
 - 前端：`80 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布 + 2× 真实重试 + 2× 运行时错误恢复 + 2× 目录失败不回退 Demo + 2× 角色管理，共 78 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
 - 前端 ESLint：`npm run lint` 通过。
-- 前端生产构建：`npm run build` 通过（30 个路由）。
+- 前端生产构建：`npm run build` 通过（32 个路由）。
 - Alembic：`0001 → 0009`、`downgrade base`、再次 `upgrade head` 均通过；`integrity_check=ok`。
 - 依赖审计：前端生产依赖 0 critical/high；后端 `pip-audit` 无已知漏洞（详见 `DEPENDENCY-AUDIT.md`）。
 - 最终验收报告：`G0-G4-ACCEPTANCE-REPORT.md`。
