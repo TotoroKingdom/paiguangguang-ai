@@ -78,6 +78,8 @@ export default defineConfig({
         ASSISTANT_ADMIN_USERNAME: adminUsername,
         ASSISTANT_ADMIN_PASSWORD: adminPassword,
         ASSISTANT_ADMIN_COOKIE_SECURE: "false",
+        ASSISTANT_REGISTER_RATE_PER_HOUR: "1000",
+        ASSISTANT_REGISTER_RATE_PER_DAY: "1000",
       },
     },
     {

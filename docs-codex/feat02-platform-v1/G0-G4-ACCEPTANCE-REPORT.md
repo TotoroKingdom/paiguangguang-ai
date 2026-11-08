@@ -22,7 +22,7 @@
 |---|---|
 | 后端 `pytest` | **65 passed** |
 | 前端 `vitest` | **79 passed** |
-| Playwright | **74 passed**（desktop + mobile） |
+| Playwright | **76 passed**（desktop + mobile） |
 | TypeScript | 通过 |
 | ESLint 10 | 通过 |
 | Next.js 16 production build | 通过 |
@@ -58,10 +58,10 @@ F00 本地演练：
 | 集合 | PASS | PARTIAL | BLOCKED |
 |---|---:|---:|---:|
 | U-01～U-17 | 16 | 0 | 1 |
-| C-01～C-10 | 8 | 2 | 0 |
+| C-01～C-10 | 9 | 1 | 0 |
 | R-01～R-06 | 2 | 3 | 1 |
 | O-01～O-05 | 2 | 2 | 1 |
-| **合计** | **28** | **7** | **3** |
+| **合计** | **29** | **6** | **3** |
 
 逐条证据见 `G4-ACCEPTANCE-MATRIX.md`。
 

@@ -149,7 +149,10 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         })),
       });
     } catch (error) {
-      if (canUseService) {
+      const account = await getAccountSession().catch(() => null);
+      const activeAccount =
+        account?.user.status === "ACTIVE" && account.session.scope === "FULL";
+      if (canUseService || activeAccount) {
         dispatch({ type: "SET_CATALOG", catalog: [] });
         reportError(error, "能力目录加载失败，未启用演示目录回退。");
       } else {
