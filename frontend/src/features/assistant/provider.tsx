@@ -493,6 +493,24 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
               });
               return;
             }
+            if (event.type === "mcp" && assistantId) {
+              const current = stateRef.current.conversations.find(
+                (item) => item.id === conversation.id,
+              );
+              const message = current?.messages.find((item) => item.id === assistantId);
+              dispatch({
+                type: "UPDATE_MESSAGE",
+                conversationId: conversation.id,
+                messageId: assistantId,
+                patch: {
+                  steps: [
+                    ...(message?.steps ?? []),
+                    { title: `MCP ${event.name}`, detail: "已通过个人授权调用已批准 MCP 工具" },
+                  ],
+                },
+              });
+              return;
+            }
             if (event.type === "done") {
               activeRuns.current.delete(conversation.id);
               const status =

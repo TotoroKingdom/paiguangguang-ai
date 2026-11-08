@@ -177,7 +177,9 @@ export function McpServerCatalog() {
                   placeholder="只保存在服务端加密存储中"
                 />
               </label>
-              <p className={styles.muted}>MCP 工具调用尚未接入当前 Agent Runtime，连接记录先用于授权治理。</p>
+              <p className={styles.muted}>
+                个人授权只允许当前账号调用该 Server；已发布且声明 MCP 工具的 Agent/Tool 会使用此授权执行。
+              </p>
               <div className={styles.dialogActions}>
                 <button
                   className={styles.primary}

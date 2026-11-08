@@ -209,3 +209,51 @@ export function setUserRole(
     body: JSON.stringify({ role, expectedVersion, reason }),
   });
 }
+
+export type AdminMcpServer = {
+  id: string;
+  name: string;
+  description: string;
+  status: "pending" | "approved" | "disabled";
+  transport: string;
+  tools: { name?: string; description?: string }[];
+  createdAt: string;
+  reviewedAt: string | null;
+};
+
+export function adminListMcpServers(): Promise<{ items: AdminMcpServer[] }> {
+  return request("/api/v1/admin/mcp/servers");
+}
+
+export function adminCreateMcpServer(input: {
+  name: string;
+  description: string;
+  endpointUrl: string;
+  transport: "http" | "sse";
+}): Promise<AdminMcpServer> {
+  return request("/api/v1/admin/mcp/servers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function adminApproveMcpServer(id: string, reason = ""): Promise<AdminMcpServer> {
+  return request(`/api/v1/admin/mcp/servers/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function adminDisableMcpServer(id: string, reason = ""): Promise<AdminMcpServer> {
+  return request(`/api/v1/admin/mcp/servers/${id}/disable`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function adminDiscoverMcpTools(id: string): Promise<AdminMcpServer> {
+  return request(`/api/v1/admin/mcp/servers/${id}/discover`, {
+    method: "POST",
+    body: "{}",
+  });
+}

@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`41 passed`（`python -m pytest tests -q`；登录限流只统计失败尝试）。
+- 后端：`44 passed`（`python -m pytest tests -q`；含 MCP 协议、工具发现与 Runtime 调用）。
 - 前端：`76 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环，共 68 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
@@ -34,10 +34,10 @@
 | F09 | PASSED（自动化） | Creator 测试→提交→Admin 审核→发布、审计、版本回滚接口 |
 | F10 | PARTIAL | 正式目录过滤 Demo、生产强制关闭演示、非授权不显示；开发默认保留 Demo；前端访客仍保留明确标注的模拟回复；历史 Demo 未做归档迁移 |
 | F11 | PASSED（自动化 + E2E） | 个人 Skill 服务端 CRUD、Markdown 导入、所有者隔离、Runtime 加载；服务端文件上传/下载/删除/正文校验；登录态前端已切换到服务端个人资源 |
-| F12 | PARTIAL | 平台批准 MCP Server、个人连接、Token Fernet 加密、未批准拒绝、Token 不回显；登录态 UI 只显示已批准服务且无任意 URL 输入；工具发现与真实调用 NOT_RUN |
+| F12 | PASSED（自动化 + E2E） | 平台批准 MCP Server、管理端登记/发现工具、个人连接、Token Fernet 加密、未批准拒绝、Token 不回显；登录态 UI 只显示已批准服务且无任意 URL 输入；外部真实 Server 为 NOT_RUN |
 | F13 | PARTIAL | OpenAI-compatible 流式适配器、Fake Provider、SSE 端点、Run 终态持久化完成；真实模型调用 NOT_RUN |
 | F14 | PASSED（自动化） | Tool Gateway、参数 Schema 校验、2 个只读工具、大小/超时/副作用限制 |
-| F15 | PARTIAL | MCP Client、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；真实 MCP NOT_RUN，取消/超时无 E2E |
+| F15 | PARTIAL | MCP Client、工具发现、个人授权调用、最小 Agent Loop、Run/RunStep/RunTrace、取消/超时/失败代码完成；MCP 协议与 Runtime 调用用本地注入传输验证；外部真实 MCP NOT_RUN |
 | F16 | BLOCKED | 生产 TLS、443、Secure Cookie、密钥、依赖审计、部署权限未核验 |
 | F17 | PARTIAL | 自动化覆盖身份/能力/个人资源/Runtime 子集；Playwright 68 条通过（含首页/RAG/3D 路由回归）；38 个验收场景仍未逐条冻结证据 |
 
@@ -96,7 +96,7 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 
 - `mode=fake`：Fake Provider，仅用于自动化与开发联调；输出明确带 `[FakeProvider]`。
 - `mode=openai`：代码已实现 OpenAI-compatible 流式适配；本轮未配置密钥，测试结果为 `REAL_PROVIDER_NOT_CONFIGURED`，**不是真实调用成功**。
-- MCP：本轮只验证注册/授权/凭据隔离；未连接外部 MCP Server，`tools/list` 与真实调用为 **NOT_RUN**。
+- MCP：注册、批准、工具发现、个人授权、凭据加密与 Runtime 调用已用本地 MockTransport 验证；未连接外部 MCP Server，真实外部 `tools/list` 与调用为 **NOT_RUN**。
 - `capability_runs.status=accepted` 仍只代表旧准入事件，不代表真实执行完成。
 
 ## 7. 仍阻断的事项
@@ -111,6 +111,6 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 
 1. 在获授权的隔离环境执行生产副本的 F00 只读盘点与恢复演练。
 2. 补齐真实模型密钥与已批准 MCP Server 后，跑 R-01～R-06 真实联调。
-3. 补齐个人 Skill 编辑/版本历史、聊天附件正文读取与 MCP 工具发现管理页。
+3. 补齐个人 Skill 编辑/版本历史、聊天附件正文读取与 MCP 工具级权限细化。
 4. 补齐 38 个验收场景的逐条证据表与剩余 Runtime/能力页面 E2E。
 5. 生产发布前完成 TLS、Secure Cookie、Origin、依赖审计与回滚演练。

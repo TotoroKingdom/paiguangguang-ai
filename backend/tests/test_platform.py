@@ -1,5 +1,8 @@
+import asyncio
+import json
 import secrets
 
+import httpx
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -9,6 +12,7 @@ from app.db import SessionLocal
 from app.main import app
 from app.modules.identity.models import User
 from app.modules.personal.models import McpServer
+from app.modules.runtime.mcp_client import McpClient, set_transport_factory
 from app.repositories import utc_now
 
 
@@ -374,3 +378,203 @@ def test_mcp_connections_only_use_approved_servers_and_hide_tokens():
         f"/api/v1/me/mcp/connections/{connection.json()['id']}",
         headers=headers(second),
     ).status_code == 404
+
+
+def mcp_handler(request: httpx.Request) -> httpx.Response:
+    body = json.loads(request.content)
+    method = body.get("method")
+    if method == "tools/list":
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body.get("id"),
+                "result": {
+                    "tools": [
+                        {
+                            "name": "search",
+                            "description": "Search approved knowledge",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"query": {"type": "string"}},
+                                "required": ["query"],
+                            },
+                        }
+                    ]
+                },
+            },
+        )
+    if method == "tools/call":
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body.get("id"),
+                "result": {
+                    "content": [{"type": "text", "text": "mcp-ok"}],
+                    "isError": False,
+                },
+            },
+        )
+    return httpx.Response(400, json={"error": "unknown method"})
+
+
+def test_mcp_client_lists_and_calls_tools_with_bearer_token():
+    captured: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(request)
+        return mcp_handler(request)
+
+    client = McpClient(
+        "https://mcp.example.com/rpc",
+        token="private-token",
+        transport=httpx.MockTransport(handler),
+    )
+    tools = asyncio.run(client.list_tools())
+    assert [tool.name for tool in tools] == ["search"]
+    result = asyncio.run(client.call_tool("search", {"query": "policy"}))
+    assert result["content"][0]["text"] == "mcp-ok"
+    assert all(
+        request.headers["Authorization"] == "Bearer private-token" for request in captured
+    )
+
+
+def test_admin_discovers_mcp_tools_into_the_approved_server():
+    make_user("1", role="ADMIN", password="adminpass123")
+    with SessionLocal() as session:
+        server = McpServer(
+            name="Discovery Server",
+            description="",
+            endpoint_url="https://example.com/rpc",
+            transport="http",
+            status="approved",
+            tools_json="[]",
+            created_by="admin",
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        session.add(server)
+        session.commit()
+        server_id = server.id
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    set_transport_factory(lambda: httpx.MockTransport(mcp_handler))
+    try:
+        discovered = admin.post(
+            f"/api/v1/admin/mcp/servers/{server_id}/discover",
+            json={},
+            headers=headers(admin),
+        )
+    finally:
+        set_transport_factory(None)
+    assert discovered.status_code == 200, discovered.text
+    assert discovered.json()["tools"][0]["name"] == "search"
+
+
+def test_runtime_executes_approved_mcp_tool_with_personal_connection():
+    make_user("1", role="ADMIN", password="adminpass123")
+    with SessionLocal() as session:
+        server = McpServer(
+            name="Runtime MCP",
+            description="",
+            endpoint_url="https://example.com/rpc",
+            transport="http",
+            status="approved",
+            tools_json=json.dumps(
+                [{"name": "search", "description": "Search", "inputSchema": {}}]
+            ),
+            created_by="admin",
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+        session.add(server)
+        session.commit()
+        server_id = server.id
+
+    creator_id = make_user("900", role="CREATOR")
+    creator = new_client()
+    login(creator, "900")
+    created = creator.post(
+        "/api/v1/creator/capabilities",
+        json={
+            "kind": "tool",
+            "name": "MCP 知识检索",
+            "description": "调用已批准 MCP 只读工具",
+            "category": "知识",
+            "icon": "search",
+            "steps": [],
+            "tools": [],
+            "content": None,
+            "config": {
+                "executor": "mcp",
+                "mcpServerId": server_id,
+                "mcpTool": "search",
+            },
+            "changelog": "MCP runtime",
+        },
+        headers=headers(creator),
+    )
+    assert created.status_code == 201, created.text
+    capability_id = created.json()["id"]
+    tested = creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["testStatus"] == "passed"
+    creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/submit",
+        json={"reason": "MCP 审核"},
+        headers=headers(creator),
+    )
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    admin.post(
+        f"/api/v1/admin/governance/capabilities/{capability_id}/release",
+        json={"changelog": "发布 MCP 工具"},
+        headers=headers(admin),
+    )
+    user_id = make_user("901")
+    admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+    user = new_client()
+    login(user, "901")
+    connected = user.post(
+        "/api/v1/me/mcp/connections",
+        json={"serverId": server_id, "token": "runtime-token"},
+        headers=headers(user),
+    )
+    assert connected.status_code == 201, connected.text
+    conversation_id = create_conversation(user)
+    set_transport_factory(lambda: httpx.MockTransport(mcp_handler))
+    try:
+        result = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "mcp-runtime-1",
+                "text": "查询知识库",
+                "capabilityId": capability_id,
+                "capabilityKind": "tool",
+                "toolArguments": {"query": "policy"},
+                "mode": "fake",
+            },
+            headers=headers(user),
+        )
+    finally:
+        set_transport_factory(None)
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert body["run"]["status"] == "completed"
+    assert any(step["type"] == "mcp" for step in body["run"]["steps"])
+    assert "mcp-ok" in body["run"]["outputText"]

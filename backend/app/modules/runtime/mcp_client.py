@@ -1,13 +1,27 @@
 import ipaddress
 import socket
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse
 
 import httpx
 
 from app.config import settings
 from app.core.errors import APIError
+
+_transport_factory: Callable[[], httpx.AsyncBaseTransport | None] | None = None
+
+
+def set_transport_factory(
+    factory: Callable[[], httpx.AsyncBaseTransport | None] | None,
+) -> None:
+    """Test seam for MCP protocol tests without external network calls."""
+    global _transport_factory
+    _transport_factory = factory
+
+
+def default_transport() -> httpx.AsyncBaseTransport | None:
+    return _transport_factory() if _transport_factory is not None else None
 
 
 def validate_mcp_url(url: str) -> str:
@@ -57,7 +71,7 @@ class McpClient:
     ):
         self.endpoint_url = endpoint_url
         self.token = token
-        self.transport = transport
+        self.transport = transport if transport is not None else default_transport()
         self.timeout = timeout
         self._counter = 0
 
