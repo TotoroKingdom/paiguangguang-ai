@@ -571,9 +571,21 @@ def test_creator_capability(
     require_json_request(request)
     require_user_csrf(request, principal)
     _owned_capability(capability_id, principal, session)
-    return CapabilityService(session).test_capability(
+    detail = CapabilityService(session).test_capability(
         capability_id, actor_id=principal.user.id
     )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.tested",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"status": detail.testStatus},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
 
 
 @creator_router.post(
