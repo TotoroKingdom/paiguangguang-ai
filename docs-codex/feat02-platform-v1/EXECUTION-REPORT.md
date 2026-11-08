@@ -10,7 +10,7 @@
 
 自动化结果：
 
-- 后端：`44 passed`（`python -m pytest tests -q`；含 MCP 协议、工具发现与 Runtime 调用）。
+- 后端：`46 passed`（`python -m pytest tests -q`；含 MCP 协议、工具发现、Runtime 调用、超时与取消）。
 - 前端：`76 passed`（`npm test`）。
 - Playwright：现有 64 条回归 + 2× 账号闭环 + 2× 个人资源闭环 + 2× Creator 审核发布，共 70 条通过（桌面/移动）。
 - 前端 TypeScript：`npx tsc --noEmit` 通过。
