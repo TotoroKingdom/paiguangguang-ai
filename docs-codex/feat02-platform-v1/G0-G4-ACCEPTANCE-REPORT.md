@@ -1,7 +1,7 @@
 # feat02 智能助手平台 V1｜G0–G4 验收报告
 
-> 日期：2026-11-08
-> 代码基线：`dev` `247e4a0` + 本轮取消幂等提交（PR #39）
+> 日期：2026-11-09
+> 代码基线：`dev` `8d5f947`（PR #45～#52 已合并）
 > 环境：local（Windows）+ GitHub Actions（ubuntu-latest）
 > 生产：**未连接、未部署、未验收**
 > 总体结论：**开发环境可执行范围已交付；完整 V1 仍为 BLOCKED**。
@@ -14,7 +14,7 @@
 | G1 身份与权限 | PASS（开发环境） | 账户、会话、RBAC、恢复码、审核、匿名认领自动化与 E2E 通过；人工恢复单独 BLOCKED |
 | G2 能力治理 | PASS（开发环境） | 四类能力 ACL、审核发布、版本回滚、个人 Skill/文件、MCP 授权通过；生产关闭演示时归档存量 Demo 并保留历史 |
 | G3 Runtime | PARTIAL / BLOCKED | Fake、Tool、MCP、Agent、Run/Trace 自动化通过；真实模型与外部 MCP 未联调 |
-| G4 生产与全量回归 | BLOCKED | 生产 TLS/密钥/恢复未核验；38 场景为 23 PASS / 12 PARTIAL / 3 BLOCKED |
+| G4 生产与全量回归 | BLOCKED | 生产 TLS/密钥/恢复未核验；38 场景为 30 PASS / 5 PARTIAL / 3 BLOCKED |
 
 ## 2. 自动化证据
 
@@ -29,7 +29,7 @@
 | Alembic | `0001 → 0009`，`0009 ↔ 0008` 通过 |
 | 前端生产依赖审计 | 0 critical / 0 high / 0 moderate |
 | 后端 `pip-audit` | No known vulnerabilities |
-| GitHub Actions | 所有已合并 PR 的两项必需检查均 success |
+| GitHub Actions | PR #52 的 Backend tests 与 Frontend tests and E2E 均为 success；其余合并记录见对应 PR |
 
 ## 3. 数据库
 
@@ -98,7 +98,7 @@ TLS/HSTS 仍由生产反向代理负责，未在生产核验。
 4. 生产 HTTPS/443、证书、反代、Secure Cookie、GitHub secrets、部署权限。
 5. 生产备份恢复、旧管理员真实登录、容器重启数据保留。
 6. 断网后恢复服务端已接收 turn 已有单元自动化；完整浏览器断网注入仍未执行，等待授权 Run 状态仍缺少产品协议。
-7. C-10 预算不足/外部授权的精确前端优先级未完整覆盖。
+7. 生产日志、反向代理缓存与生产浏览器样本尚未抽查。
 
 ## 8. 发布判定
 
@@ -113,5 +113,5 @@ TLS/HSTS 仍由生产反向代理负责，未在生产核验。
 3. 在隔离副本执行 `0009` 迁移与旧管理员登录。
 4. 生产烟测注册 → Pending → 激活 → 登录 → 会话 → 刷新 → 文件 → 重启保留。
 5. 完成真实模型、真实 Tool、真实 MCP、Agent Run 脱敏证据。
-6. 完成 R-05/R-06、C-10 与剩余 UI 状态。
+6. 完成真实模型/真实 MCP 联调、等待授权协议与生产日志/缓存抽查。
 7. 通过最终 G4 评审后才允许 `dev → main`。
