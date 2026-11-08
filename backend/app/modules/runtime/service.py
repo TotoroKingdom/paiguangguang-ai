@@ -15,6 +15,7 @@ from app.modules.capabilities.schemas import CapabilitySnapshot
 from app.modules.capabilities.service import CapabilityService, loads
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
+from app.modules.personal.models import PersonalSkill
 from app.modules.runtime.models import AgentRun, RunStep, RunTrace
 from app.modules.runtime.providers import build_provider
 from app.modules.runtime.tools import execute_tool, get_tool
@@ -186,7 +187,28 @@ class RuntimeService:
                 )
                 run.version_id = version.id
             except Exception:
-                capability_snapshot = None
+                personal = self.session.scalar(
+                    select(PersonalSkill).where(
+                        PersonalSkill.id == run.capability_id,
+                        PersonalSkill.user_id == principal.user.id,
+                    )
+                )
+                if personal is not None:
+                    capability_snapshot = CapabilitySnapshot(
+                        kind="skill",
+                        name=personal.name,
+                        description=personal.description,
+                        category="个人技能",
+                        icon="skill",
+                        steps=[],
+                        tools=[],
+                        content=personal.content_md,
+                        config={},
+                        executionMode="simulated",
+                        source="managed",
+                    )
+                else:
+                    capability_snapshot = None
         try:
             messages: list[dict[str, str]] = []
             if capability_snapshot is not None:

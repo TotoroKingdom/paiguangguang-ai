@@ -268,6 +268,56 @@ def test_private_skills_and_files_are_owner_isolated():
     ).status_code in {201, 422}
 
 
+def test_personal_skill_runs_only_for_its_owner():
+    owner_id = make_user("808")
+    make_user("809")
+    owner = new_client()
+    login(owner, "808")
+    skill = owner.post(
+        "/api/v1/me/skills",
+        json={
+            "name": "周报整理",
+            "description": "把要点整理成周报",
+            "contentMd": "输出固定三段：进展、风险、下一步。",
+        },
+        headers=headers(owner),
+    )
+    assert skill.status_code == 201, skill.text
+    conversation_id = create_conversation(owner)
+    result = owner.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "personal-skill-1",
+            "text": "整理本周工作",
+            "capabilityId": skill.json()["id"],
+            "capabilityKind": "skill",
+            "mode": "fake",
+        },
+        headers=headers(owner),
+    )
+    assert result.status_code == 200, result.text
+    assert result.json()["run"]["status"] == "completed"
+    assert "周报整理" in result.json()["run"]["outputText"]
+
+    other = new_client()
+    login(other, "809")
+    other_conversation = create_conversation(other)
+    denied = other.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": other_conversation,
+            "clientTurnId": "personal-skill-2",
+            "text": "读取别人的技能",
+            "capabilityId": skill.json()["id"],
+            "capabilityKind": "skill",
+            "mode": "fake",
+        },
+        headers=headers(other),
+    )
+    assert denied.status_code == 404
+
+
 def test_mcp_connections_only_use_approved_servers_and_hide_tokens():
     make_user("806")
     make_user("807")

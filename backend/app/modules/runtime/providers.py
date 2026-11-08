@@ -30,8 +30,17 @@ class FakeProvider:
         tool_context = next(
             (item["content"] for item in reversed(messages) if item["role"] == "tool"), ""
         )
+        system_context = next(
+            (item["content"].splitlines()[0] for item in messages if item["role"] == "system"),
+            "",
+        )
         if tool_context:
             reply = f"[FakeProvider] 已调用只读工具，结果：{tool_context[:500]}"
+        elif system_context:
+            reply = (
+                f"[FakeProvider] 已加载{system_context[:80]}。已收到：{user_text[:200]}。"
+                "当前为测试提供方，未调用真实模型。"
+            )
         else:
             reply = f"[FakeProvider] 已收到：{user_text[:200]}。当前为测试提供方，未调用真实模型。"
         for index in range(0, len(reply), 8):
