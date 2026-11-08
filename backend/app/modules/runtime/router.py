@@ -4,7 +4,7 @@ from datetime import timezone
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -265,12 +265,20 @@ async def retry_run_stream(
     turn, capability_id, version_id = _turn_payload(
         execute, session, principal.user.id
     )
-    ConversationService(session).patch_message(
-        scope,
-        payload.conversationId,
-        payload.messageId,
-        MessagePatch(content="", status="generating", steps=[]),
+    claimed = session.execute(
+        update(Message)
+        .where(
+            Message.id == payload.messageId,
+            Message.conversation_id == payload.conversationId,
+            Message.role == "assistant",
+            Message.status.in_(("error", "stopped")),
+        )
+        .values(status="generating", content="", updated_at=utc_now())
     )
+    if claimed.rowcount != 1:
+        session.rollback()
+        raise APIError(409, "RETRY_NOT_ALLOWED", "当前消息不可重试或已在执行")
+    session.commit()
 
     async def events():
         try:
@@ -286,6 +294,19 @@ async def retry_run_stream(
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as error:
+            try:
+                ConversationService(session).patch_message(
+                    scope,
+                    payload.conversationId,
+                    payload.messageId,
+                    MessagePatch(
+                        content="执行失败：无法启动重试",
+                        status="error",
+                        steps=[],
+                    ),
+                )
+            except Exception:
+                pass
             yield (
                 "data: "
                 + json.dumps(
