@@ -12,7 +12,11 @@ from app.config import settings
 from app.core.errors import APIError
 from app.models import Message
 from app.modules.capabilities.schemas import CapabilitySnapshot
-from app.modules.capabilities.models import CapabilityDefinition
+from app.modules.capabilities.models import (
+    CapabilityDefinition,
+    CapabilityDependency,
+    CapabilityVersion,
+)
 from app.modules.capabilities.service import CapabilityService, loads
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
@@ -213,6 +217,60 @@ class RuntimeService:
                     )
                 else:
                     capability_snapshot = None
+        dependency_step_started = utc_now()
+        if capability_snapshot is not None and capability_snapshot.kind == "agent":
+            dependencies = list(
+                self.session.scalars(
+                    select(CapabilityDependency).where(
+                        CapabilityDependency.version_id == run.version_id
+                    )
+                )
+            )
+            if not dependencies:
+                raise APIError(
+                    409,
+                    "AGENT_DEPENDENCY_MISSING",
+                    "Agent 未锁定任何依赖版本",
+                )
+            resolved: list[dict[str, Any]] = []
+            for dependency in dependencies:
+                target = self.session.get(
+                    CapabilityVersion, dependency.dependency_version_id
+                )
+                target_definition = self.session.get(
+                    CapabilityDefinition, dependency.dependency_id
+                )
+                if (
+                    target is None
+                    or target.status != "published"
+                    or target_definition is None
+                    or target_definition.status != "published"
+                ):
+                    raise APIError(
+                        409,
+                        "AGENT_DEPENDENCY_UNAVAILABLE",
+                        "Agent 锁定依赖不可用",
+                    )
+                resolved.append(
+                    {
+                        "id": dependency.dependency_id,
+                        "kind": dependency.dependency_kind,
+                        "versionId": dependency.dependency_version_id,
+                        "version": target.version,
+                        "name": target_definition.name,
+                    }
+                )
+            self._step(
+                run,
+                "agent",
+                "dependencies",
+                status="completed",
+                input_value={"versionId": run.version_id},
+                output={"dependencies": resolved},
+                started_at=dependency_step_started,
+            )
+            self._trace(run, "agent.dependencies", {"dependencies": resolved})
+            yield {"type": "agent", "dependencies": resolved}
         try:
             messages: list[dict[str, str]] = []
             if capability_snapshot is not None:

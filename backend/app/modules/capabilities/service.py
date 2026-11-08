@@ -7,11 +7,12 @@ from typing import Any
 from uuid import uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.modules.capabilities.models import (
     CapabilityDefinition,
+    CapabilityDependency,
     CapabilityGrant,
     CapabilityReview,
     CapabilityRun,
@@ -392,6 +393,7 @@ class CapabilityService:
         snapshot = CapabilitySnapshot.model_validate(loads(draft.snapshot_json, {}))
         if not snapshot.name.strip():
             raise HTTPException(status_code=422, detail="Capability name is required")
+        self._lock_dependencies(definition, draft, snapshot)
         now = utc_now()
         for item in definition.versions:
             if item.status == "published" and item.id != draft.id:
@@ -410,6 +412,63 @@ class CapabilityService:
         definition.updated_at = now
         self._record_review(definition, draft.id, "publish", actor_id, changelog)
         return detail_view(self._get(capability_id))
+
+    def _lock_dependencies(
+        self,
+        definition: CapabilityDefinition,
+        version: CapabilityVersion,
+        snapshot: CapabilitySnapshot,
+    ) -> None:
+        self.session.execute(
+            delete(CapabilityDependency).where(
+                CapabilityDependency.version_id == version.id
+            )
+        )
+        raw = snapshot.config.get("dependencies", [])
+        if raw is None:
+            return
+        if not isinstance(raw, list):
+            raise HTTPException(status_code=422, detail="Dependencies must be a list")
+        seen: set[str] = set()
+        for item in raw:
+            if not isinstance(item, dict):
+                raise HTTPException(status_code=422, detail="Dependency entry is invalid")
+            dependency_id = str(item.get("id", "")).strip()
+            dependency_version_id = str(item.get("versionId", "")).strip()
+            kind = str(item.get("kind", "")).strip()
+            if not dependency_id or not dependency_version_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Dependency requires id and versionId",
+                )
+            if dependency_id in seen:
+                continue
+            target = self.session.get(CapabilityVersion, dependency_version_id)
+            target_definition = self.session.get(CapabilityDefinition, dependency_id)
+            if (
+                target is None
+                or target.capability_id != dependency_id
+                or target.status != "published"
+                or target_definition is None
+                or target_definition.status != "published"
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Dependency version is not published or does not match",
+                )
+            if kind and kind != target_definition.kind:
+                raise HTTPException(
+                    status_code=422, detail="Dependency kind does not match"
+                )
+            seen.add(dependency_id)
+            self.session.add(
+                CapabilityDependency(
+                    version_id=version.id,
+                    dependency_id=dependency_id,
+                    dependency_kind=target_definition.kind,
+                    dependency_version_id=target.id,
+                )
+            )
 
     def disable(self, capability_id: str, *, actor_id: str) -> CapabilityDetail:
         definition = self._get(capability_id)
@@ -496,10 +555,60 @@ class CapabilityService:
         checks: list[dict[str, Any]] = []
         checks.append({"name": "name", "ok": bool(snapshot.name.strip())})
         executor = str(snapshot.config.get("executor", "")).strip().lower()
-        checks.append({"name": "executor", "ok": executor in {"system", "mcp", "demo"}})
+        is_agent = snapshot.kind == "agent"
+        checks.append(
+            {
+                "name": "executor",
+                "ok": is_agent or executor in {"system", "mcp", "demo"},
+            }
+        )
         tool_name = str(snapshot.config.get("tool", "")).strip()
         ready = False
-        if executor == "system":
+        if is_agent:
+            raw = snapshot.config.get("dependencies", [])
+            dependency_checks: list[dict[str, Any]] = []
+            valid = isinstance(raw, list) and bool(raw)
+            if isinstance(raw, list):
+                for item in raw:
+                    if not isinstance(item, dict):
+                        valid = False
+                        continue
+                    dependency_id = str(item.get("id", "")).strip()
+                    dependency_version_id = str(item.get("versionId", "")).strip()
+                    target = (
+                        self.session.get(CapabilityVersion, dependency_version_id)
+                        if dependency_version_id
+                        else None
+                    )
+                    target_definition = (
+                        self.session.get(CapabilityDefinition, dependency_id)
+                        if dependency_id
+                        else None
+                    )
+                    ok = bool(
+                        target
+                        and target.capability_id == dependency_id
+                        and target.status == "published"
+                        and target_definition
+                        and target_definition.status == "published"
+                    )
+                    valid = valid and ok
+                    dependency_checks.append(
+                        {
+                            "id": dependency_id,
+                            "versionId": dependency_version_id,
+                            "ok": ok,
+                        }
+                    )
+            ready = valid
+            checks.append(
+                {
+                    "name": "agent-dependencies",
+                    "ok": ready,
+                    "detail": dependency_checks,
+                }
+            )
+        elif executor == "system":
             from app.modules.runtime.tools import get_tool
 
             tool = get_tool(tool_name)

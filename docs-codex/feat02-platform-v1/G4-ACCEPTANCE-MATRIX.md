@@ -53,7 +53,7 @@
 | C-04 | PASS | 个人 Skill 服务端 CRUD、Markdown 导入、所有者隔离、Runtime 加载 | 无编辑/版本历史 UI |
 | C-05 | PASS | 登录态仅显示 approved Server；无任意 URL 输入；E2E 断言 | 无 Creator 提交待审 Server 的 E2E |
 | C-06 | PARTIAL | 个人连接隔离、Token 加密、Runtime 通过个人连接调用 MCP Tool（MockTransport） | 外部真实 MCP、过期/撤销后调用拒绝未 L4 |
-| C-07 | PARTIAL | 版本发布后新 Run 使用当前版本；旧 Run 保留版本 ID；回滚接口 | Agent 对多依赖版本锁定与旧 Run 追溯未完整验证 |
+| C-07 | PARTIAL | 发布时锁定 Agent 依赖的 Tool/Skill 版本；依赖草稿变更不影响已发布 Agent；RunStep 记录锁定版本；旧 Run 保留版本 ID；回滚接口 | 发布 Agent v2 后新 Run 切换 v2 的完整断言未覆盖 |
 | C-08 | PASS | 停用后新目录/执行拒绝；版本回滚并审计 | 依赖停用级联检查未覆盖 |
 | C-09 | PARTIAL | 正式目录过滤 Demo；登录态目录失败不再回退 Demo；未就绪能力显示“未就绪”并禁用聊天；Provider 未配置返回失败 Run | 无失败注入 E2E，依赖不可用原因仍需细化 |
 | C-10 | PARTIAL | ACL、发布、测试就绪分离；服务端 403/503 | 预算不足与“需外部授权”UI 唯一主按钮未覆盖 |

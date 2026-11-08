@@ -91,6 +91,9 @@ class CapabilityDependency(Base):
     )
     dependency_id: Mapped[str] = mapped_column(String(36), nullable=False)
     dependency_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    dependency_version_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, default=""
+    )
     version: Mapped[CapabilityVersion] = relationship(back_populates="dependencies")
 
 

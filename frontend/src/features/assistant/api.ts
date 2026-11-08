@@ -236,6 +236,10 @@ export type RuntimeEvent =
   | { type: "chunk"; content: string }
   | { type: "tool"; name: string; result: Record<string, unknown> }
   | { type: "mcp"; serverId: string; name: string; result: Record<string, unknown> }
+  | {
+      type: "agent";
+      dependencies: { id: string; kind: string; versionId: string; version: number; name: string }[];
+    }
   | { type: "done"; runId: string; status: string }
   | { type: "error"; runId?: string; code: string; message?: string };
 

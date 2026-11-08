@@ -13,6 +13,7 @@ from app.core.security import hash_user_password
 from app.db import SessionLocal
 from app.main import app
 from app.modules.identity.models import User
+from app.modules.capabilities.models import CapabilityDefinition, CapabilityVersion
 from app.modules.identity.user_service import UserIdentityService
 from app.modules.runtime.models import AgentRun
 from app.modules.runtime.providers import LLMChunk
@@ -858,3 +859,122 @@ def test_reject_disable_restore_transitions_and_audit():
         "admin.user.disable",
         "admin.user.restore",
     }
+
+
+def test_agent_locks_dependency_versions_across_draft_changes():
+    tool_id, creator_id = creator_tool_flow()
+    approve_and_release(tool_id)
+    with SessionLocal() as session:
+        tool_versions = list(
+            session.scalars(
+                select(CapabilityVersion).where(
+                    CapabilityVersion.capability_id == tool_id
+                )
+            )
+        )
+        tool_version = next(
+            version for version in tool_versions if version.status == "published"
+        )
+        tool_version_id = tool_version.id
+
+    creator = new_client()
+    login(creator, "700")
+    agent = creator.post(
+        "/api/v1/creator/capabilities",
+        json={
+            "kind": "agent",
+            "name": "依赖锁定 Agent",
+            "description": "锁定工具版本",
+            "category": "测试",
+            "icon": "agent",
+            "steps": [],
+            "tools": [],
+            "content": None,
+            "config": {
+                "dependencies": [
+                    {"id": tool_id, "versionId": tool_version_id, "kind": "tool"}
+                ]
+            },
+            "changelog": "锁定 v1",
+        },
+        headers=headers(creator),
+    )
+    assert agent.status_code == 201, agent.text
+    agent_id = agent.json()["id"]
+    tested = creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    assert tested.status_code == 200, tested.text
+    assert tested.json()["testStatus"] == "passed"
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/submit",
+        json={"reason": "依赖锁定审核"},
+        headers=headers(creator),
+    )
+
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    admin.post(
+        f"/api/v1/admin/governance/capabilities/{agent_id}/release",
+        json={"changelog": "发布 Agent v1"},
+        headers=headers(admin),
+    )
+    user_id = make_user("930")
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+
+    user = new_client()
+    login(user, "930")
+    first = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "agent-lock-1",
+            "text": "运行锁定 Agent",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert first.status_code == 200, first.text
+    agent_step = next(
+        step for step in first.json()["run"]["steps"] if step["type"] == "agent"
+    )
+    assert agent_step["output"]["dependencies"][0]["versionId"] == tool_version_id
+
+    creator.patch(
+        f"/api/v1/creator/capabilities/{tool_id}",
+        json={
+            "name": "服务器时间（草稿 v2）",
+            "config": {"executor": "system", "tool": "system.current_time"},
+        },
+        headers=headers(creator),
+    )
+    second = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "agent-lock-2",
+            "text": "草稿变更后再次运行",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert second.status_code == 200, second.text
+    second_step = next(
+        step for step in second.json()["run"]["steps"] if step["type"] == "agent"
+    )
+    assert second_step["output"]["dependencies"][0]["versionId"] == tool_version_id
