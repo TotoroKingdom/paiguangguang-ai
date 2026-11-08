@@ -15,7 +15,7 @@ from app.main import app
 from app.modules.identity.models import User
 from app.modules.capabilities.models import CapabilityDefinition, CapabilityVersion
 from app.modules.identity.user_service import UserIdentityService
-from app.modules.runtime.models import AgentRun
+from app.modules.runtime.models import AgentRun, RunStep
 from app.modules.runtime.providers import LLMChunk
 from app.modules.runtime.service import RuntimeService
 from app.modules.personal.models import McpServer
@@ -1058,3 +1058,191 @@ def test_revocation_after_turn_creation_blocks_execution():
         assert final.status == "failed"
         assert final.error_code == "CAPABILITY_REVOKED"
         assert any(event.get("code") == "CAPABILITY_REVOKED" for event in events)
+
+
+def test_agent_v2_uses_new_dependency_but_old_run_keeps_v1():
+    tool_id, creator_id = creator_tool_flow()
+    approve_and_release(tool_id)
+    creator = new_client()
+    login(creator, "700")
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+
+    def published_version(capability_id: str) -> CapabilityVersion:
+        with SessionLocal() as session:
+            return next(
+                version
+                for version in session.scalars(
+                    select(CapabilityVersion).where(
+                        CapabilityVersion.capability_id == capability_id
+                    )
+                )
+                if version.status == "published"
+            )
+
+    tool_v1 = published_version(tool_id)
+    agent = creator.post(
+        "/api/v1/creator/capabilities",
+        json={
+            "kind": "agent",
+            "name": "版本切换 Agent",
+            "description": "验证 v1/v2 依赖切换",
+            "category": "测试",
+            "icon": "agent",
+            "steps": [],
+            "tools": [],
+            "content": None,
+            "config": {
+                "dependencies": [
+                    {"id": tool_id, "versionId": tool_v1.id, "kind": "tool"}
+                ]
+            },
+            "changelog": "Agent v1",
+        },
+        headers=headers(creator),
+    )
+    assert agent.status_code == 201, agent.text
+    agent_id = agent.json()["id"]
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/submit",
+        json={"reason": "Agent v1"},
+        headers=headers(creator),
+    )
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    admin.post(
+        f"/api/v1/admin/governance/capabilities/{agent_id}/release",
+        json={"changelog": "Agent v1"},
+        headers=headers(admin),
+    )
+    user_id = make_user("950")
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+    user = new_client()
+    login(user, "950")
+    first = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "agent-v1-run",
+            "text": "运行 Agent v1",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert first.status_code == 200, first.text
+    old_run_id = first.json()["run"]["id"]
+    first_dependency = next(
+        step for step in first.json()["run"]["steps"] if step["type"] == "agent"
+    )["output"]["dependencies"][0]
+    assert first_dependency["versionId"] == tool_v1.id
+
+    patched = creator.patch(
+        f"/api/v1/creator/capabilities/{tool_id}",
+        json={
+            "name": "服务器时间 v2",
+            "config": {"executor": "system", "tool": "system.current_time"},
+        },
+        headers=headers(creator),
+    )
+    assert patched.status_code == 200, patched.text
+    assert patched.json()["draftVersion"] == 2
+    tested_v2 = creator.post(
+        f"/api/v1/creator/capabilities/{tool_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    assert tested_v2.status_code == 200, tested_v2.text
+    submitted_v2 = creator.post(
+        f"/api/v1/creator/capabilities/{tool_id}/submit",
+        json={"reason": "Tool v2"},
+        headers=headers(creator),
+    )
+    assert submitted_v2.status_code == 200, submitted_v2.text
+    approved_v2 = admin.post(
+        f"/api/v1/admin/capabilities/{tool_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    assert approved_v2.status_code == 200, approved_v2.text
+    released_v2 = admin.post(
+        f"/api/v1/admin/governance/capabilities/{tool_id}/release",
+        json={"changelog": "Tool v2"},
+        headers=headers(admin),
+    )
+    assert released_v2.status_code == 200, released_v2.text
+    tool_v2 = published_version(tool_id)
+    assert tool_v2.version == 2
+
+    creator.patch(
+        f"/api/v1/creator/capabilities/{agent_id}",
+        json={
+            "config": {
+                "dependencies": [
+                    {"id": tool_id, "versionId": tool_v2.id, "kind": "tool"}
+                ]
+            }
+        },
+        headers=headers(creator),
+    )
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/submit",
+        json={"reason": "Agent v2"},
+        headers=headers(creator),
+    )
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    admin.post(
+        f"/api/v1/admin/governance/capabilities/{agent_id}/release",
+        json={"changelog": "Agent v2"},
+        headers=headers(admin),
+    )
+    second = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "agent-v2-run",
+            "text": "运行 Agent v2",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert second.status_code == 200, second.text
+    second_dependency = next(
+        step for step in second.json()["run"]["steps"] if step["type"] == "agent"
+    )["output"]["dependencies"][0]
+    assert second_dependency["versionId"] == tool_v2.id
+
+    with SessionLocal() as session:
+        old_step = session.scalar(
+            select(RunStep).where(
+                RunStep.run_id == old_run_id, RunStep.step_type == "agent"
+            )
+        )
+        assert old_step is not None
+        assert json.loads(old_step.output_json)["dependencies"][0][
+            "versionId"
+        ] == tool_v1.id
