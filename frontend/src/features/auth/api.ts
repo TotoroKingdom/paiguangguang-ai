@@ -257,3 +257,107 @@ export function adminDiscoverMcpTools(id: string): Promise<AdminMcpServer> {
     body: "{}",
   });
 }
+
+export type GovernanceCapability = {
+  id: string;
+  kind: "tool" | "skill" | "mcp" | "agent";
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  status: "draft" | "published" | "disabled";
+  source: "demo" | "admin" | "creator";
+  hasDraft: boolean;
+  publishedVersion: number | null;
+  draftVersion: number | null;
+  executionMode: "demo" | "simulated" | null;
+  visibility: "platform" | "private";
+  accessMode: "all_active" | "granted";
+  reviewStatus: string;
+  ownerId: string | null;
+  testStatus: string;
+  updatedAt: string;
+};
+
+export type CreatorCapabilityInput = {
+  kind: "tool" | "skill" | "agent";
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  steps: string[];
+  tools: string[];
+  content: string | null;
+  config: Record<string, unknown>;
+  changelog: string;
+};
+
+export async function creatorListCapabilities(): Promise<GovernanceCapability[]> {
+  const response = await request<{ items: GovernanceCapability[] }>(
+    "/api/v1/creator/capabilities",
+  );
+  return response.items;
+}
+
+export function creatorCreateCapability(
+  input: CreatorCapabilityInput,
+): Promise<GovernanceCapability> {
+  return request("/api/v1/creator/capabilities", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function creatorTestCapability(id: string): Promise<GovernanceCapability> {
+  return request(`/api/v1/creator/capabilities/${id}/test`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export function creatorSubmitCapability(
+  id: string,
+  reason: string,
+): Promise<GovernanceCapability> {
+  return request(`/api/v1/creator/capabilities/${id}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function governanceListCapabilities(): Promise<GovernanceCapability[]> {
+  const response = await request<{ items: GovernanceCapability[] }>(
+    "/api/v1/admin/governance/capabilities",
+  );
+  return response.items;
+}
+
+export function governanceApproveCapability(
+  id: string,
+  reason: string,
+): Promise<GovernanceCapability> {
+  return request(`/api/v1/admin/capabilities/${id}/approve`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function governanceRejectCapability(
+  id: string,
+  reason: string,
+): Promise<GovernanceCapability> {
+  return request(`/api/v1/admin/capabilities/${id}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function governanceReleaseCapability(
+  id: string,
+  changelog: string,
+): Promise<GovernanceCapability> {
+  return request(`/api/v1/admin/governance/capabilities/${id}/release`, {
+    method: "POST",
+    body: JSON.stringify({ changelog }),
+  });
+}

@@ -141,6 +141,8 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             ? "智能体中心"
             : pathname === "/assistant/files"
               ? "文件库"
+              : pathname === "/assistant/creator"
+                ? "创作中心"
               : pathname.startsWith("/assistant/chat/")
                 ? "聊天"
                 : "新建聊天");
@@ -230,6 +232,17 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
               <span className="as-sidebar-label">{item.name}</span>
             </Link>
           ))}
+          {session?.user.role === "CREATOR" || session?.user.role === "ADMIN" ? (
+            <Link
+              href="/assistant/creator"
+              title="创作中心"
+              className={`as-nav-link${pathname === "/assistant/creator" ? " as-nav-link--active" : ""}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              <AssistantIcon name="spark" size={21} />
+              <span className="as-sidebar-label">创作中心</span>
+            </Link>
+          ) : null}
         </nav>
         <div className="as-recent as-sidebar-label">
           <div className="as-recent-heading">
