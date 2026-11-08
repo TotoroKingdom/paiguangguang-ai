@@ -25,8 +25,8 @@
 
 | ID | 状态 | 证据 | 缺口 |
 |---|---|---|---|
-| U-01 | PASS | 路由回归 `/assistant`；注册/登录页可直达；访客聊天明确标注模拟 | 无独立“登录入口可见”截图断言 |
-| U-02 | PASS | `test_password_policy_keeps_six_character_minimum...`：5 位拒绝、6 位通过、弱口令拒绝、无邮箱字段 | 无 5 位密码的浏览器 UI 断言 |
+| U-01 | PASS | 路由回归 `/assistant`；注册/登录页可直达；访客聊天明确标注模拟；访客账户菜单显示“登录 / 注册”（桌面/移动 E2E） | 无 |
+| U-02 | PASS | `test_password_policy_keeps_six_character_minimum...`：5 位拒绝、6 位通过、弱口令拒绝、无邮箱字段；浏览器 `minLength` 对 5 位密码判定 `tooShort` 且不提交（桌面/移动 E2E） | 无 |
 | U-03 | PASS | `test_register_starts_at_100...`、`test_register_crosses_decimal_boundaries...`：100/101/999→1000/9999→10000 | 无生产迁移后的真实号段核对 |
 | U-04 | PASS | 6 线程并发注册唯一；同幂等键重试不重复发号；不同请求体 409 | 无网络超时/断连重试的浏览器注入 |
 | U-05 | PASS | 注册响应仅首次含恢复码；幂等重放不再返回；账号 E2E 显示真实账号与一次性恢复码；刷新成功页后恢复码不再存在 | 无 |
