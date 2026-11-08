@@ -1,7 +1,7 @@
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { expect, test, type TestInfo } from "@playwright/test";
+import { expect, request as requestFactory, test, type TestInfo } from "@playwright/test";
 
 function adminPassword(testInfo: TestInfo): string {
   const metadata = testInfo.config.metadata as { adminPassword?: string };
@@ -90,6 +90,27 @@ test("persists personal skills and files and restricts MCP to approved servers",
   expect(uploaded).toBeTruthy();
   const content = await page.request.get(`/api/v1/me/files/${uploaded.id}/content`);
   expect(await content.text()).toBe("server-owned personal file");
+  const otherBrowser = await requestFactory.newContext({ baseURL: origin });
+  try {
+    const otherLogin = await otherBrowser.post("/api/v1/auth/login", {
+      data: { accountNumber: account, password },
+      headers: { origin },
+    });
+    expect(otherLogin.status()).toBe(200);
+    const otherFiles = await otherBrowser.get("/api/v1/me/files");
+    expect(otherFiles.status()).toBe(200);
+    expect(
+      (await otherFiles.json()).items.some(
+        (file: { filename: string }) => file.filename === "personal-notes.txt",
+      ),
+    ).toBe(true);
+    const otherContent = await otherBrowser.get(
+      `/api/v1/me/files/${uploaded.id}/content`,
+    );
+    expect(await otherContent.text()).toBe("server-owned personal file");
+  } finally {
+    await otherBrowser.dispose();
+  }
   await page.getByRole("button", { name: "删除文件：personal-notes.txt" }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(page.getByText("personal-notes.txt", { exact: true })).toHaveCount(0);

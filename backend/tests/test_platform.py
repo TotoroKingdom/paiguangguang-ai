@@ -1890,3 +1890,149 @@ def test_creator_run_summary_is_scoped_to_owned_capabilities():
     other = new_client()
     login(other, "701")
     assert other.get("/api/v1/creator/runs/summary").json()["total"] == 0
+
+
+def test_rejected_capability_can_be_edited_tested_and_resubmitted():
+    capability_id, _ = creator_tool_flow()
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    rejected = admin.post(
+        f"/api/v1/admin/capabilities/{capability_id}/reject",
+        json={"reason": "说明需要补充"},
+        headers=headers(admin),
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["reviewStatus"] == "rejected"
+
+    creator = new_client()
+    login(creator, "700")
+    updated = creator.patch(
+        f"/api/v1/creator/capabilities/{capability_id}",
+        json={"description": "已补充失败路径与只读边界"},
+        headers=headers(creator),
+    )
+    assert updated.status_code == 200, updated.text
+    tested = creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    assert tested.status_code == 200
+    assert tested.json()["testStatus"] == "passed"
+    resubmitted = creator.post(
+        f"/api/v1/creator/capabilities/{capability_id}/submit",
+        json={"reason": "已按驳回意见修改"},
+        headers=headers(creator),
+    )
+    assert resubmitted.status_code == 200, resubmitted.text
+    assert resubmitted.json()["reviewStatus"] == "submitted"
+
+
+def test_disabled_agent_dependency_blocks_new_runs_without_rewriting_history():
+    tool_id, _ = creator_tool_flow()
+    approve_and_release(tool_id)
+    with SessionLocal() as session:
+        tool_version = session.scalar(
+            select(CapabilityVersion).where(
+                CapabilityVersion.capability_id == tool_id,
+                CapabilityVersion.status == "published",
+            )
+        )
+        assert tool_version is not None
+        tool_version_id = tool_version.id
+
+    creator = new_client()
+    login(creator, "700")
+    agent = creator.post(
+        "/api/v1/creator/capabilities",
+        json={
+            "kind": "agent",
+            "name": "依赖停用测试 Agent",
+            "description": "验证依赖停用后的新执行拒绝",
+            "category": "测试",
+            "icon": "agent",
+            "steps": [],
+            "tools": [],
+            "content": "使用已锁定工具版本。",
+            "config": {
+                "dependencies": [
+                    {"id": tool_id, "versionId": tool_version_id, "kind": "tool"}
+                ]
+            },
+            "changelog": "依赖版本",
+        },
+        headers=headers(creator),
+    )
+    assert agent.status_code == 201, agent.text
+    agent_id = agent.json()["id"]
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/test",
+        json={},
+        headers=headers(creator),
+    )
+    creator.post(
+        f"/api/v1/creator/capabilities/{agent_id}/submit",
+        json={"reason": "审核 Agent"},
+        headers=headers(creator),
+    )
+    admin = new_client()
+    login(admin, "1", "adminpass123")
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/approve",
+        json={"reason": "通过"},
+        headers=headers(admin),
+    )
+    admin.post(
+        f"/api/v1/admin/governance/capabilities/{agent_id}/release",
+        json={"changelog": "发布 Agent"},
+        headers=headers(admin),
+    )
+    user_id = make_user("997")
+    admin.post(
+        f"/api/v1/admin/capabilities/{agent_id}/grants",
+        json={"userId": user_id},
+        headers=headers(admin),
+    )
+    user = new_client()
+    login(user, "997")
+    first = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "dependency-before-disable",
+            "text": "依赖可用时执行",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["run"]["status"] == "completed"
+    first_run_id = first.json()["run"]["id"]
+
+    disabled = admin.post(
+        f"/api/v1/admin/governance/capabilities/{tool_id}/retire",
+        json={},
+        headers=headers(admin),
+    )
+    assert disabled.status_code == 200, disabled.text
+    blocked = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": create_conversation(user),
+            "clientTurnId": "dependency-after-disable",
+            "text": "依赖停用后执行",
+            "capabilityId": agent_id,
+            "capabilityKind": "agent",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["run"]["status"] == "failed"
+    assert blocked.json()["run"]["errorCode"] == "AGENT_DEPENDENCY_UNAVAILABLE"
+    with SessionLocal() as session:
+        historical = session.get(AgentRun, first_run_id)
+        assert historical is not None
+        assert historical.status == "completed"

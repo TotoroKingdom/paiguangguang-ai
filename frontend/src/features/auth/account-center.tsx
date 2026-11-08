@@ -139,7 +139,11 @@ export function AccountCenter() {
       )}
       {error && <div className={styles.alert}>{error}</div>}
       {notice && <div className={styles.info}>{notice}</div>}
-      {recoveryCode && <code className={styles.code}>{recoveryCode}</code>}
+      {recoveryCode && (
+        <code className={styles.code} data-testid="rotated-recovery-code">
+          {recoveryCode}
+        </code>
+      )}
 
       <section className={styles.section}>
         <h2>修改密码</h2>
