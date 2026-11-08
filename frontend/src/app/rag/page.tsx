@@ -32,9 +32,9 @@ export default function RagPage() {
               </p>
             </div>
 
-            <a href="/" className="home-button home-button--glass rag-intro__back">
+            <Link href="/" className="home-button home-button--glass rag-intro__back">
               ← 回到首页
-            </a>
+            </Link>
           </section>
 
           <section className="rag-board-section" aria-label="RAG 完整链路">
@@ -44,3 +44,4 @@ export default function RagPage() {
     </div>
   );
 }
+import Link from "next/link";
