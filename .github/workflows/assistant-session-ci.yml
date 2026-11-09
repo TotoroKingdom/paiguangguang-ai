@@ -12,6 +12,8 @@ on:
       - ".env.example"
       - ".github/workflows/**"
       - "AGENTS.md"
+      - "docs-codex/**"
+      - "docs-work/**"
   push:
     branches:
       - dev
