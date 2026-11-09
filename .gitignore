@@ -32,5 +32,15 @@ frontend/*.tsbuildinfo
 *.p12
 *.pfx
 
+# SQLite runtime data (database + WAL sidecars must never be committed)
+/.env/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Local audit artifacts
 frontend/.local-audit-*.json
 frontend/.local-*
