@@ -1,7 +1,7 @@
 # feat02 智能助手平台 V1｜连续执行报告
 
-> 日期：2026-11-08
-> 分支：`dev`（worktree `C:\AI\paiguangguang-ai-feat02`，最终基线 `247e4a0` + 本轮取消幂等提交）
+> 日期：2026-11-09
+> 分支：`dev`（worktree `C:\AI\paiguangguang-ai-feat02`，最终基线 `8d5f947`）
 > 状态：开发环境连续实现已分批合并回 `dev`；**未触碰 `main`、未部署生产**。
 
 ## 1. 交付摘要
@@ -19,6 +19,7 @@
 - Alembic：`0001 → 0009`、`downgrade base`、再次 `upgrade head` 均通过；`integrity_check=ok`。
 - 依赖审计：前端生产依赖 0 critical/high；后端 `pip-audit` 无已知漏洞（详见 `DEPENDENCY-AUDIT.md`）。
 - 最终验收报告：`G0-G4-ACCEPTANCE-REPORT.md`。
+- 最终交付报告：`FINAL-DELIVERY-REPORT.md`。
 
 ## 2. 任务状态
 
@@ -53,6 +54,7 @@
 - `0006_capability_governance`
 - `0007_personal_resources`
 - `0008_runtime_runs`
+- `0009_agent_dependency_versions`
 
 新增主要 API：
 
@@ -90,9 +92,9 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 
 未验证：
 
-- 38 个验收场景的逐条冻结证据与新增 Runtime/能力管理页面的完整浏览器覆盖。
 - 真实模型、真实 MCP Server、真实外部 Tool。
-- 生产恢复、TLS、依赖审计、部署回滚。
+- 生产 HTTPS/TLS、生产备份恢复、生产日志/代理缓存与部署回滚。
+- 38 场景中的 `C-06`、`R-01`、`R-02`、`R-03`、`O-01`、`O-03`、`O-05`、`U-11` 仍分别处于 PARTIAL 或 BLOCKED。
 
 ## 6. 真实执行与模拟证据区分
 
@@ -107,12 +109,12 @@ Schema 变化全部为 Expand（先扩展）：保留 `admin_users`、`admin_ses
 2. **生产环境 F00/F16**：无生产只读盘点、备份恢复、TLS/443、Secure Cookie、GitHub secrets、依赖审计证据。
 3. **Q-03 旧管理员正式退役**：旧管理端仍作为兼容桥接，双权威源尚未关闭。
 4. **真实 Runtime 联调**：无模型密钥、无已批准外部 MCP Server，真实调用 NOT_RUN。
-5. **完整 38 场景 E2E**：未执行浏览器级验收，不能宣称 V1 全量闭环。
+5. **38 场景闭环**：当前为 30 PASS / 5 PARTIAL / 3 BLOCKED；真实外部服务与生产场景未完成，不能宣称 V1 全量闭环。
 
 ## 8. 下一步
 
 1. 在获授权的隔离环境执行生产副本的 F00 只读盘点与恢复演练。
 2. 补齐真实模型密钥与已批准 MCP Server 后，跑 R-01～R-06 真实联调。
-3. 补齐个人 Skill 编辑/版本历史、聊天附件正文读取与 MCP 工具级权限细化。
-4. 补齐 38 个验收场景的逐条证据表与剩余 Runtime/能力页面 E2E。
+3. 冻结 U-11 人工恢复 SOP，以及 R-03 等待授权/审批 Run 的产品与安全协议。
+4. 执行 O-03/O-05 的生产日志、代理缓存、浏览器样本和真实旧管理员登录核验。
 5. 生产发布前完成 TLS、Secure Cookie、Origin、生产镜像依赖复核与回滚演练。
