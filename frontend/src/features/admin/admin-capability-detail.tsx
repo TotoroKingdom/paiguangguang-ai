@@ -97,7 +97,6 @@ export function AdminCapabilityDetail({
       active = false;
     };
     // The ID is the resource boundary; other state is derived from the response.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [capabilityId]);
 
   const config = useMemo(() => parseConfig(configText), [configText]);
@@ -329,71 +328,74 @@ export function AdminCapabilityDetail({
                 <label>
                   执行器
                   <select
-                    value={String(config?.executor ?? "http")}
+                    value={String(config?.executor ?? "system")}
                     onChange={(event) => updateConfig("executor", event.target.value)}
                   >
-                    <option value="http">HTTP 执行器（未接入）</option>
-                    <option value="builtin">内置执行器（未接入）</option>
-                    <option value="demo">演示执行器</option>
+                    <option value="system">内置只读 Tool</option>
+                    <option value="mcp">已批准 MCP Tool</option>
+                    <option value="demo">演示执行器（仅开发）</option>
                   </select>
                 </label>
+              </div>
+              {String(config?.executor ?? "system") === "system" && (
                 <label>
-                  超时（秒）
+                  内置工具标识
                   <input
-                    type="number"
-                    min={1}
-                    max={600}
-                    value={Number(config?.timeoutSeconds ?? 30)}
-                    onChange={(event) =>
-                      updateConfig("timeoutSeconds", Number(event.target.value))
-                    }
+                    value={String(config?.tool ?? "")}
+                    onChange={(event) => updateConfig("tool", event.target.value)}
+                    placeholder="system.current_time"
                   />
                 </label>
-              </div>
-              <label>
-                执行器端点
-                <input
-                  value={String(config?.endpoint ?? "")}
-                  onChange={(event) => updateConfig("endpoint", event.target.value)}
-                  placeholder="https://internal.example/tool"
-                />
-              </label>
+              )}
+              {String(config?.executor ?? "system") === "mcp" && (
+                <div className="admin-form-grid">
+                  <label>
+                    平台 MCP Server ID
+                    <input
+                      value={String(config?.mcpServerId ?? "")}
+                      onChange={(event) =>
+                        updateConfig("mcpServerId", event.target.value)
+                      }
+                      placeholder="已批准 Server 的 ID"
+                    />
+                  </label>
+                  <label>
+                    MCP 工具名
+                    <input
+                      value={String(config?.mcpTool ?? "")}
+                      onChange={(event) => updateConfig("mcpTool", event.target.value)}
+                      placeholder="search"
+                    />
+                  </label>
+                </div>
+              )}
             </>
           )}
 
           {detail.kind === "mcp" && (
             <>
-              <label>
-                MCP 服务端点
-                <input
-                  value={String(config?.endpoint ?? "")}
-                  onChange={(event) => updateConfig("endpoint", event.target.value)}
-                  placeholder="https://mcp.example.com/sse"
-                />
-              </label>
               <div className="admin-form-grid">
                 <label>
-                  认证方式
-                  <select
-                    value={String(config?.authType ?? "none")}
-                    onChange={(event) => updateConfig("authType", event.target.value)}
-                  >
-                    <option value="none">无需认证</option>
-                    <option value="bearer">Bearer（仅保存引用）</option>
-                    <option value="header">自定义 Header（仅保存引用）</option>
-                  </select>
+                  平台 MCP Server ID
+                  <input
+                    value={String(config?.mcpServerId ?? "")}
+                    onChange={(event) =>
+                      updateConfig("mcpServerId", event.target.value)
+                    }
+                    placeholder="已批准 Server 的 ID"
+                  />
                 </label>
                 <label>
-                  凭据引用
+                  MCP 工具名
                   <input
-                    value={String(config?.credentialRef ?? "")}
-                    onChange={(event) => updateConfig("credentialRef", event.target.value)}
-                    placeholder="vault://mcp/knowledge"
+                    value={String(config?.mcpTool ?? "")}
+                    onChange={(event) => updateConfig("mcpTool", event.target.value)}
+                    placeholder="search"
                   />
                 </label>
               </div>
               <p className="admin-form-note">
-                控制台只保存凭据引用，不保存明文密钥。连接测试与工具发现将在后续阶段接入。
+                Server 批准、工具发现与个人凭据在 MCP 连接管理中独立治理；能力配置不保存明文 Token。
               </p>
             </>
           )}
@@ -405,8 +407,11 @@ export function AdminCapabilityDetail({
                 <input
                   value={String(config?.model ?? "")}
                   onChange={(event) => updateConfig("model", event.target.value)}
-                  placeholder="尚未接入真实模型"
+                  placeholder="由服务端 Provider 配置决定"
                 />
+                <span className="admin-form-note">
+                  模型密钥只从服务端环境读取，不会保存到能力配置。
+                </span>
               </label>
               <label>
                 System Prompt

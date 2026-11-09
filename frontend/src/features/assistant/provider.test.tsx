@@ -4,6 +4,9 @@ import type { ApiMessage } from "./api";
 import type { ChatMessage, Conversation } from "./types";
 
 const api = vi.hoisted(() => ({
+  streamRun: vi.fn(),
+  retryRunStream: vi.fn(),
+  cancelRun: vi.fn(),
   apiCreateConversation: vi.fn(),
   createConversation: vi.fn(),
   createTurn: vi.fn(),
@@ -23,6 +26,10 @@ const api = vi.hoisted(() => ({
   AssistantApiError: class AssistantApiError extends Error {},
 }));
 vi.mock("./api", () => api);
+const auth = vi.hoisted(() => ({
+  getSession: vi.fn(),
+}));
+vi.mock("@/features/auth/api", () => auth);
 
 const messageRequests = new Map<string, ApiMessage["request"]>();
 
@@ -76,6 +83,7 @@ beforeEach(() => {
     },
   });
   api.apiListConversations.mockResolvedValue([]);
+  auth.getSession.mockRejectedValue(new Error("anonymous"));
   api.apiCreateConversation.mockImplementation(async () => makeConversation());
   api.createConversation.mockImplementation(async () => makeConversation());
   api.createTurn.mockImplementation(async (...args: Parameters<typeof api.apiCreateTurn>) => api.apiCreateTurn(...args));
@@ -201,4 +209,66 @@ it("keeps working in memory when storage is unavailable", () => {
   expect(result.current.storageNotice).toContain("内存");
   act(() => result.current.dispatch({ type: "SET_DRAFT", patch: { text: "内存草稿" } }));
   expect(result.current.state.draft.text).toBe("内存草稿");
+});
+
+it("recovers server-owned turn state after the real run stream disconnects", async () => {
+  auth.getSession.mockResolvedValue({
+    authenticated: true,
+    user: { status: "ACTIVE" },
+    session: { scope: "FULL" },
+  });
+  const conversation = makeConversation("recover-1");
+  const request = {
+    conversationId: conversation.id,
+    clientTurnId: "network-turn",
+    text: "断网恢复",
+    capability: null,
+    fileIds: [],
+    simulateFailure: false,
+  };
+  const userMessage = {
+    ...makeApiMessage("user-network", "user", request),
+    clientTurnId: "network-turn",
+  };
+  const assistantMessage = {
+    ...makeApiMessage("assistant-network", "assistant", request),
+    status: "generating" as const,
+  };
+  api.createConversation.mockResolvedValue(conversation);
+  api.getConversation.mockResolvedValue({
+    ...conversation,
+    loaded: true,
+    version: 2,
+    messages: [toChat(userMessage), toChat(assistantMessage)],
+  });
+  api.streamRun.mockImplementation(async (_input, onEvent) => {
+    onEvent({
+      type: "start",
+      conversation: { ...conversation, version: 2 },
+      userMessage,
+      assistantMessage,
+    });
+    throw new Error("network disconnected");
+  });
+
+  const { result } = renderHook(() => useAssistant(), { wrapper: AssistantProvider });
+  let conversationId: string | null = null;
+  await act(async () => {
+    conversationId = await result.current.sendMessage({
+      text: "断网恢复",
+      fileIds: [],
+      clientTurnId: "network-turn",
+    });
+  });
+
+  expect(auth.getSession).toHaveBeenCalled();
+  expect(api.streamRun).toHaveBeenCalled();
+  expect(api.getConversation).toHaveBeenCalled();
+  expect(conversationId).toBe("recover-1");
+  const recovered = result.current.state.conversations.find(
+    (item) => item.id === "recover-1",
+  );
+  expect(recovered?.messages).toHaveLength(2);
+  expect(recovered?.messages[1].status).toBe("generating");
+  expect(result.current.storageNotice).toContain("已从服务端恢复");
 });

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { AuthProvider } from "@/features/auth/provider";
 
 export const metadata: Metadata = {
   title: "智能助手 · 派广广",
@@ -7,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AssistantProductLayout({ children }: { children: ReactNode }) {
-  return children;
+  return <AuthProvider>{children}</AuthProvider>;
 }

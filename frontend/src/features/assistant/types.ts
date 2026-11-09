@@ -11,6 +11,12 @@ export type Capability = CapabilityRef & {
   version?: number;
   versionId?: string;
   executionMode?: "demo" | "simulated" | "real";
+  ready?: boolean;
+  authorized?: boolean;
+  accessMode?: "all_active" | "granted";
+  testStatus?: string;
+  blockedReason?: string;
+  primaryAction?: string;
 };
 export type ConnectorStatus =
   "connected" | "disconnected" | "unconfigured" | "connecting" | "error" | "unauthorized";
@@ -69,9 +75,11 @@ export type DemoAction =
   | { type: "SET_DRAFT"; patch: Partial<Draft> }
   | { type: "TOGGLE_FAVORITE"; id: string }
   | { type: "IMPORT_SKILL"; skill: Capability }
+  | { type: "SET_SKILLS"; skills: Capability[] }
   | { type: "DELETE_SKILL"; id: string }
   | { type: "UPSERT_CONNECTOR"; connector: ConnectorConfig }
   | { type: "ADD_FILES"; files: DemoFile[] }
+  | { type: "SET_FILES"; files: DemoFile[] }
   | { type: "DELETE_FILE"; id: string }
   | { type: "CREATE_CONVERSATION"; conversation: Conversation }
   | { type: "SET_CATALOG"; catalog: Capability[] }

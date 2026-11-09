@@ -29,8 +29,7 @@ def _verify(value: str) -> str | None:
 
 
 def get_owner_id(request: Request, response: Response) -> str:
-    value = request.cookies.get(settings.owner_cookie_name)
-    owner_id = _verify(value) if value else None
+    owner_id = verified_owner_id(request)
     if owner_id is None:
         owner_id = secrets.token_urlsafe(24)[:32]
         response.set_cookie(
@@ -43,6 +42,11 @@ def get_owner_id(request: Request, response: Response) -> str:
             path="/",
         )
     return owner_id
+
+
+def verified_owner_id(request: Request) -> str | None:
+    value = request.cookies.get(settings.owner_cookie_name)
+    return _verify(value) if value else None
 
 
 def require_json_request(request: Request) -> None:

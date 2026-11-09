@@ -9,6 +9,7 @@ import {
   logoutAdmin,
   type AdminUser,
 } from "./api";
+import { getSession as getUnifiedSession } from "@/features/auth/api";
 
 type AdminAuthState = {
   status: "loading" | "authenticated" | "anonymous";
@@ -37,6 +38,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
       setState({ status: "authenticated", user: session.user, notice: "" });
     } catch (error) {
       if (error instanceof AdminApiError && error.status === 401) {
+        try {
+          const unified = await getUnifiedSession();
+          if (unified.user.role === "ADMIN" && unified.user.status === "ACTIVE") {
+            setState({
+              status: "authenticated",
+              user: {
+                id: unified.user.id,
+                username: unified.user.accountNumber,
+                role: "admin",
+                expiresAt: unified.session.expiresAt,
+              },
+              notice: "",
+            });
+            return;
+          }
+        } catch {
+          /* fall through to anonymous */
+        }
         setState({ status: "anonymous", user: null, notice: "" });
         return;
       }

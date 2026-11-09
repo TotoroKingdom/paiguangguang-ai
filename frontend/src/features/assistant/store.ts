@@ -167,6 +167,8 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       };
     case "IMPORT_SKILL":
       return { ...state, userSkills: [...state.userSkills, action.skill] };
+    case "SET_SKILLS":
+      return { ...state, userSkills: action.skills };
     case "DELETE_SKILL":
       return {
         ...state,
@@ -192,6 +194,8 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       };
     case "ADD_FILES":
       return { ...state, files: [...state.files, ...action.files] };
+    case "SET_FILES":
+      return { ...state, files: action.files };
     case "DELETE_FILE":
       return {
         ...state,

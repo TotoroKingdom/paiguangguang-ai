@@ -8,9 +8,9 @@ PASSWORD_ALGORITHM = "pbkdf2_sha256"
 PASSWORD_ITERATIONS = 390_000
 
 
-def hash_password(password: str) -> str:
-    if len(password) < 12:
-        raise ValueError("Administrator passwords must contain at least 12 characters")
+def hash_password(password: str, *, min_length: int = 12) -> str:
+    if len(password) < min_length:
+        raise ValueError(f"Passwords must contain at least {min_length} characters")
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_ITERATIONS)
     return "$".join(
@@ -21,6 +21,11 @@ def hash_password(password: str) -> str:
             base64.urlsafe_b64encode(digest).decode("ascii"),
         )
     )
+
+
+def hash_user_password(password: str) -> str:
+    """Hash a normal user password. Product rule: minimum 6 characters."""
+    return hash_password(password, min_length=6)
 
 
 def verify_password(password: str, encoded: str) -> bool:
@@ -44,3 +49,7 @@ def new_secret(size: int = 32) -> str:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def hmac_digest(secret: str, value: str) -> str:
+    return hmac.new(secret.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()

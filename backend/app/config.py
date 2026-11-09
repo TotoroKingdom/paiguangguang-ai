@@ -24,6 +24,34 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: SecretStr | None = None
 
+    user_session_cookie_name: str = "paiguangguang_session"
+    user_csrf_cookie_name: str = "paiguangguang_csrf"
+    user_cookie_secure: bool = False
+    user_session_max_age_seconds: int = 60 * 60 * 24 * 7
+    status_session_max_age_seconds: int = 60 * 60
+    registration_enabled: bool = True
+    user_password_min_length: int = 6
+    recovery_code_secret: SecretStr | None = None
+    demo_catalog_enabled: bool = True
+    encryption_key: SecretStr | None = None
+    file_storage_dir: str = ""
+
+    register_rate_per_hour: int = 10
+    register_rate_per_day: int = 50
+    login_rate_per_window: int = 5
+    login_ip_rate_per_window: int = 20
+    login_rate_window_seconds: int = 900
+    recovery_rate_per_hour: int = 5
+    recovery_rate_per_day: int = 20
+
+    llm_provider: str = "fake"
+    llm_base_url: str = ""
+    llm_api_key: SecretStr | None = None
+    llm_model: str = ""
+    llm_timeout_seconds: int = 120
+    llm_daily_request_limit: int = 20
+    run_max_steps: int = 6
+
     model_config = SettingsConfigDict(env_file=".env", env_prefix="ASSISTANT_", extra="ignore")
 
     @property
@@ -54,6 +82,25 @@ class Settings(BaseSettings):
                 or "your-org" in self.allowed_origins
             ):
                 raise RuntimeError("ASSISTANT_ALLOWED_ORIGINS must be set in production")
+            if not self.user_cookie_secure:
+                raise RuntimeError("ASSISTANT_USER_COOKIE_SECURE must be true in production")
+            if self.demo_catalog_enabled:
+                raise RuntimeError("ASSISTANT_DEMO_CATALOG_ENABLED must be false in production")
+            origins = [
+                item.strip()
+                for item in self.allowed_origins.split(",")
+                if item.strip()
+            ]
+            if any(not item.startswith("https://") for item in origins):
+                raise RuntimeError("ASSISTANT_ALLOWED_ORIGINS must contain HTTPS origins only")
+            provider = self.llm_provider.strip().lower()
+            if provider in {"", "fake", "test", "fake-slow"}:
+                raise RuntimeError("ASSISTANT_LLM_PROVIDER must be a real provider in production")
+            if not self.llm_base_url.strip() or not self.llm_model.strip() or self.llm_api_key is None:
+                raise RuntimeError(
+                    "ASSISTANT_LLM_BASE_URL, ASSISTANT_LLM_MODEL and "
+                    "ASSISTANT_LLM_API_KEY are required in production"
+                )
             bootstrap_password = (
                 self.admin_password.get_secret_value()
                 if self.admin_password
@@ -73,6 +120,29 @@ class Settings(BaseSettings):
             "http://localhost:3100",
             "http://127.0.0.1:3100",
         }
+
+    @property
+    def recovery_secret(self) -> str:
+        if self.recovery_code_secret is not None:
+            return self.recovery_code_secret.get_secret_value()
+        return self.owner_cookie_secret
+
+    @property
+    def encryption_secret(self) -> str:
+        if self.encryption_key is not None:
+            return self.encryption_key.get_secret_value()
+        return self.owner_cookie_secret
+
+    @property
+    def storage_root(self) -> str:
+        if self.file_storage_dir.strip():
+            return self.file_storage_dir.strip()
+        base = self.database_path
+        if base:
+            from pathlib import Path
+
+            return str(Path(base).resolve().parent / "user-files")
+        return "user-files"
 
 
 @lru_cache

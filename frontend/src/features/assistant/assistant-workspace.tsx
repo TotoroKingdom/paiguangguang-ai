@@ -9,6 +9,7 @@ import { AssistantDialog } from "./assistant-dialog";
 import { AssistantComposer } from "./assistant-composer";
 import type { Conversation } from "./types";
 import { AdminApiError, getAdminSession, type AdminUser } from "@/features/admin/api";
+import { useAuth } from "@/features/auth/provider";
 
 const navigation = [
   { href: "/assistant", name: "新建聊天", icon: "plus" },
@@ -20,6 +21,7 @@ const navigation = [
 ];
 
 export function AssistantWorkspace({ children }: { children: ReactNode }) {
+  const { session, logout } = useAuth();
   const {
     state,
     ready,
@@ -139,9 +141,14 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             ? "智能体中心"
             : pathname === "/assistant/files"
               ? "文件库"
+              : pathname === "/assistant/creator"
+                ? "创作中心"
               : pathname.startsWith("/assistant/chat/")
                 ? "聊天"
                 : "新建聊天");
+  const accountName =
+    session?.user.nickname || (session ? session.user.accountNumber : "派广广");
+  const accountInitial = accountName.slice(0, 1).toUpperCase();
   const editConversation = (conversation: Conversation) => {
     setMobileOpen(false);
     setEditing(conversation);
@@ -225,6 +232,17 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
               <span className="as-sidebar-label">{item.name}</span>
             </Link>
           ))}
+          {session?.user.role === "CREATOR" || session?.user.role === "ADMIN" ? (
+            <Link
+              href="/assistant/creator"
+              title="创作中心"
+              className={`as-nav-link${pathname === "/assistant/creator" ? " as-nav-link--active" : ""}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              <AssistantIcon name="spark" size={21} />
+              <span className="as-sidebar-label">创作中心</span>
+            </Link>
+          ) : null}
         </nav>
         <div className="as-recent as-sidebar-label">
           <div className="as-recent-heading">
@@ -293,7 +311,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           <div className="as-topbar-end">
             <span className="as-demo-label">
               <i />
-              服务端目录 · 模拟执行
+              {session?.user.status === "ACTIVE" ? "账号已登录 · 服务端会话" : "访客 · 模拟回复"}
             </span>
             {activeConversation && (
               <button
@@ -312,30 +330,64 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 aria-haspopup="menu"
                 onClick={() => setAccountOpen((current) => !current)}
               >
-                <span>{adminUser ? adminUser.username.slice(0, 1).toUpperCase() : "派"}</span>
+                <span>{adminUser ? adminUser.username.slice(0, 1).toUpperCase() : accountInitial}</span>
                 <AssistantIcon name="chevron" size={14} />
               </button>
               {accountOpen && (
                 <div className="as-account-popover" role="menu" aria-label="账户菜单">
                   <div className="as-account-summary">
                     <span className="as-avatar">
-                      {adminUser ? adminUser.username.slice(0, 1).toUpperCase() : "派"}
+                      {adminUser ? adminUser.username.slice(0, 1).toUpperCase() : accountInitial}
                     </span>
                     <div>
-                      <strong>{adminUser ? adminUser.username : "派广广"}</strong>
-                      <small>{adminUser ? "管理员身份已登录" : "匿名浏览器会话"}</small>
+                      <strong>{adminUser ? adminUser.username : accountName}</strong>
+                      <small>
+                        {adminUser
+                          ? "管理员身份已登录"
+                          : session
+                            ? `${session.user.role} · ${session.user.status}`
+                            : "匿名浏览器会话"}
+                      </small>
                     </div>
                   </div>
-                  {adminUser && (
-                    <Link
-                      href="/assistant/admin"
-                      role="menuitem"
-                      onClick={() => setAccountOpen(false)}
-                    >
+                  {!session && (
+                    <>
+                      <Link href="/assistant/login" role="menuitem" onClick={() => setAccountOpen(false)}>
+                        <AssistantIcon name="arrow" size={17} />
+                        登录 / 注册
+                      </Link>
+                      <Link href="/assistant/register" role="menuitem" onClick={() => setAccountOpen(false)}>
+                        <AssistantIcon name="plus" size={17} />
+                        创建数字账号
+                      </Link>
+                    </>
+                  )}
+                  {session && (
+                    <Link href="/assistant/me" role="menuitem" onClick={() => setAccountOpen(false)}>
                       <AssistantIcon name="settings" size={17} />
-                      管理控制台
-                      <AssistantIcon name="arrow" size={14} />
+                      个人中心
                     </Link>
+                  )}
+                  {(adminUser || session?.user.role === "ADMIN") && (
+                    <>
+                      <Link
+                        href="/assistant/admin"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="settings" size={17} />
+                        管理控制台
+                        <AssistantIcon name="arrow" size={14} />
+                      </Link>
+                      <Link
+                        href="/assistant/admin/users"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="skill" size={17} />
+                        用户管理
+                      </Link>
+                    </>
                   )}
                   <button
                     type="button"
@@ -353,6 +405,19 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                     <AssistantIcon name="arrow" size={17} />
                     返回网站
                   </Link>
+                  {session && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        void logout();
+                      }}
+                    >
+                      <AssistantIcon name="close" size={17} />
+                      退出登录
+                    </button>
+                  )}
                 </div>
               )}
             </div>

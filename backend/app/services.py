@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.models import Conversation, Message
 from app.config import settings
 from app.modules.capabilities.service import CapabilityService
-from app.repositories import ConversationRepository, utc_now
+from app.repositories import ConversationRepository, OwnerScope, utc_now
 from app.schemas import (
     AttachmentSnapshot,
     ConversationResponse,
@@ -66,8 +66,10 @@ class ConversationService:
         self.session = session
         self.repository = ConversationRepository(session)
 
-    def get_owned(self, owner_id: str, conversation_id: str, *, with_messages: bool = False) -> Conversation:
-        conversation = self.repository.get(owner_id, conversation_id, with_messages=with_messages)
+    def get_owned(
+        self, scope: OwnerScope, conversation_id: str, *, with_messages: bool = False
+    ) -> Conversation:
+        conversation = self.repository.get(scope, conversation_id, with_messages=with_messages)
         if conversation is None:
             raise HTTPException(status_code=404, detail="Conversation not found")
         return conversation
@@ -91,8 +93,8 @@ class ConversationService:
             conversation.version += 1
             self.session.commit()
 
-    def detail(self, owner_id: str, conversation_id: str) -> ConversationResponse:
-        conversation = self.get_owned(owner_id, conversation_id, with_messages=True)
+    def detail(self, scope: OwnerScope, conversation_id: str) -> ConversationResponse:
+        conversation = self.get_owned(scope, conversation_id, with_messages=True)
         self.recover_orphaned_generating(conversation)
         return ConversationResponse(
             **summary(conversation).model_dump(),
@@ -101,57 +103,65 @@ class ConversationService:
 
     def create(
         self,
-        owner_id: str,
+        scope: OwnerScope,
         title: str = "新对话",
         migration_key: str | None = None,
         conversation_id: str | None = None,
     ) -> ConversationSummary:
         if migration_key:
-            existing = self.repository.get_by_migration_key(owner_id, migration_key)
+            existing = self.repository.get_by_migration_key(scope, migration_key)
             if existing is not None:
                 return summary(existing)
-        conversation = self.repository.create(owner_id, title, migration_key, conversation_id)
+        conversation = self.repository.create(scope, title, migration_key, conversation_id)
         try:
             self.session.commit()
         except IntegrityError:
             self.session.rollback()
             if migration_key:
-                existing = self.repository.get_by_migration_key(owner_id, migration_key)
+                existing = self.repository.get_by_migration_key(scope, migration_key)
                 if existing is not None:
                     return summary(existing)
             raise
         return summary(conversation)
 
-    def rename(self, owner_id: str, conversation_id: str, title: str, version: int) -> ConversationSummary:
+    def rename(
+        self, scope: OwnerScope, conversation_id: str, title: str, version: int
+    ) -> ConversationSummary:
         now = utc_now()
-        result = self.session.execute(
-            update(Conversation)
-            .where(
-                Conversation.owner_id == owner_id,
-                Conversation.id == conversation_id,
-                Conversation.version == version,
+        statement = update(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.version == version,
+        )
+        if scope.user_id:
+            statement = statement.where(Conversation.user_id == scope.user_id)
+        else:
+            statement = statement.where(
+                Conversation.owner_id == scope.owner_id, Conversation.user_id.is_(None)
             )
-            .values(title=title, updated_at=now, version=Conversation.version + 1)
+        result = self.session.execute(
+            statement.values(title=title, updated_at=now, version=Conversation.version + 1)
         )
         if result.rowcount != 1:
-            conversation = self.get_owned(owner_id, conversation_id)
+            conversation = self.get_owned(scope, conversation_id)
             raise HTTPException(
                 status_code=409,
                 detail="Conversation version conflict"
                 if conversation.version != version
                 else "Conversation update conflict",
             )
-        conversation = self.get_owned(owner_id, conversation_id)
+        conversation = self.get_owned(scope, conversation_id)
         self.session.commit()
         return summary(conversation)
 
-    def delete(self, owner_id: str, conversation_id: str) -> None:
-        conversation = self.get_owned(owner_id, conversation_id)
+    def delete(self, scope: OwnerScope, conversation_id: str) -> None:
+        conversation = self.get_owned(scope, conversation_id)
         self.session.delete(conversation)
         self.session.commit()
 
-    def create_turn(self, owner_id: str, conversation_id: str, request: TurnCreate) -> TurnResponse:
-        conversation = self.get_owned(owner_id, conversation_id, with_messages=True)
+    def create_turn(
+        self, scope: OwnerScope, conversation_id: str, request: TurnCreate
+    ) -> TurnResponse:
+        conversation = self.get_owned(scope, conversation_id, with_messages=True)
         if request.request.conversationId not in {None, conversation_id}:
             raise HTTPException(status_code=422, detail="Request conversation does not match path")
         if request.request.text != request.text:
@@ -181,13 +191,30 @@ class ConversationService:
         capability_definition = None
         capability_version = None
         capability_public = None
+        personal_skill = None
         if request.capability is not None:
-            capability_definition, capability_version, capability_public = (
-                CapabilityService(self.session).resolve_published(
-                    request.capability.id, request.capability.kind
+            if request.capability.kind == "skill" and scope.user_id:
+                from app.modules.personal.models import PersonalSkill
+
+                personal_skill = self.session.scalar(
+                    select(PersonalSkill).where(
+                        PersonalSkill.id == request.capability.id,
+                        PersonalSkill.user_id == scope.user_id,
+                    )
                 )
-            )
-            request.capability.name = capability_public.name
+            if personal_skill is not None:
+                request.capability.name = personal_skill.name
+            else:
+                capability_definition, capability_version, capability_public = (
+                    CapabilityService(self.session).resolve_published(
+                        request.capability.id, request.capability.kind
+                    )
+                )
+                if not CapabilityService(self.session).can_execute(
+                    capability_definition, scope.user_id
+                ):
+                    raise HTTPException(status_code=403, detail="Capability access denied")
+                request.capability.name = capability_public.name
         seq = self.repository.next_seq(conversation_id)
         now = utc_now()
         user_message = Message(
@@ -228,7 +255,7 @@ class ConversationService:
                 version=capability_version,
                 public=capability_public,
                 conversation_id=conversation_id,
-                owner_id=owner_id,
+                owner_id=scope.user_id or scope.owner_id,
             )
         try:
             self.session.commit()
@@ -264,9 +291,9 @@ class ConversationService:
         )
 
     def patch_message(
-        self, owner_id: str, conversation_id: str, message_id: str, patch: MessagePatch
+        self, scope: OwnerScope, conversation_id: str, message_id: str, patch: MessagePatch
     ) -> MessageResponse:
-        conversation = self.get_owned(owner_id, conversation_id, with_messages=True)
+        conversation = self.get_owned(scope, conversation_id, with_messages=True)
         message = next((item for item in conversation.messages if item.id == message_id), None)
         if message is None or message.role != "assistant":
             raise HTTPException(status_code=404, detail="Message not found")

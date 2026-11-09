@@ -11,6 +11,8 @@ sys.path.insert(0, str(BACKEND_ROOT))
 TEST_DATABASE = Path(tempfile.gettempdir()) / "paiguangguang-assistant-tests.db"
 os.environ["ASSISTANT_DATABASE_URL"] = f"sqlite:///{TEST_DATABASE.as_posix()}"
 os.environ["ASSISTANT_OWNER_COOKIE_SECRET"] = "test-secret-for-assistant-owner-cookie-32"
+os.environ["ASSISTANT_USER_COOKIE_SECURE"] = "false"
+os.environ["ASSISTANT_DEMO_CATALOG_ENABLED"] = "true"
 
 from app.db import Base, engine
 from app.db import SessionLocal

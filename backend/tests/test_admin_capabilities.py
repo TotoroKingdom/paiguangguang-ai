@@ -3,6 +3,7 @@ from datetime import timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from app.config import Settings, settings
@@ -76,6 +77,31 @@ def create_capability(client: TestClient, csrf: str, **overrides) -> dict:
     )
     assert response.status_code == 201, response.text
     return response.json()
+
+
+def test_admin_settings_reflect_the_server_runtime_without_leaking_keys(monkeypatch):
+    create_admin()
+    client = TestClient(app)
+    login(client)
+
+    monkeypatch.setattr(settings, "llm_provider", "fake")
+    fake_settings = client.get("/api/v1/admin/settings")
+    assert fake_settings.status_code == 200, fake_settings.text
+    assert fake_settings.json()["executionMode"] == "fake"
+    assert any(
+        "Agent Runtime" in note for note in fake_settings.json()["notes"]
+    )
+    assert all(
+        "未接入真实 LLM" not in note for note in fake_settings.json()["notes"]
+    )
+
+    secret = "provider-key-must-not-appear"
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_api_key", SecretStr(secret))
+    real_settings = client.get("/api/v1/admin/settings")
+    assert real_settings.status_code == 200, real_settings.text
+    assert real_settings.json()["executionMode"] == "openai"
+    assert secret not in real_settings.text
 
 
 def test_admin_login_session_logout_and_csrf():
@@ -194,9 +220,43 @@ def test_production_requires_secure_admin_cookie():
         owner_cookie_secret="x" * 40,
         owner_cookie_secure=True,
         admin_cookie_secure=True,
+            user_cookie_secure=True,
+            demo_catalog_enabled=False,
+            llm_provider="openai",
+            llm_base_url="https://llm.example.com/v1",
+            llm_model="approved-test-model",
+            llm_api_key="test-key",
         allowed_origins="https://example.com",
     )
     secure.validate_runtime()
+
+
+def test_production_rejects_fake_llm_and_http_origins():
+    base = dict(
+        environment="production",
+        database_url="sqlite:///./production-check.db",
+        owner_cookie_secret="x" * 40,
+        owner_cookie_secure=True,
+        admin_cookie_secure=True,
+        user_cookie_secure=True,
+        demo_catalog_enabled=False,
+        llm_provider="openai",
+        llm_base_url="https://llm.example.com/v1",
+        llm_model="approved-test-model",
+        llm_api_key="test-key",
+        allowed_origins="https://example.com",
+    )
+    fake = Settings(**{**base, "llm_provider": "fake"})
+    with pytest.raises(RuntimeError, match="ASSISTANT_LLM_PROVIDER"):
+        fake.validate_runtime()
+
+    http_origin = Settings(**{**base, "allowed_origins": "http://example.com"})
+    with pytest.raises(RuntimeError, match="HTTPS origins only"):
+        http_origin.validate_runtime()
+
+    missing_key = Settings(**{**base, "llm_api_key": None})
+    with pytest.raises(RuntimeError, match="ASSISTANT_LLM_API_KEY"):
+        missing_key.validate_runtime()
 
 
 def test_capability_draft_publish_disable_and_immutable_versions():

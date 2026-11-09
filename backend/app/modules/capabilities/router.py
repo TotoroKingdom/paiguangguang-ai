@@ -28,6 +28,10 @@ from app.modules.capabilities.schemas import (
     RunItem,
     RunListResponse,
     SettingsResponse,
+    ReviewActionRequest,
+    ReviewEventView,
+    ReviewListResponse,
+    GrantRequest,
 )
 from app.modules.capabilities.service import (
     CapabilityService,
@@ -36,7 +40,15 @@ from app.modules.capabilities.service import (
     loads,
     run_count,
 )
-from app.modules.identity.dependencies import require_admin, require_csrf
+from app.modules.identity.dependencies import (
+    require_admin,
+    require_csrf,
+    require_creator,
+    require_unified_admin,
+    require_user_csrf,
+)
+from app.modules.identity.user_service import UserIdentityService
+from app.modules.identity.user_service import UserPrincipal
 from app.modules.identity.service import AdminPrincipal
 from app.modules.observability.models import AuditEvent
 from app.modules.observability.service import record_audit
@@ -44,24 +56,40 @@ from app.owner import require_json_request
 
 public_router = APIRouter(prefix="/capabilities", tags=["capabilities"])
 admin_router = APIRouter(prefix="/admin", tags=["admin-capabilities"])
+creator_router = APIRouter(prefix="/creator", tags=["creator-capabilities"])
+governance_router = APIRouter(prefix="/admin/governance", tags=["admin-governance"])
+
+
+def catalog_user_id(request: Request, session: Session) -> str | None:
+    token = request.cookies.get(settings.user_session_cookie_name)
+    if not token:
+        return None
+    principal = UserIdentityService(session).resolve_session(token)
+    return principal.user.id if principal else None
 
 
 @public_router.get("", response_model=PublicCapabilityListResponse)
 def list_public_capabilities(
+    request: Request,
     kind: str | None = Query(default=None, pattern="^(tool|skill|mcp|agent)$"),
     q: str = Query(default="", max_length=120),
     session: Session = Depends(get_db),
 ):
     return PublicCapabilityListResponse(
-        items=CapabilityService(session).public_list(kind=kind, query=q)
+        items=CapabilityService(session).public_list(
+            kind=kind, query=q, user_id=catalog_user_id(request, session)
+        )
     )
 
 
 @public_router.get("/{capability_id}", response_model=PublicCapability)
-def get_public_capability(capability_id: str, session: Session = Depends(get_db)):
+def get_public_capability(
+    capability_id: str, request: Request, session: Session = Depends(get_db)
+):
     try:
-        _, _, public = CapabilityService(session).resolve_published(capability_id)
-        return public
+        return CapabilityService(session).public_capability(
+            capability_id, catalog_user_id(request, session)
+        )
     except HTTPException as error:
         raise HTTPException(status_code=404, detail="Capability not found") from error
 
@@ -424,6 +452,10 @@ def list_audit_events(
 def get_admin_settings(
     principal: AdminPrincipal = Depends(require_admin),
 ):
+    provider = settings.llm_provider.strip().lower()
+    execution_mode = (
+        "fake" if provider in {"", "fake", "test", "fake-slow"} else provider
+    )
     return SettingsResponse(
         environment=settings.environment,
         database=settings.database_url.split("?", 1)[0],
@@ -435,11 +467,361 @@ def get_admin_settings(
             "windowSeconds": settings.admin_login_window_seconds,
             "lockSeconds": settings.admin_login_lock_seconds,
         },
-        executionMode="simulated-only",
+        executionMode=execution_mode,
         notes=[
-            "当前未接入真实 LLM、MCP Runtime 或 Agent Loop。",
-            "管理端能力发布只影响用户端目录与调用准入校验。",
-            "匿名浏览器会话继续用于普通聊天，不用于管理员鉴权。",
+            "服务端 Agent Runtime、Tool Gateway、MCP Client 与 Run/Step/Trace 已启用。",
+            "Fake Provider 只用于开发与自动化；生产必须配置真实服务端模型。",
+            "模型密钥只从服务端环境读取，不在管理页面、能力配置或 Run 记录中保存。",
+            "MCP Server 必须由平台审核批准，普通用户只能使用本人连接和个人授权。",
+            "匿名访客仍使用明确标注的本地模拟；Active 用户执行走服务端 Runtime。",
             f"当前管理员：{principal.user.username}（{principal.user.role}）",
         ],
     )
+
+
+# --------------------------------------------------------------------- creator
+@creator_router.get("/capabilities", response_model=CapabilityListResponse)
+def list_creator_capabilities(
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    return CapabilityListResponse(
+        items=CapabilityService(session).list_owned(principal.user.id)
+    )
+
+
+@creator_router.post("/capabilities", response_model=CapabilityDetail, status_code=201)
+def create_creator_capability(
+    payload: CapabilityCreate,
+    request: Request,
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    detail = CapabilityService(session).create(
+        payload,
+        actor_id=principal.user.id,
+        owner_id=principal.user.id,
+        visibility="platform",
+        access_mode="granted",
+        review_status="draft",
+        source="creator",
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.created",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"kind": detail.kind, "name": detail.name},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+def _owned_capability(
+    capability_id: str, principal: UserPrincipal, session: Session
+) -> CapabilityDefinition:
+    definition = session.scalar(
+        select(CapabilityDefinition)
+        .where(CapabilityDefinition.id == capability_id)
+        .options(selectinload(CapabilityDefinition.versions))
+    )
+    if definition is None or definition.owner_id != principal.user.id:
+        raise HTTPException(status_code=404, detail="Capability not found")
+    return definition
+
+
+@creator_router.patch("/capabilities/{capability_id}", response_model=CapabilityDetail)
+def update_creator_capability(
+    capability_id: str,
+    payload: CapabilityUpdate,
+    request: Request,
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    definition = _owned_capability(capability_id, principal, session)
+    if definition.status not in {"draft", "published"} or definition.review_status == "submitted":
+        raise HTTPException(status_code=409, detail="Capability is not editable")
+    detail = CapabilityService(session).update(
+        capability_id, payload, actor_id=principal.user.id
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.draft.saved",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"draftVersion": detail.draftVersion},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+@creator_router.post(
+    "/capabilities/{capability_id}/test", response_model=CapabilityDetail
+)
+def test_creator_capability(
+    capability_id: str,
+    request: Request,
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    _owned_capability(capability_id, principal, session)
+    detail = CapabilityService(session).test_capability(
+        capability_id, actor_id=principal.user.id
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.tested",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"status": detail.testStatus},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+@creator_router.post(
+    "/capabilities/{capability_id}/submit", response_model=CapabilityDetail
+)
+def submit_creator_capability(
+    capability_id: str,
+    payload: ReviewActionRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_creator),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    _owned_capability(capability_id, principal, session)
+    detail = CapabilityService(session).submit(
+        capability_id, actor_id=principal.user.id, reason=payload.reason
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="creator.capability.submitted",
+        resource_type="capability",
+        resource_id=detail.id,
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+# ---------------------------------------------------------- admin governance
+@admin_router.get("/reviews", response_model=ReviewListResponse)
+def list_reviews(
+    _: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    items = CapabilityService(session).list_reviews()
+    return ReviewListResponse(
+        items=[
+            ReviewEventView(
+                id=item.id,
+                capabilityId=item.capability_id,
+                versionId=item.version_id,
+                action=item.action,
+                actorId=item.actor_id,
+                reason=item.reason,
+                createdAt=item.created_at.replace(tzinfo=timezone.utc),
+            )
+            for item in items
+        ]
+    )
+
+
+def _review_capability(
+    capability_id: str,
+    action: str,
+    payload: ReviewActionRequest,
+    request: Request,
+    principal: UserPrincipal,
+    session: Session,
+) -> CapabilityDetail:
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    detail = CapabilityService(session).review(
+        capability_id, action, actor_id=principal.user.id, reason=payload.reason
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action=f"admin.capability.{action}",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"reason": payload.reason},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+@admin_router.post("/capabilities/{capability_id}/approve", response_model=CapabilityDetail)
+def approve_capability(
+    capability_id: str,
+    payload: ReviewActionRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    return _review_capability(capability_id, "approve", payload, request, principal, session)
+
+
+@admin_router.post("/capabilities/{capability_id}/reject", response_model=CapabilityDetail)
+def reject_capability(
+    capability_id: str,
+    payload: ReviewActionRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    return _review_capability(capability_id, "reject", payload, request, principal, session)
+
+
+@admin_router.post(
+    "/capabilities/{capability_id}/rollback/{version_id}",
+    response_model=CapabilityDetail,
+)
+def rollback_capability(
+    capability_id: str,
+    version_id: str,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    detail = CapabilityService(session).rollback(
+        capability_id, version_id, actor_id=principal.user.id
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="admin.capability.rollback",
+        resource_type="capability",
+        resource_id=detail.id,
+        detail={"versionId": version_id},
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+@admin_router.post("/capabilities/{capability_id}/grants", status_code=204)
+def grant_capability(
+    capability_id: str,
+    payload: GrantRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    CapabilityService(session).grant(
+        capability_id, payload.userId, actor_id=principal.user.id
+    )
+    return None
+
+
+@admin_router.delete("/capabilities/{capability_id}/grants/{user_id}", status_code=204)
+def revoke_capability_grant(
+    capability_id: str,
+    user_id: str,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_user_csrf(request, principal)
+    CapabilityService(session).revoke_grant(
+        capability_id, user_id, actor_id=principal.user.id
+    )
+    return None
+
+
+@governance_router.get("/capabilities", response_model=CapabilityListResponse)
+def governance_list_capabilities(
+    kind: str | None = Query(default=None, pattern="^(tool|skill|mcp|agent)$"),
+    status: str | None = Query(default=None, pattern="^(draft|published|disabled)$"),
+    q: str = Query(default="", max_length=120),
+    _: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    return CapabilityListResponse(
+        items=CapabilityService(session).list(kind=kind, status=status, query=q)
+    )
+
+
+@governance_router.post(
+    "/capabilities/{capability_id}/release", response_model=CapabilityDetail
+)
+def governance_release_capability(
+    capability_id: str,
+    payload: PublishRequest,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    detail = CapabilityService(session).publish(
+        capability_id,
+        version_id=payload.versionId,
+        changelog=payload.changelog,
+        actor_id=principal.user.id,
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="admin.capability.released",
+        resource_type="capability",
+        resource_id=detail.id,
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
+
+
+@governance_router.post(
+    "/capabilities/{capability_id}/retire", response_model=CapabilityDetail
+)
+def governance_retire_capability(
+    capability_id: str,
+    request: Request,
+    principal: UserPrincipal = Depends(require_unified_admin),
+    session: Session = Depends(get_db),
+):
+    require_json_request(request)
+    require_user_csrf(request, principal)
+    detail = CapabilityService(session).disable(
+        capability_id, actor_id=principal.user.id
+    )
+    record_audit(
+        session,
+        actor_type="user",
+        actor_id=principal.user.id,
+        action="admin.capability.retired",
+        resource_type="capability",
+        resource_id=detail.id,
+        client_ip=request.client.host if request.client else "",
+    )
+    session.commit()
+    return detail
