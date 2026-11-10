@@ -285,7 +285,6 @@ export async function streamRun(
       capabilityId: input.capability?.id ?? null,
       capabilityKind: input.capability?.kind ?? null,
       toolArguments: {},
-      mode: "fake",
     }),
   });
   if (!response.ok || !response.body) {

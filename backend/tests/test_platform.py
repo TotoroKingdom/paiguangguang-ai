@@ -14,13 +14,14 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.core.security import hash_user_password
+from app.core.errors import APIError
 from app.db import SessionLocal
 from app.main import app
 from app.modules.identity.models import User
 from app.modules.capabilities.models import CapabilityDefinition, CapabilityVersion
 from app.modules.identity.user_service import UserIdentityService
 from app.modules.runtime.models import AgentRun, RunStep
-from app.modules.runtime.providers import LLMChunk
+from app.modules.runtime.providers import LLMChunk, build_provider
 from app.modules.runtime.service import RuntimeService
 from app.modules.personal.models import McpServer
 from app.modules.runtime.mcp_client import McpClient, set_transport_factory
@@ -366,7 +367,11 @@ def test_runtime_executes_readonly_tool_and_persists_run_and_steps():
     assert other.get(f"/api/v1/assistant/runs/{body['run']['id']}").status_code == 404
 
 
-def test_real_mode_without_configuration_fails_honestly():
+def test_real_mode_without_configuration_fails_honestly(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_api_key", None)
     user_id = make_user("803")
     user = new_client()
     login(user, "803")
@@ -832,7 +837,7 @@ def test_runtime_times_out_and_persists_terminal_state(monkeypatch):
     conversation_id = create_conversation(client)
     monkeypatch.setattr(
         "app.modules.runtime.service.build_provider",
-        lambda mode: SlowProvider(delay=0.2, chunks=2),
+        lambda _mode=None: SlowProvider(delay=0.2, chunks=2),
     )
     monkeypatch.setattr("app.config.settings.llm_timeout_seconds", 0.05)
     response = client.post(
@@ -857,7 +862,7 @@ def test_runtime_cancel_is_observed_between_chunks(monkeypatch):
     make_user("911")
     monkeypatch.setattr(
         "app.modules.runtime.service.build_provider",
-        lambda mode: SlowProvider(delay=0.03, chunks=40),
+        lambda _mode=None: SlowProvider(delay=0.03, chunks=40),
     )
     with SessionLocal() as session:
         user = session.scalar(select(User).where(User.account_number == "911"))
@@ -1416,6 +1421,128 @@ def test_openai_compatible_provider_streams_from_local_server(monkeypatch):
     assert body["run"]["provider"] == "openai"
 
 
+def test_client_cannot_override_the_server_configured_provider(monkeypatch):
+    make_user("966")
+    user = new_client()
+    login(user, "966")
+    conversation_id = create_conversation(user)
+    with local_openai_server(chunks=["服务端", "Provider"]) as port:
+        monkeypatch.setattr(settings, "llm_provider", "openai")
+        monkeypatch.setattr(settings, "llm_base_url", f"http://127.0.0.1:{port}/v1")
+        monkeypatch.setattr(settings, "llm_model", "local-test-model")
+        monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+        response = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "provider-trust-boundary",
+                "text": "客户端请求 fake，但服务端应使用真实配置",
+                "mode": "fake",
+            },
+            headers=headers(user),
+        )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "completed"
+    assert body["run"]["provider"] == "openai"
+    assert body["run"]["outputText"] == "服务端Provider"
+    assert "FakeProvider" not in body["run"]["outputText"]
+
+
+def test_initial_and_retry_use_the_same_configured_provider(monkeypatch):
+    make_user("967")
+    user = new_client()
+    login(user, "967")
+    conversation_id = create_conversation(user)
+    with local_openai_server(chunks=[], status=503) as port:
+        monkeypatch.setattr(settings, "llm_provider", "openai")
+        monkeypatch.setattr(settings, "llm_base_url", f"http://127.0.0.1:{port}/v1")
+        monkeypatch.setattr(settings, "llm_model", "local-test-model")
+        monkeypatch.setattr(settings, "llm_api_key", SecretStr("local-test-key"))
+        first = user.post(
+            "/api/v1/assistant/runs",
+            json={
+                "conversationId": conversation_id,
+                "clientTurnId": "provider-retry-first",
+                "text": "初次执行使用服务端 Provider",
+                "mode": "fake",
+            },
+            headers=headers(user),
+        )
+        assert first.status_code == 200, first.text
+        assert first.json()["run"]["errorCode"] == "LLM_UPSTREAM_ERROR"
+        assistant_id = user.get(f"/api/v1/conversations/{conversation_id}").json()["messages"][-1]["id"]
+        retry = user.post(
+            "/api/v1/assistant/runs/retry/stream",
+            json={
+                "conversationId": conversation_id,
+                "messageId": assistant_id,
+                "mode": "fake",
+            },
+            headers=headers(user),
+        )
+    assert retry.status_code == 200
+    assert '"code": "LLM_UPSTREAM_ERROR"' in retry.text
+    assert "FakeProvider" not in retry.text
+
+
+def test_test_environment_can_run_the_server_configured_fake_provider(monkeypatch):
+    make_user("968")
+    user = new_client()
+    login(user, "968")
+    conversation_id = create_conversation(user)
+    monkeypatch.setattr(settings, "environment", "test")
+    monkeypatch.setattr(settings, "llm_provider", "fake")
+    response = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "test-fake-provider",
+            "text": "测试环境 Fake",
+            "mode": "openai",
+        },
+        headers=headers(user),
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["run"]["status"] == "completed"
+    assert response.json()["run"]["provider"] == "fake"
+
+
+def test_missing_real_model_fails_without_falling_back_to_fake(monkeypatch):
+    make_user("969")
+    user = new_client()
+    login(user, "969")
+    conversation_id = create_conversation(user)
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_api_key", None)
+    response = user.post(
+        "/api/v1/assistant/runs",
+        json={
+            "conversationId": conversation_id,
+            "clientTurnId": "missing-real-model",
+            "text": "没有配置真实模型",
+            "mode": "fake",
+        },
+        headers=headers(user),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["run"]["status"] == "failed"
+    assert body["run"]["errorCode"] == "REAL_PROVIDER_NOT_CONFIGURED"
+    assert "FakeProvider" not in body["run"]["outputText"]
+    assert "FakeProvider" not in body["assistantMessage"]["content"]
+
+
+def test_production_runtime_rejects_a_fake_provider(monkeypatch):
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "llm_provider", "fake")
+    with pytest.raises(APIError) as error:
+        build_provider()
+    assert error.value.code == "REAL_PROVIDER_NOT_CONFIGURED"
+
+
 def test_openai_compatible_provider_surfaces_upstream_error(monkeypatch):
     make_user("961")
     user = new_client()
@@ -1507,7 +1634,11 @@ def test_openai_provider_truncated_stream_is_not_success(monkeypatch):
     assert body["run"]["errorCode"] == "LLM_STREAM_TRUNCATED"
 
 
-def test_retry_reuses_assistant_message_without_duplicate_user_turn():
+def test_retry_reuses_assistant_message_without_duplicate_user_turn(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_api_key", None)
     make_user("963")
     user = new_client()
     login(user, "963")
@@ -1540,12 +1671,12 @@ def test_retry_reuses_assistant_message_without_duplicate_user_turn():
         headers=headers(user),
     )
     assert retried.status_code == 200
-    assert '"type": "done"' in retried.text
+    assert '"code": "REAL_PROVIDER_NOT_CONFIGURED"' in retried.text
     after = user.get(f"/api/v1/conversations/{conversation_id}").json()
     assert len(after["messages"]) == 2
     assert after["messages"][-1]["id"] == assistant["id"]
-    assert after["messages"][-1]["status"] == "complete"
-    assert "FakeProvider" in after["messages"][-1]["content"]
+    assert after["messages"][-1]["status"] == "error"
+    assert "FakeProvider" not in after["messages"][-1]["content"]
     duplicate = user.post(
         "/api/v1/assistant/runs/retry/stream",
         json={
@@ -1555,8 +1686,8 @@ def test_retry_reuses_assistant_message_without_duplicate_user_turn():
         },
         headers=headers(user),
     )
-    assert duplicate.status_code == 409
-    assert duplicate.json()["error"]["code"] == "RETRY_NOT_ALLOWED"
+    assert duplicate.status_code == 200
+    assert '"code": "REAL_PROVIDER_NOT_CONFIGURED"' in duplicate.text
 
 
 def test_capability_blocked_reasons_follow_priority(monkeypatch):
@@ -1606,7 +1737,11 @@ def test_capability_blocked_reasons_follow_priority(monkeypatch):
     assert item["primaryAction"] == "budget"
 
 
-def test_concurrent_retry_only_starts_one_run():
+def test_concurrent_retry_only_starts_one_run(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_api_key", None)
     make_user("964")
     setup = new_client()
     login(setup, "964")
@@ -1622,6 +1757,10 @@ def test_concurrent_retry_only_starts_one_run():
         headers=headers(setup),
     )
     assert failed.status_code == 200
+    monkeypatch.setattr(
+        "app.modules.runtime.service.build_provider",
+        lambda _mode=None: SlowProvider(delay=0.03, chunks=40),
+    )
     detail = setup.get(f"/api/v1/conversations/{conversation_id}").json()
     message_id = detail["messages"][-1]["id"]
     results: list[int] = []
@@ -1709,7 +1848,7 @@ def test_inflight_run_finishes_but_revoked_user_cannot_start_another(monkeypatch
 
     monkeypatch.setattr(
         "app.modules.runtime.service.build_provider",
-        lambda mode: SignalingProvider(),
+        lambda _mode=None: SignalingProvider(),
     )
     result: dict = {}
 
@@ -1761,7 +1900,11 @@ def test_inflight_run_finishes_but_revoked_user_cannot_start_another(monkeypatch
     assert denied.status_code == 403
 
 
-def test_failed_run_is_not_auto_retried():
+def test_failed_run_is_not_auto_retried(monkeypatch):
+    monkeypatch.setattr(settings, "llm_provider", "openai")
+    monkeypatch.setattr(settings, "llm_base_url", "")
+    monkeypatch.setattr(settings, "llm_model", "")
+    monkeypatch.setattr(settings, "llm_api_key", None)
     make_user("991")
     user = new_client()
     login(user, "991")

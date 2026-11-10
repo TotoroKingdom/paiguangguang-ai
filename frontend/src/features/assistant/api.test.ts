@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createConversation, getConversation, listConversations } from "./api";
+import { createConversation, getConversation, listConversations, streamRun } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -72,5 +72,26 @@ describe("assistant API client", () => {
       retryable: false,
       message: "这条聊天已被其他页面更新，请刷新后重试。",
     });
+  });
+
+  it("does not send a client-selected provider mode for runtime execution", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('data: {"type":"done","status":"completed"}\n\n', { status: 200 }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await streamRun(
+      {
+        conversationId: "conversation-1",
+        clientTurnId: "turn-1",
+        text: "使用服务端模型",
+        capability: null,
+        fileIds: [],
+      },
+      vi.fn(),
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as Record<string, unknown>;
+    expect(body).not.toHaveProperty("mode");
   });
 });

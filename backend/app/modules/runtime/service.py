@@ -148,17 +148,20 @@ class RuntimeService:
         version_id: str,
         capability_id: str,
         input_text: str,
-        mode: str,
+        mode: str | None = None,
     ) -> AgentRun:
         self._check_quota(principal.user.id)
         now = utc_now()
+        configured_provider = settings.llm_provider.strip().lower() or "unconfigured"
+        if configured_provider in {"fake", "test"}:
+            configured_provider = "fake"
         run = AgentRun(
             user_id=principal.user.id,
             conversation_id=conversation_id,
             capability_id=capability_id,
             version_id=version_id,
-            mode=mode,
-            provider=settings.llm_provider if mode != "fake" else "fake",
+            mode=configured_provider,
+            provider=configured_provider,
             status="running",
             input_text=input_text[:6000],
             created_at=now,
@@ -314,7 +317,7 @@ class RuntimeService:
                     )
                     raise
 
-            provider = build_provider(run.mode)
+            provider = build_provider()
             self._ensure_capability_allowed(run, principal)
             llm_started = utc_now()
             self._trace(run, "llm.started", {"provider": provider.name})

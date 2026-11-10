@@ -57,7 +57,12 @@ class OpenAICompatibleProvider:
     name = "openai-compatible"
 
     def __init__(self) -> None:
-        if not settings.llm_base_url or not settings.llm_model or settings.llm_api_key is None:
+        if (
+            not settings.llm_base_url.strip()
+            or not settings.llm_model.strip()
+            or settings.llm_api_key is None
+            or not settings.llm_api_key.get_secret_value().strip()
+        ):
             raise APIError(
                 503,
                 "REAL_PROVIDER_NOT_CONFIGURED",
@@ -111,9 +116,20 @@ class OpenAICompatibleProvider:
         yield LLMChunk(done=True)
 
 
-def build_provider(mode: str | None = None):
-    selected = (mode or settings.llm_provider or "fake").lower()
+def build_provider(_requested_mode: str | None = None):
+    """Build the provider selected by trusted server configuration.
+
+    ``_requested_mode`` remains an ignored compatibility parameter for older
+    test doubles and callers. Client payloads never select the provider.
+    """
+    selected = settings.llm_provider.strip().lower()
     if selected in {"fake", "test"}:
+        if settings.environment.lower() in {"production", "prod"}:
+            raise APIError(
+                503,
+                "REAL_PROVIDER_NOT_CONFIGURED",
+                "生产环境禁止使用 Fake Provider",
+            )
         return FakeProvider()
     if selected in {"openai", "openai-compatible", "real"}:
         return OpenAICompatibleProvider()

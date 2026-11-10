@@ -105,7 +105,6 @@ async def _stream_events(
     turn: TurnCreate,
     capability_id: str,
     version_id: str,
-    mode: str,
     assistant_id: str,
 ):
     service = RuntimeService(session)
@@ -115,7 +114,6 @@ async def _stream_events(
         version_id=version_id,
         capability_id=capability_id,
         input_text=turn.text,
-        mode=mode,
     )
     async for event in service.stream(
         run,
@@ -149,7 +147,6 @@ async def execute_run(
         turn,
         capability_id,
         version_id,
-        payload.mode,
         turn_result.assistantMessage.id,
     ):
         if event.get("runId"):
@@ -201,7 +198,6 @@ async def stream_run(
                 turn,
                 capability_id,
                 version_id,
-                payload.mode,
                 turn_result.assistantMessage.id,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -294,7 +290,6 @@ async def retry_run_stream(
                 turn,
                 capability_id,
                 version_id,
-                payload.mode,
                 message.id,
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
