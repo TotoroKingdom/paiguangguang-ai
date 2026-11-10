@@ -362,6 +362,7 @@ class RuntimeService:
                         )
                     ],
                 ),
+                internal=True,
             )
             self._trace(run, "run.completed", {"status": "completed"})
             self.session.commit()
@@ -375,6 +376,7 @@ class RuntimeService:
                 run.conversation_id,
                 assistant_message_id,
                 MessagePatch(content=output, status="stopped", steps=[]),
+                internal=True,
             )
             self.session.commit()
             yield {"type": "done", "runId": run.id, "status": "cancelled"}
@@ -389,6 +391,7 @@ class RuntimeService:
                 run.conversation_id,
                 assistant_message_id,
                 MessagePatch(content=output or "执行超时", status="error", steps=[]),
+                internal=True,
             )
             self.session.commit()
             yield {"type": "error", "runId": run.id, "code": "RUN_TIMEOUT"}
@@ -531,6 +534,7 @@ class RuntimeService:
                     status="error",
                     steps=[],
                 ),
+                internal=True,
             )
         except Exception:
             pass

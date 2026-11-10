@@ -21,6 +21,8 @@ from app.modules.identity.dependencies import (
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.runtime.models import AgentRun
 from app.modules.runtime.schemas import (
+    AdminRunListResponse,
+    AdminRunView,
     CancelResponse,
     ExecuteRequest,
     RunListResponse,
@@ -304,6 +306,7 @@ async def retry_run_stream(
                         status="error",
                         steps=[],
                     ),
+                    internal=True,
                 )
             except Exception:
                 pass
@@ -460,7 +463,7 @@ def cancel_run(
     return CancelResponse(runId=run.id)
 
 
-@admin_router.get("/runs", response_model=RunListResponse)
+@admin_router.get("/runs", response_model=AdminRunListResponse)
 def admin_list_runs(
     _: UserPrincipal = Depends(require_unified_admin),
     session: Session = Depends(get_db),
@@ -468,15 +471,33 @@ def admin_list_runs(
     runs = list(
         session.scalars(
             select(AgentRun)
-            .options(selectinload(AgentRun.steps), selectinload(AgentRun.traces))
             .order_by(AgentRun.created_at.desc())
             .limit(100)
         )
     )
-    items = []
-    for run in runs:
-        view = run_view(run)
-        view["outputText"] = ""
-        view["inputText"] = ""
-        items.append(RunView.model_validate(view))
-    return RunListResponse(items=items)
+    return AdminRunListResponse(
+        items=[
+            AdminRunView(
+                id=run.id,
+                status=run.status,
+                mode=run.mode,
+                provider=run.provider,
+                capabilityId=run.capability_id,
+                versionId=run.version_id,
+                errorCode=run.error_code,
+                stepCount=run.step_count,
+                createdAt=run.created_at.replace(tzinfo=timezone.utc),
+                startedAt=(
+                    run.started_at.replace(tzinfo=timezone.utc)
+                    if run.started_at
+                    else None
+                ),
+                finishedAt=(
+                    run.finished_at.replace(tzinfo=timezone.utc)
+                    if run.finished_at
+                    else None
+                ),
+            )
+            for run in runs
+        ]
+    )
