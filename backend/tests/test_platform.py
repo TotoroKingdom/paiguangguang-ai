@@ -20,9 +20,10 @@ from app.main import app
 from app.modules.identity.models import User
 from app.modules.capabilities.models import CapabilityDefinition, CapabilityVersion
 from app.modules.identity.user_service import UserIdentityService
-from app.modules.runtime.models import AgentRun, RunStep
+from app.modules.runtime.models import AgentRun, RunStep, RunTrace
 from app.modules.runtime.providers import LLMChunk, build_provider
 from app.modules.runtime.service import RuntimeService
+from app.modules.runtime.tools import execute_tool
 from app.modules.personal.models import McpServer
 from app.modules.runtime.mcp_client import McpClient, set_transport_factory
 from app.modules.observability.models import AuditEvent
@@ -365,6 +366,272 @@ def test_runtime_executes_readonly_tool_and_persists_run_and_steps():
     make_user("802")
     login(other, "802")
     assert other.get(f"/api/v1/assistant/runs/{body['run']['id']}").status_code == 404
+
+
+def test_admin_runtime_run_list_returns_only_redacted_metadata():
+    user_id = make_user("810")
+    make_user("811", role="ADMIN", password="adminpass123")
+    now = utc_now()
+    with SessionLocal() as session:
+        run = AgentRun(
+            user_id=user_id,
+            conversation_id="private-conversation",
+            capability_id="private-capability",
+            version_id="private-version",
+            mode="fake",
+            provider="fake",
+            status="completed",
+            input_text="private prompt",
+            output_text="private answer",
+            error_code="PRIVATE_CODE",
+            error_message="private error detail",
+            token_input=12,
+            token_output=8,
+            step_count=1,
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+        )
+        run.steps.append(
+            RunStep(
+                seq=1,
+                step_type="tool",
+                name="private-tool",
+                status="completed",
+                input_json=json.dumps({"secret": "tool-input-secret"}),
+                output_json=json.dumps({"secret": "tool-output-secret"}),
+                error="",
+                started_at=now,
+                finished_at=now,
+                duration_ms=1,
+            )
+        )
+        run.traces.append(
+            RunTrace(
+                seq=1,
+                event="tool.completed",
+                detail_json=json.dumps({"raw": "trace-secret"}),
+                created_at=now,
+            )
+        )
+        session.add(run)
+        session.commit()
+        run_id = run.id
+
+    admin = new_client()
+    login(admin, "811", "adminpass123")
+    response = admin.get("/api/v1/admin/assistant/runs")
+
+    assert response.status_code == 200, response.text
+    item = next(item for item in response.json()["items"] if item["id"] == run_id)
+    assert set(item) == {
+        "id",
+        "status",
+        "mode",
+        "provider",
+        "capabilityId",
+        "versionId",
+        "errorCode",
+        "stepCount",
+        "createdAt",
+        "startedAt",
+        "finishedAt",
+    }
+    assert all(
+        key not in item
+        for key in ("inputText", "outputText", "errorMessage", "tokenInput", "tokenOutput", "steps", "traces")
+    )
+    assert all(
+        secret not in response.text
+        for secret in (
+            "private prompt",
+            "private answer",
+            "private error detail",
+            "tool-input-secret",
+            "tool-output-secret",
+            "trace-secret",
+        )
+    )
+
+
+def test_user_run_list_and_detail_are_scoped_to_the_authenticated_user():
+    owner_id = make_user("812")
+    other_id = make_user("813")
+    now = utc_now()
+    with SessionLocal() as session:
+        owner_run = AgentRun(
+            user_id=owner_id,
+            conversation_id="owner-conversation",
+            mode="fake",
+            provider="fake",
+            status="completed",
+            created_at=now,
+        )
+        other_run = AgentRun(
+            user_id=other_id,
+            conversation_id="other-conversation",
+            mode="fake",
+            provider="fake",
+            status="completed",
+            created_at=now,
+        )
+        session.add_all([owner_run, other_run])
+        session.commit()
+        owner_run_id = owner_run.id
+        other_run_id = other_run.id
+
+    owner = new_client()
+    login(owner, "812")
+    listed = owner.get("/api/v1/assistant/runs")
+
+    assert listed.status_code == 200, listed.text
+    assert [item["id"] for item in listed.json()["items"]] == [owner_run_id]
+    assert owner.get(f"/api/v1/assistant/runs/{owner_run_id}").status_code == 200
+    assert owner.get(f"/api/v1/assistant/runs/{other_run_id}").status_code == 404
+
+
+def test_authenticated_user_cannot_patch_server_generated_assistant_message():
+    make_user("817")
+    user = new_client()
+    login(user, "817")
+    conversation_id = create_conversation(user)
+    created = user.post(
+        f"/api/v1/conversations/{conversation_id}/turns",
+        json={
+            "clientTurnId": "write-boundary",
+            "text": "原始请求",
+            "attachments": [],
+            "request": {
+                "conversationId": None,
+                "clientTurnId": "write-boundary",
+                "text": "原始请求",
+                "fileIds": [],
+                "simulateFailure": False,
+            },
+        },
+        headers=headers(user),
+    )
+    assert created.status_code == 201, created.text
+    assistant_id = created.json()["assistantMessage"]["id"]
+
+    patched = user.patch(
+        f"/api/v1/conversations/{conversation_id}/messages/{assistant_id}",
+        json={"content": "客户端伪造结果", "status": "complete", "steps": []},
+        headers=headers(user),
+    )
+
+    assert patched.status_code == 403, patched.text
+    detail = user.get(f"/api/v1/conversations/{conversation_id}").json()
+    assistant = next(item for item in detail["messages"] if item["id"] == assistant_id)
+    assert assistant["content"] == ""
+    assert assistant["status"] == "generating"
+
+
+def test_catalog_search_honors_user_acl_visibility_and_readiness():
+    owner_id = make_user("814", role="CREATOR")
+    viewer_id = make_user("815")
+    now = utc_now()
+
+    def add_capability(
+        session,
+        slug: str,
+        name: str,
+        *,
+        owner_id: str,
+        visibility: str = "platform",
+        access_mode: str = "all_active",
+        test_status: str = "passed",
+    ) -> str:
+        definition = CapabilityDefinition(
+            slug=slug,
+            kind="tool",
+            name=name,
+            description=name,
+            category="测试",
+            icon="test",
+            status="published",
+            source="creator",
+            created_by=owner_id,
+            owner_id=owner_id,
+            visibility=visibility,
+            access_mode=access_mode,
+            review_status="approved",
+            test_status=test_status,
+            created_at=now,
+            updated_at=now,
+        )
+        definition.versions.append(
+            CapabilityVersion(
+                version=1,
+                status="published",
+                snapshot_json=json.dumps(
+                    {
+                        "kind": "tool",
+                        "name": name,
+                        "description": name,
+                        "category": "测试",
+                        "icon": "test",
+                        "steps": [],
+                        "tools": [],
+                        "content": None,
+                        "config": {},
+                        "executionMode": "simulated",
+                        "source": "managed",
+                    }
+                ),
+                changelog="测试",
+                created_by=owner_id,
+                published_by="admin",
+                created_at=now,
+                published_at=now,
+            )
+        )
+        session.add(definition)
+        session.flush()
+        return definition.id
+
+    with SessionLocal() as session:
+        private_id = add_capability(
+            session,
+            "private-catalog-capability",
+            "私有能力",
+            owner_id=owner_id,
+            visibility="private",
+        )
+        granted_id = add_capability(
+            session,
+            "granted-catalog-capability",
+            "需授权能力",
+            owner_id=owner_id,
+            access_mode="granted",
+        )
+        not_ready_id = add_capability(
+            session,
+            "not-ready-catalog-capability",
+            "未就绪能力",
+            owner_id=owner_id,
+            test_status="failed",
+        )
+        ready_id = add_capability(
+            session,
+            "ready-catalog-capability",
+            "可执行能力",
+            owner_id=owner_id,
+        )
+        session.commit()
+
+        result = execute_tool(
+            "system.catalog_search",
+            {"query": "能力", "limit": 10},
+            session=session,
+            user_id=viewer_id,
+        )
+
+    returned_ids = {item["id"] for item in result["items"]}
+    assert returned_ids == {ready_id}
+    assert private_id not in returned_ids
+    assert granted_id not in returned_ids
+    assert not_ready_id not in returned_ids
 
 
 def test_real_mode_without_configuration_fails_honestly(monkeypatch):
@@ -2033,6 +2300,73 @@ def test_creator_run_summary_is_scoped_to_owned_capabilities():
     other = new_client()
     login(other, "701")
     assert other.get("/api/v1/creator/runs/summary").json()["total"] == 0
+
+
+def test_creator_run_summary_excludes_runs_owned_by_another_creator():
+    first_creator_id = make_user("818", role="CREATOR")
+    second_creator_id = make_user("819", role="CREATOR")
+    now = utc_now()
+    with SessionLocal() as session:
+        first_capability = CapabilityDefinition(
+            slug="creator-818-capability",
+            kind="tool",
+            name="Creator 818 能力",
+            description="",
+            category="测试",
+            icon="test",
+            status="published",
+            source="creator",
+            created_by=first_creator_id,
+            owner_id=first_creator_id,
+            test_status="passed",
+            created_at=now,
+            updated_at=now,
+        )
+        second_capability = CapabilityDefinition(
+            slug="creator-819-capability",
+            kind="tool",
+            name="Creator 819 能力",
+            description="",
+            category="测试",
+            icon="test",
+            status="published",
+            source="creator",
+            created_by=second_creator_id,
+            owner_id=second_creator_id,
+            test_status="passed",
+            created_at=now,
+            updated_at=now,
+        )
+        session.add_all([first_capability, second_capability])
+        session.flush()
+        first_run = AgentRun(
+            user_id="runtime-user-1",
+            capability_id=first_capability.id,
+            status="completed",
+            mode="fake",
+            provider="fake",
+            created_at=now,
+        )
+        second_run = AgentRun(
+            user_id="runtime-user-2",
+            capability_id=second_capability.id,
+            status="completed",
+            mode="fake",
+            provider="fake",
+            created_at=now,
+        )
+        session.add_all([first_run, second_run])
+        session.commit()
+
+    first_creator = new_client()
+    login(first_creator, "818")
+    summary = first_creator.get("/api/v1/creator/runs/summary")
+
+    assert summary.status_code == 200, summary.text
+    body = summary.json()
+    assert body["total"] == 1
+    assert [item["capabilityId"] for item in body["recent"]] == [first_capability.id]
+    assert second_capability.id not in {item["capabilityId"] for item in body["recent"]}
 
 
 def test_rejected_capability_can_be_edited_tested_and_resubmitted():

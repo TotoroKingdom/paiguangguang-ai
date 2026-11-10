@@ -47,6 +47,24 @@ class RunListResponse(BaseModel):
     items: list[RunView]
 
 
+class AdminRunView(BaseModel):
+    id: str
+    status: str
+    mode: str
+    provider: str
+    capabilityId: str
+    versionId: str
+    errorCode: str
+    stepCount: int
+    createdAt: datetime
+    startedAt: datetime | None
+    finishedAt: datetime | None
+
+
+class AdminRunListResponse(BaseModel):
+    items: list[AdminRunView]
+
+
 class CancelResponse(BaseModel):
     runId: str
     cancelRequested: bool = True

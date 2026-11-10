@@ -291,8 +291,19 @@ class ConversationService:
         )
 
     def patch_message(
-        self, scope: OwnerScope, conversation_id: str, message_id: str, patch: MessagePatch
+        self,
+        scope: OwnerScope,
+        conversation_id: str,
+        message_id: str,
+        patch: MessagePatch,
+        *,
+        internal: bool = False,
     ) -> MessageResponse:
+        if scope.user_id and not internal:
+            raise HTTPException(
+                status_code=403,
+                detail="Server-generated assistant messages cannot be edited",
+            )
         conversation = self.get_owned(scope, conversation_id, with_messages=True)
         message = next((item for item in conversation.messages if item.id == message_id), None)
         if message is None or message.role != "assistant":

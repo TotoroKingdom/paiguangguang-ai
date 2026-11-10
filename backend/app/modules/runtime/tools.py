@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import APIError
 from app.modules.capabilities.models import CapabilityDefinition
+from app.modules.capabilities.service import CapabilityService
 
 MAX_ARGUMENT_BYTES = 16 * 1024
 MAX_RESULT_BYTES = 64 * 1024
@@ -71,18 +72,7 @@ def _current_time(_: Session, arguments: dict[str, Any], __: str) -> dict[str, A
 def _catalog_search(session: Session, arguments: dict[str, Any], user_id: str) -> dict[str, Any]:
     query = str(arguments.get("query", "")).strip()
     limit = min(int(arguments.get("limit", 5)), 10)
-    statement = (
-        select(CapabilityDefinition)
-        .where(CapabilityDefinition.status == "published")
-        .where(CapabilityDefinition.source != "demo")
-        .limit(limit)
-    )
-    if query:
-        value = f"%{query}%"
-        statement = statement.where(
-            CapabilityDefinition.name.ilike(value)
-            | CapabilityDefinition.description.ilike(value)
-        )
+    visible = CapabilityService(session).public_list(query=query, user_id=user_id)
     items = [
         {
             "id": item.id,
@@ -90,8 +80,18 @@ def _catalog_search(session: Session, arguments: dict[str, Any], user_id: str) -
             "kind": item.kind,
             "description": item.description[:200],
         }
-        for item in session.scalars(statement)
+        for item in visible
+        if item.authorized
+        and item.ready
+        and item.blockedReason == "none"
+        and session.scalar(
+            select(CapabilityDefinition.source).where(
+                CapabilityDefinition.id == item.id
+            )
+        )
+        != "demo"
     ]
+    items = items[:limit]
     return {"items": items, "count": len(items)}
 
 
