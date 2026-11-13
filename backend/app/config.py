@@ -1,4 +1,6 @@
 from functools import lru_cache
+from urllib.parse import urlparse
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -94,12 +96,26 @@ class Settings(BaseSettings):
             if any(not item.startswith("https://") for item in origins):
                 raise RuntimeError("ASSISTANT_ALLOWED_ORIGINS must contain HTTPS origins only")
             provider = self.llm_provider.strip().lower()
-            if provider in {"", "fake", "test", "fake-slow"}:
-                raise RuntimeError("ASSISTANT_LLM_PROVIDER must be a real provider in production")
-            if not self.llm_base_url.strip() or not self.llm_model.strip() or self.llm_api_key is None:
+            if provider not in {"openai", "openai-compatible", "real"}:
+                raise RuntimeError(
+                    "ASSISTANT_LLM_PROVIDER must be a supported real provider in production"
+                )
+            base_url = self.llm_base_url.strip()
+            model = self.llm_model.strip()
+            api_key = (
+                self.llm_api_key.get_secret_value().strip()
+                if self.llm_api_key is not None
+                else ""
+            )
+            if not base_url or not model or not api_key:
                 raise RuntimeError(
                     "ASSISTANT_LLM_BASE_URL, ASSISTANT_LLM_MODEL and "
                     "ASSISTANT_LLM_API_KEY are required in production"
+                )
+            parsed_base_url = urlparse(base_url)
+            if parsed_base_url.scheme != "https" or not parsed_base_url.netloc:
+                raise RuntimeError(
+                    "ASSISTANT_LLM_BASE_URL must be an HTTPS URL in production"
                 )
             bootstrap_password = (
                 self.admin_password.get_secret_value()

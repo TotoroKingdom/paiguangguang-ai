@@ -164,11 +164,15 @@ jobs:
           ASSISTANT_ALLOWED_ORIGINS: ${{ vars.ASSISTANT_ALLOWED_ORIGINS }}
           ASSISTANT_ADMIN_USERNAME: ${{ vars.ASSISTANT_ADMIN_USERNAME }}
           ASSISTANT_ADMIN_PASSWORD: ${{ secrets.ASSISTANT_ADMIN_PASSWORD }}
+          ASSISTANT_LLM_PROVIDER: ${{ vars.ASSISTANT_LLM_PROVIDER }}
+          ASSISTANT_LLM_BASE_URL: ${{ vars.ASSISTANT_LLM_BASE_URL }}
+          ASSISTANT_LLM_MODEL: ${{ vars.ASSISTANT_LLM_MODEL }}
+          ASSISTANT_LLM_API_KEY: ${{ secrets.ASSISTANT_LLM_API_KEY }}
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: IMAGE_NAME,BACKEND_IMAGE_NAME,DEPLOY_COMMIT,GHCR_USERNAME,GHCR_TOKEN,ASSISTANT_OWNER_COOKIE_SECRET,ASSISTANT_ALLOWED_ORIGINS,ASSISTANT_ADMIN_USERNAME,ASSISTANT_ADMIN_PASSWORD
+          envs: IMAGE_NAME,BACKEND_IMAGE_NAME,DEPLOY_COMMIT,GHCR_USERNAME,GHCR_TOKEN,ASSISTANT_OWNER_COOKIE_SECRET,ASSISTANT_ALLOWED_ORIGINS,ASSISTANT_ADMIN_USERNAME,ASSISTANT_ADMIN_PASSWORD,ASSISTANT_LLM_PROVIDER,ASSISTANT_LLM_BASE_URL,ASSISTANT_LLM_MODEL,ASSISTANT_LLM_API_KEY
           script: |
             set -eu
             umask 077
@@ -176,17 +180,27 @@ jobs:
             rollback_env="$app_dir/.env.rollback"
             rollback_compose="$app_dir/.docker-compose.rollback.yml"
             incoming_compose="$app_dir/.incoming/docker-compose.yml"
-            old_app_image_id=""
+            old_frontend_image_ref=""
+            old_backend_image_ref=""
             existing_volume_name=""
 
-            if docker inspect paiguangguang-ai >/dev/null 2>&1; then
-              old_app_image_id="$(docker inspect --format='{{.Image}}' paiguangguang-ai)"
+            if docker inspect paiguangguang-ai-frontend >/dev/null 2>&1; then
+              old_frontend_image_ref="$(docker inspect --format='{{.Config.Image}}' paiguangguang-ai-frontend)"
             fi
-            if [ -n "$old_app_image_id" ]; then
-              printf '%s\n' "$old_app_image_id" > "$app_dir/.rollback-image"
+            if docker inspect paiguangguang-ai-backend >/dev/null 2>&1; then
+              old_backend_image_ref="$(docker inspect --format='{{.Config.Image}}' paiguangguang-ai-backend)"
+            fi
+            if [ -n "$old_frontend_image_ref" ]; then
+              printf '%s\n' "$old_frontend_image_ref" > "$app_dir/.rollback-image"
               chmod 600 "$app_dir/.rollback-image"
             else
               rm -f "$app_dir/.rollback-image"
+            fi
+            if [ -n "$old_backend_image_ref" ]; then
+              printf '%s\n' "$old_backend_image_ref" > "$app_dir/.rollback-backend-image"
+              chmod 600 "$app_dir/.rollback-backend-image"
+            else
+              rm -f "$app_dir/.rollback-backend-image"
             fi
             if [ -f "$app_dir/.env" ]; then
               install -m 600 "$app_dir/.env" "$rollback_env"
@@ -209,9 +223,13 @@ jobs:
               fi
               if [ -f "$rollback_env" ]; then
                 install -m 600 "$rollback_env" "$app_dir/.env"
-                if [ -n "$old_app_image_id" ]; then
+                if [ -s "$app_dir/.rollback-image" ]; then
                   sed -i '/^IMAGE_NAME=/d' "$app_dir/.env"
-                  printf 'IMAGE_NAME=%s\n' "$old_app_image_id" >> "$app_dir/.env"
+                  printf 'IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-image")" >> "$app_dir/.env"
+                fi
+                if [ -s "$app_dir/.rollback-backend-image" ]; then
+                  sed -i '/^BACKEND_IMAGE_NAME=/d' "$app_dir/.env"
+                  printf 'BACKEND_IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-backend-image")" >> "$app_dir/.env"
                 fi
                 docker compose up -d --remove-orphans || true
               else
@@ -239,6 +257,18 @@ jobs:
               esac
             done
             IFS="$old_ifs"
+            test -n "$ASSISTANT_LLM_PROVIDER"
+            case "$(printf '%s' "$ASSISTANT_LLM_PROVIDER" | tr '[:upper:]' '[:lower:]')" in
+              openai|openai-compatible|real) ;;
+              *) echo 'ASSISTANT_LLM_PROVIDER must be a supported real provider' >&2; exit 1 ;;
+            esac
+            test -n "$ASSISTANT_LLM_BASE_URL"
+            case "$ASSISTANT_LLM_BASE_URL" in
+              https://?*) ;;
+              *) echo 'ASSISTANT_LLM_BASE_URL must be an HTTPS URL' >&2; exit 1 ;;
+            esac
+            test -n "$ASSISTANT_LLM_MODEL"
+            test -n "$ASSISTANT_LLM_API_KEY"
 
             volume_name="${existing_volume_name:-paiguangguang-ai-assistant-data}"
             printf '%s' "$volume_name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]*$'
@@ -250,6 +280,7 @@ jobs:
               printf 'IMAGE_NAME=%s\n' "$IMAGE_NAME"
               printf 'BACKEND_IMAGE_NAME=%s\n' "$BACKEND_IMAGE_NAME"
               printf 'DEPLOY_COMMIT=%s\n' "$DEPLOY_COMMIT"
+              printf 'ASSISTANT_ENVIRONMENT=production\n'
               printf 'ASSISTANT_OWNER_COOKIE_SECRET=%s\n' "$ASSISTANT_OWNER_COOKIE_SECRET"
               printf 'ASSISTANT_OWNER_COOKIE_SECURE=true\n'
               printf 'ASSISTANT_ALLOWED_ORIGINS=%s\n' "$ASSISTANT_ALLOWED_ORIGINS"
@@ -260,13 +291,19 @@ jobs:
               if [ -n "${ASSISTANT_ADMIN_PASSWORD:-}" ]; then
                 printf 'ASSISTANT_ADMIN_PASSWORD=%s\n' "$ASSISTANT_ADMIN_PASSWORD"
               fi
+              printf 'ASSISTANT_LLM_PROVIDER=%s\n' "$ASSISTANT_LLM_PROVIDER"
+              printf 'ASSISTANT_LLM_BASE_URL=%s\n' "$ASSISTANT_LLM_BASE_URL"
+              printf 'ASSISTANT_LLM_MODEL=%s\n' "$ASSISTANT_LLM_MODEL"
+              printf 'ASSISTANT_LLM_API_KEY=%s\n' "$ASSISTANT_LLM_API_KEY"
               printf 'ASSISTANT_DATA_VOLUME=%s\n' "$volume_name"
             } > "$app_dir/.env"
             chmod 600 "$app_dir/.env"
 
             printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USERNAME" --password-stdin
             cd "$app_dir"
+            docker compose config --quiet
             docker compose pull
+            docker run --rm --entrypoint python --env-file "$app_dir/.env" "$BACKEND_IMAGE_NAME" -m scripts.deploy_preflight
 
             if docker volume inspect "$volume_name" >/dev/null 2>&1; then
               database_status=0
@@ -355,6 +392,11 @@ jobs:
                 sed -i '/^IMAGE_NAME=/d' "$app_dir/.env"
                 printf 'IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-image")" >> "$app_dir/.env"
               fi
+              if [ -s "$app_dir/.rollback-backend-image" ]; then
+                sed -i '/^BACKEND_IMAGE_NAME=/d' "$app_dir/.env"
+                printf 'BACKEND_IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-backend-image")" >> "$app_dir/.env"
+              fi
+              docker compose config --quiet
               docker compose up -d --remove-orphans
               docker compose ps
               docker logout ghcr.io >/dev/null 2>&1 || true

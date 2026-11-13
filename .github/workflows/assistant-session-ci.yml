@@ -123,3 +123,41 @@ jobs:
             frontend/playwright-report
           if-no-files-found: ignore
 
+  deployment-config:
+    name: Deployment config preflight
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: ghcr.io/example/paiguangguang-ai-frontend:ci
+      BACKEND_IMAGE_NAME: ghcr.io/example/paiguangguang-ai-backend:ci
+      ASSISTANT_OWNER_COOKIE_SECRET: ci-owner-secret-abcdefghijklmnopqrstuvwxyz
+      ASSISTANT_OWNER_COOKIE_SECURE: "true"
+      ASSISTANT_ADMIN_COOKIE_SECURE: "true"
+      ASSISTANT_USER_COOKIE_SECURE: "true"
+      ASSISTANT_ALLOWED_ORIGINS: https://example.invalid
+      ASSISTANT_DEMO_CATALOG_ENABLED: "false"
+      ASSISTANT_LLM_PROVIDER: openai
+      ASSISTANT_LLM_BASE_URL: https://llm.example.invalid/v1
+      ASSISTANT_LLM_MODEL: ci-model
+      ASSISTANT_LLM_API_KEY: ci-dummy-key
+      ASSISTANT_DATA_VOLUME: paiguangguang-ai-ci-config
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      - name: Validate isolated Compose configuration
+        run: docker compose config --quiet
+
+      - name: Run deployment preflight with dummy values
+        working-directory: backend
+        run: python -m scripts.deploy_preflight
+
