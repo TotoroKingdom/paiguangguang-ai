@@ -28,7 +28,7 @@ from app.modules.personal.schemas import (
     SkillUpdate,
     SkillView,
 )
-from app.modules.personal.service import PersonalService
+from app.modules.personal.service import MAX_FILE_BYTES, PersonalService
 from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
 from app.owner import require_json_request
 from app.repositories import utc_now
@@ -162,7 +162,7 @@ async def upload_file(
     session: Session = Depends(get_db),
 ):
     require_user_csrf(request, principal)
-    data = await file.read(5 * 1024 * 1024 + 1)
+    data = await file.read(MAX_FILE_BYTES + 1)
     item = PersonalService(session).save_file(
         principal.user.id, file.filename or "", file.content_type or "", data
     )

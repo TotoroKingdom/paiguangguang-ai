@@ -64,6 +64,8 @@ export class AssistantApiError extends Error {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+  const method = (init?.method ?? (init?.body ? "POST" : "GET")).toUpperCase();
+  const mutatesSession = !["GET", "HEAD", "OPTIONS"].includes(method);
   try {
     response = await fetch(path, {
       credentials: "same-origin",
@@ -71,6 +73,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers: {
         ...(init?.body ? { "Content-Type": "application/json" } : {}),
         ...init?.headers,
+        ...(mutatesSession ? { "X-CSRF-Token": authCsrfToken() } : {}),
       },
     });
   } catch {
@@ -284,6 +287,7 @@ export async function streamRun(
       text: input.text,
       capabilityId: input.capability?.id ?? null,
       capabilityKind: input.capability?.kind ?? null,
+      fileIds: input.fileIds,
       toolArguments: {},
     }),
   });

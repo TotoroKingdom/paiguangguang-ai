@@ -14,6 +14,15 @@ from app.modules.personal.storage import storage_lock
 from app.repositories import utc_now
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
+SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
+SUPPORTED_TEXT_CONTENT_TYPES = {
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+    # Some browsers send Markdown files as the generic binary MIME type. The
+    # extension and UTF-8/NUL checks below still gate this compatibility path.
+    "application/octet-stream",
+}
 
 
 def _fernet() -> Fernet:
@@ -127,6 +136,19 @@ class PersonalService:
         if len(data) > MAX_FILE_BYTES:
             raise APIError(413, "FILE_TOO_LARGE", "文件超过 5 MiB")
         name = clean_filename(filename)
+        extension = Path(name).suffix.lower()
+        normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+        if (
+            extension not in SUPPORTED_TEXT_EXTENSIONS
+            or normalized_type not in SUPPORTED_TEXT_CONTENT_TYPES
+        ):
+            raise APIError(422, "FILE_TYPE_UNSUPPORTED", "仅支持 TXT 或 Markdown 文本文件")
+        try:
+            decoded = data.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise APIError(422, "FILE_CONTENT_INVALID", "文本文件必须使用 UTF-8 编码") from error
+        if "\x00" in decoded:
+            raise APIError(422, "FILE_CONTENT_INVALID", "文本文件内容无效")
         file_id = __import__("uuid").uuid4().hex
         root = Path(settings.storage_root).resolve()
         with storage_lock(root):
@@ -166,6 +188,19 @@ class PersonalService:
         if not path.exists():
             raise APIError(404, "NOT_FOUND", "文件内容不存在")
         return item, path.read_bytes()
+
+    def read_file_prefix(self, user_id: str, file_id: str, limit: int) -> tuple[UserFile, bytes]:
+        item = self.get_file(user_id, file_id)
+        path = Path(item.storage_path).resolve()
+        root = Path(settings.storage_root).resolve()
+        if root not in path.parents:
+            raise APIError(500, "STORAGE_INVALID", "文件存储路径异常")
+        if not path.exists():
+            raise APIError(404, "NOT_FOUND", "文件内容不存在")
+        if path.stat().st_size > MAX_FILE_BYTES:
+            raise APIError(413, "FILE_TOO_LARGE", "文件超过 5 MiB")
+        with path.open("rb") as source:
+            return item, source.read(limit)
 
     def delete_file(self, user_id: str, file_id: str) -> None:
         with storage_lock(settings.storage_root):

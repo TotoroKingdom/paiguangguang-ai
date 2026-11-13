@@ -100,6 +100,7 @@ class ExecuteRequest(BaseModel):
     text: str = Field(min_length=1, max_length=6000)
     capabilityId: str | None = Field(default=None, max_length=36)
     capabilityKind: str | None = Field(default=None, max_length=16)
+    fileIds: list[str] = Field(default_factory=list, max_length=20)
     toolArguments: dict[str, Any] = Field(default_factory=dict)
     # Deprecated compatibility field. Provider selection is server-controlled.
     mode: str | None = Field(default=None, max_length=16)

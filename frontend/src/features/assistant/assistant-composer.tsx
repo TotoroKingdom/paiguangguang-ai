@@ -59,7 +59,7 @@ export function AssistantComposer() {
     void (async () => {
       const id = await sendMessage({
         conversationId: conversation?.id,
-        text: draft.text.trim() || "请根据这些附件的元信息整理要点。",
+        text: draft.text.trim() || "请根据这些附件内容整理要点。",
         capability: draft.capability,
         fileIds: attachments.map((file) => file.id),
         simulateFailure,
