@@ -647,22 +647,29 @@ class CapabilityService:
             ready = tool is not None and not tool.side_effect
             checks.append({"name": "readonly-tool", "ok": ready, "detail": tool_name})
         elif executor == "mcp":
-            from app.modules.personal.models import McpServer
+            from app.modules.personal.models import McpServer, McpServerTool
+            from app.modules.runtime.mcp_client import MCP_TRANSPORT_STREAMABLE_HTTP
 
             server_id = str(snapshot.config.get("mcpServerId", "")).strip()
             mcp_tool = str(snapshot.config.get("mcpTool", "")).strip()
             server = self.session.get(McpServer, server_id) if server_id else None
-            tools = loads(server.tools_json, []) if server is not None else []
-            tool_names = {
-                str(item.get("name", "")).strip()
-                for item in tools
-                if isinstance(item, dict)
-            }
+            approved_tool = (
+                self.session.scalar(
+                    select(McpServerTool.id).where(
+                        McpServerTool.server_id == server_id,
+                        McpServerTool.name == mcp_tool,
+                        McpServerTool.approval_status == "approved",
+                        McpServerTool.risk_class == "readonly",
+                    )
+                )
+                if server is not None and mcp_tool
+                else None
+            )
             ready = (
                 server is not None
                 and server.status == "approved"
-                and bool(mcp_tool)
-                and mcp_tool in tool_names
+                and server.transport == MCP_TRANSPORT_STREAMABLE_HTTP
+                and approved_tool is not None
             )
             checks.append(
                 {
@@ -814,6 +821,23 @@ class CapabilityService:
             is not None
         )
 
+    def _has_approved_mcp_tool(self, server_id: str, tool_name: str) -> bool:
+        if not server_id or not tool_name:
+            return False
+        from app.modules.personal.models import McpServerTool
+
+        return (
+            self.session.scalar(
+                select(McpServerTool.id).where(
+                    McpServerTool.server_id == server_id,
+                    McpServerTool.name == tool_name,
+                    McpServerTool.approval_status == "approved",
+                    McpServerTool.risk_class == "readonly",
+                )
+            )
+            is not None
+        )
+
     def _availability(
         self,
         definition: CapabilityDefinition,
@@ -838,6 +862,9 @@ class CapabilityService:
             else {}
         )
         server_id = str(config.get("mcpServerId", "")).strip()
+        tool_name = str(config.get("mcpTool", "")).strip()
+        if server_id and not self._has_approved_mcp_tool(server_id, tool_name):
+            return "not_ready", "unavailable"
         if server_id and not self._has_mcp_connection(user_id, server_id):
             return "needs_mcp_connection", "connect"
         if definition.test_status != "passed":

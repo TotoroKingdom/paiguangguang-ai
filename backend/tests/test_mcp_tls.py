@@ -7,6 +7,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import httpx
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
@@ -15,6 +16,32 @@ from cryptography.x509.oid import NameOID
 
 from app.core.errors import APIError
 from app.modules.runtime.mcp_client import McpClient
+
+
+def _public_addr(ip: str, port: int):
+    family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+    return [(family, socket.SOCK_STREAM, 6, "", (ip, port))]
+
+
+class LocalTlsRouteTransport(httpx.AsyncBaseTransport):
+    """Route validated public test traffic to the local TLS listener."""
+
+    def __init__(self):
+        self._inner = httpx.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        routed_url = request.url.copy_with(host="127.0.0.1")
+        routed_request = httpx.Request(
+            request.method,
+            routed_url,
+            headers=request.headers,
+            content=request.content,
+            extensions=request.extensions,
+        )
+        return await self._inner.handle_async_request(routed_request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
 
 
 def _certificate(hostname: str) -> tuple[bytes, bytes]:
@@ -60,7 +87,7 @@ def _tls_mcp_server(tmp_path: Path, certificate_pem: bytes, key_pem: bytes):
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("127.0.0.1", 0))
-    listener.listen(1)
+    listener.listen(5)
     listener.settimeout(2)
 
     def capture_sni(_ssl_socket, server_name, _ssl_context):
@@ -71,40 +98,55 @@ def _tls_mcp_server(tmp_path: Path, certificate_pem: bytes, key_pem: bytes):
     def serve() -> None:
         ready.set()
         try:
-            connection, _address = listener.accept()
-            with context.wrap_socket(connection, server_side=True) as client:
-                client.settimeout(2)
-                chunks: list[bytes] = []
-                while b"\r\n\r\n" not in b"".join(chunks):
-                    chunk = client.recv(4096)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                raw_request = b"".join(chunks)
-                observations["request"] = raw_request
-                headers = raw_request.decode("latin-1").split("\r\n")
-                observations["host"] = next(
-                    (line.split(":", 1)[1].strip() for line in headers if line.lower().startswith("host:")),
-                    None,
-                )
-                length = int(next(
-                    (line.split(":", 1)[1].strip() for line in headers if line.lower().startswith("content-length:")),
-                    "0",
-                ))
-                body = raw_request.split(b"\r\n\r\n", 1)[1]
-                while len(body) < length:
-                    chunk = client.recv(4096)
-                    if not chunk:
-                        break
-                    body += chunk
-                payload = json.dumps(
-                    {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}
-                ).encode()
-                client.sendall(
-                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                    + f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n".encode()
-                    + payload
-                )
+            for _ in range(3):
+                connection, _address = listener.accept()
+                with context.wrap_socket(connection, server_side=True) as client:
+                    client.settimeout(2)
+                    chunks: list[bytes] = []
+                    while b"\r\n\r\n" not in b"".join(chunks):
+                        chunk = client.recv(4096)
+                        if not chunk:
+                            break
+                        chunks.append(chunk)
+                    raw_request = b"".join(chunks)
+                    if observations["request"] is None:
+                        observations["request"] = raw_request
+                    headers = raw_request.decode("latin-1").split("\r\n")
+                    if observations["host"] is None:
+                        observations["host"] = next(
+                            (line.split(":", 1)[1].strip() for line in headers if line.lower().startswith("host:")),
+                            None,
+                        )
+                    length = int(next(
+                        (line.split(":", 1)[1].strip() for line in headers if line.lower().startswith("content-length:")),
+                        "0",
+                    ))
+                    body = raw_request.split(b"\r\n\r\n", 1)[1]
+                    while len(body) < length:
+                        chunk = client.recv(4096)
+                        if not chunk:
+                            break
+                        body += chunk
+                    request = json.loads(body or b"{}")
+                    if request.get("method") == "notifications/initialized":
+                        client.sendall(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                        continue
+                    if request.get("method") == "initialize":
+                        result = {
+                            "protocolVersion": "2025-06-18",
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {"name": "tls-local", "version": "1"},
+                        }
+                    else:
+                        result = {"tools": []}
+                    payload = json.dumps(
+                        {"jsonrpc": "2.0", "id": request.get("id"), "result": result}
+                    ).encode()
+                    client.sendall(
+                        b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                        + f"Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n".encode()
+                        + payload
+                    )
         except BaseException as error:  # surfaced to the test after the join
             observations["error"] = error
         finally:
@@ -131,16 +173,22 @@ def test_pinned_mcp_connection_preserves_host_and_sni(monkeypatch, tmp_path):
     certificate_pem, key_pem = _certificate("mcp.example.test")
     with _tls_mcp_server(tmp_path, certificate_pem, key_pem) as (port, observations, trusted_pem):
         endpoint = f"https://mcp.example.test:{port}/rpc"
-        monkeypatch.setattr(
-            "app.modules.runtime.mcp_client._resolve_mcp_url",
-            lambda value: (value, "127.0.0.1"),
-        )
+        original_getaddrinfo = socket.getaddrinfo
+
+        def public_dns(host, requested_port, *args, **kwargs):
+            if host == "mcp.example.test":
+                return _public_addr("93.184.216.34", requested_port)
+            return original_getaddrinfo(host, requested_port, *args, **kwargs)
+
+        monkeypatch.setattr(socket, "getaddrinfo", public_dns)
         monkeypatch.setattr(
             "httpx._transports.default.create_ssl_context",
             lambda **kwargs: _trusted_context(trusted_pem),
         )
 
-        assert asyncio.run(McpClient(endpoint, timeout=3).list_tools()) == []
+        assert asyncio.run(
+            McpClient(endpoint, transport=LocalTlsRouteTransport(), timeout=3).list_tools()
+        ) == []
 
     assert observations["error"] is None
     assert observations["sni"] == "mcp.example.test"
@@ -152,17 +200,23 @@ def test_mcp_tls_rejects_certificate_for_different_hostname(monkeypatch, tmp_pat
     certificate_pem, key_pem = _certificate("wrong.example.test")
     with _tls_mcp_server(tmp_path, certificate_pem, key_pem) as (port, observations, trusted_pem):
         endpoint = f"https://mcp.example.test:{port}/rpc"
-        monkeypatch.setattr(
-            "app.modules.runtime.mcp_client._resolve_mcp_url",
-            lambda value: (value, "127.0.0.1"),
-        )
+        original_getaddrinfo = socket.getaddrinfo
+
+        def public_dns(host, requested_port, *args, **kwargs):
+            if host == "mcp.example.test":
+                return _public_addr("93.184.216.34", requested_port)
+            return original_getaddrinfo(host, requested_port, *args, **kwargs)
+
+        monkeypatch.setattr(socket, "getaddrinfo", public_dns)
         monkeypatch.setattr(
             "httpx._transports.default.create_ssl_context",
             lambda **kwargs: _trusted_context(trusted_pem),
         )
 
         with pytest.raises(APIError) as error:
-            asyncio.run(McpClient(endpoint, timeout=3).list_tools())
+            asyncio.run(
+                McpClient(endpoint, transport=LocalTlsRouteTransport(), timeout=3).list_tools()
+            )
 
     assert error.value.code == "MCP_UNAVAILABLE"
     assert observations["sni"] == "mcp.example.test"
