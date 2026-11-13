@@ -9,6 +9,7 @@ from scripts.deploy_preflight import missing_required_environment
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "deploy.yml"
+DOCKERFILE = ROOT / "backend" / "Dockerfile"
 
 
 def production_settings(**overrides: object) -> Settings:
@@ -72,4 +73,23 @@ def test_deploy_workflow_injects_llm_config_and_preflights_before_start():
     assert workflow.index("docker compose config --quiet") < compose_start
     assert "docker inspect paiguangguang-ai-frontend" in workflow
     assert "docker inspect paiguangguang-ai-backend" in workflow
+
+
+def test_deploy_workflow_requires_joint_backup_before_migration_and_restores_on_failure():
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    assert "scripts.backup_restore create" in workflow
+    assert "scripts.backup_restore restore" in workflow
+    assert "--storage /data/user-files" in workflow
+    assert "docker compose stop backend frontend" in workflow
+    assert ".rollback-backup-dir" in workflow
+    assert "joint SQLite and user-file backup created" in workflow
+    assert "refusing to restart an unverified rollback" in workflow
+    assert "chown" in workflow and "app:app" in workflow
+
+    backup = workflow.index("scripts.backup_restore create")
+    compose_start = workflow.index("docker compose up -d --remove-orphans", backup)
+    assert backup < compose_start
+
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    assert "scripts/backup_restore.py ./scripts/backup_restore.py" in dockerfile
 

@@ -122,7 +122,7 @@ jobs:
               fi
               if [ -d "$app_dir/backups" ]; then
                 printf 'backup_dir_mode=%s\n' "$(stat -c '%a' "$app_dir/backups")"
-                find "$app_dir/backups" -maxdepth 1 -type f -name 'assistant-*.db' -printf '%f %m\n' || true
+                find "$app_dir/backups" -mindepth 2 -maxdepth 2 -type f -name 'manifest.json' -printf '%h %m\n' || true
               else
                 echo 'backup_dir=absent; deployment will create it'
               fi
@@ -183,6 +183,8 @@ jobs:
             old_frontend_image_ref=""
             old_backend_image_ref=""
             existing_volume_name=""
+            volume_name=""
+            backup_path=""
 
             if docker inspect paiguangguang-ai-frontend >/dev/null 2>&1; then
               old_frontend_image_ref="$(docker inspect --format='{{.Config.Image}}' paiguangguang-ai-frontend)"
@@ -209,6 +211,7 @@ jobs:
             if [ -f "$app_dir/docker-compose.yml" ]; then
               install -m 600 "$app_dir/docker-compose.yml" "$rollback_compose"
             fi
+            rm -f "$app_dir/.rollback-backup-dir"
 
             rollback() {
               status="$1"
@@ -216,6 +219,15 @@ jobs:
               set +e
               cd "$app_dir"
               echo "deployment failed with status $status; attempting rollback"
+              docker compose down --remove-orphans || true
+              if [ -n "$backup_path" ] && [ -f "$backup_path/manifest.json" ] && [ -n "$volume_name" ]; then
+                if ! docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_path":/backup "$BACKEND_IMAGE_NAME" -m scripts.backup_restore restore --backup /backup --database /data/assistant.db --storage /data/user-files; then
+                  echo 'joint database and user-file restore failed; refusing to restart an unverified rollback' >&2
+                  docker logout ghcr.io >/dev/null 2>&1 || true
+                  exit 1
+                fi
+                docker run --rm --entrypoint /usr/bin/chown --user 0 -v "$volume_name":/data "$BACKEND_IMAGE_NAME" -R app:app /data/assistant.db /data/user-files
+              fi
               if [ -f "$rollback_compose" ]; then
                 install -m 644 "$rollback_compose" "$app_dir/docker-compose.yml"
               else
@@ -305,12 +317,19 @@ jobs:
             docker compose pull
             docker run --rm --entrypoint python --env-file "$app_dir/.env" "$BACKEND_IMAGE_NAME" -m scripts.deploy_preflight
 
+            if docker inspect paiguangguang-ai-backend >/dev/null 2>&1 || docker inspect paiguangguang-ai-frontend >/dev/null 2>&1; then
+              docker compose stop backend frontend
+            fi
             if docker volume inspect "$volume_name" >/dev/null 2>&1; then
               database_status=0
               docker run --rm --entrypoint python --user 0 -v "$volume_name":/data "$BACKEND_IMAGE_NAME" -c "import os; raise SystemExit(0 if os.path.isfile('/data/assistant.db') else 3)" || database_status=$?
               if [ "$database_status" -eq 0 ]; then
-                docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_dir":/backup "$BACKEND_IMAGE_NAME" -c 'import os, sqlite3, time; src="/data/assistant.db"; dst="/backup/assistant-" + time.strftime("%Y%m%d-%H%M%S", time.gmtime()) + ".db"; con=sqlite3.connect(src); out=sqlite3.connect(dst); con.backup(out); out.close(); con.close(); os.chmod(dst, 0o600)'
-                echo 'sqlite backup created'
+                backup_path="$backup_dir/pre-deploy-$DEPLOY_COMMIT-$(date -u +%Y%m%d%H%M%S)"
+                install -d -m 700 "$backup_path"
+                docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_path":/backup "$BACKEND_IMAGE_NAME" -m scripts.backup_restore create --database /data/assistant.db --storage /data/user-files --destination /backup
+                printf '%s\n' "$backup_path" > "$app_dir/.rollback-backup-dir"
+                chmod 600 "$app_dir/.rollback-backup-dir"
+                echo 'joint SQLite and user-file backup created'
               elif [ "$database_status" -eq 3 ]; then
                 echo 'data volume exists without assistant.db; backup skipped'
               else
@@ -344,6 +363,9 @@ jobs:
               printf 'FRONTEND_IMAGE=%s\n' "$IMAGE_NAME"
               printf 'BACKEND_IMAGE=%s\n' "$BACKEND_IMAGE_NAME"
               printf 'DATA_VOLUME=%s\n' "$volume_name"
+              if [ -n "$backup_path" ]; then
+                printf 'BACKUP_DIR=%s\n' "$backup_path"
+              fi
               printf 'DEPLOYED_AT=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             } > "$app_dir/.deployment-record"
             chmod 600 "$app_dir/.deployment-record"
@@ -377,15 +399,19 @@ jobs:
       - name: Roll back failed public verification
         if: failure() && steps.deploy_production.outcome == 'success'
         uses: appleboy/ssh-action@v1
+        env:
+          BACKEND_IMAGE_NAME: ${{ steps.image.outputs.backend }}
         with:
           host: ${{ vars.SERVER_HOST }}
           username: ${{ vars.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          envs: BACKEND_IMAGE_NAME
           script: |
             set -eu
             app_dir=/opt/paiguangguang-ai
             cd "$app_dir"
             if [ -f "$app_dir/.docker-compose.rollback.yml" ] && [ -f "$app_dir/.env.rollback" ]; then
+              docker compose down --remove-orphans || true
               install -m 644 "$app_dir/.docker-compose.rollback.yml" "$app_dir/docker-compose.yml"
               install -m 600 "$app_dir/.env.rollback" "$app_dir/.env"
               if [ -s "$app_dir/.rollback-image" ]; then
@@ -395,6 +421,14 @@ jobs:
               if [ -s "$app_dir/.rollback-backend-image" ]; then
                 sed -i '/^BACKEND_IMAGE_NAME=/d' "$app_dir/.env"
                 printf 'BACKEND_IMAGE_NAME=%s\n' "$(cat "$app_dir/.rollback-backend-image")" >> "$app_dir/.env"
+              fi
+              volume_name="$(sed -n 's/^ASSISTANT_DATA_VOLUME=//p' "$app_dir/.env" | head -n 1)"
+              volume_name="${volume_name:-paiguangguang-ai-assistant-data}"
+              backup_path="$(cat "$app_dir/.rollback-backup-dir" 2>/dev/null || true)"
+              if [ -n "$backup_path" ] && [ -f "$backup_path/manifest.json" ]; then
+                printf '%s' "$volume_name" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9_.-]*$'
+                docker run --rm --entrypoint python --user 0 -v "$volume_name":/data -v "$backup_path":/backup "$BACKEND_IMAGE_NAME" -m scripts.backup_restore restore --backup /backup --database /data/assistant.db --storage /data/user-files
+                docker run --rm --entrypoint /usr/bin/chown --user 0 -v "$volume_name":/data "$BACKEND_IMAGE_NAME" -R app:app /data/assistant.db /data/user-files
               fi
               docker compose config --quiet
               docker compose up -d --remove-orphans
