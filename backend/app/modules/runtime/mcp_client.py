@@ -24,7 +24,7 @@ def default_transport() -> httpx.AsyncBaseTransport | None:
     return _transport_factory() if _transport_factory is not None else None
 
 
-def validate_mcp_url(url: str) -> str:
+def _resolve_mcp_url(url: str) -> tuple[str, str]:
     value = (url or "").strip()
     parsed = urlparse(value)
     if parsed.username or parsed.password:
@@ -37,20 +37,30 @@ def validate_mcp_url(url: str) -> str:
     if not host:
         raise APIError(422, "MCP_URL_INVALID", "MCP 地址缺少主机")
     try:
-        addresses = {info[4][0] for info in socket.getaddrinfo(host, parsed.port or 443)}
-    except socket.gaierror as error:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        addresses = {info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)}
+    except (socket.gaierror, ValueError) as error:
         raise APIError(422, "MCP_URL_INVALID", "MCP 主机无法解析") from error
+    if not addresses:
+        raise APIError(422, "MCP_URL_INVALID", "MCP 主机无法解析")
     for address in addresses:
-        ip = ipaddress.ip_address(address)
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError as error:
+            raise APIError(422, "MCP_URL_INVALID", "MCP 主机解析结果无效") from error
+        mapped = getattr(ip, "ipv4_mapped", None)
         if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
+            not ip.is_global
             or ip.is_reserved
             or ip.is_multicast
+            or (mapped is not None and (not mapped.is_global or mapped.is_reserved))
         ):
             raise APIError(422, "MCP_URL_BLOCKED", "MCP 地址不能指向内网或保留地址")
-    return value
+    return value, sorted(addresses)[0]
+
+
+def validate_mcp_url(url: str) -> str:
+    return _resolve_mcp_url(url)[0]
 
 
 @dataclass
@@ -87,13 +97,19 @@ class McpClient:
             "params": params or {},
         }
         try:
+            endpoint, address = _resolve_mcp_url(self.endpoint_url)
+            original = httpx.URL(endpoint)
+            pinned = original.copy_with(host=address)
+            headers["Host"] = original.netloc.decode("ascii")
             async with httpx.AsyncClient(
                 timeout=self.timeout,
                 transport=self.transport,
                 follow_redirects=False,
+                trust_env=False,
             ) as client:
                 response = await client.post(
-                    self.endpoint_url, json=body, headers=headers
+                    pinned, json=body, headers=headers,
+                    extensions={"sni_hostname": original.host},
                 )
         except httpx.TimeoutException as error:
             raise APIError(504, "MCP_TIMEOUT", "MCP 服务超时") from error

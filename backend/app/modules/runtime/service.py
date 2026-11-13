@@ -584,6 +584,11 @@ class RuntimeService:
         server = self.session.get(McpServer, server_id)
         if server is None or server.status != "approved":
             raise APIError(403, "MCP_SERVER_NOT_APPROVED", "MCP Server 未获平台批准")
+        tools = loads(server.tools_json, [])
+        if not isinstance(tools, list) or not any(
+            isinstance(item, dict) and item.get("name") == tool_name for item in tools
+        ):
+            raise APIError(403, "MCP_TOOL_NOT_ALLOWED", "MCP 工具不在允许列表中")
         connection = self.session.scalar(
             select(McpConnection).where(
                 McpConnection.user_id == principal.user.id,

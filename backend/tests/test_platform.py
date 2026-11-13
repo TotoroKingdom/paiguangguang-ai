@@ -852,7 +852,11 @@ class SlowProvider:
         yield LLMChunk(done=True)
 
 
-def test_mcp_client_lists_and_calls_tools_with_bearer_token():
+def test_mcp_client_lists_and_calls_tools_with_bearer_token(monkeypatch):
+    monkeypatch.setattr(
+        "app.modules.runtime.mcp_client._resolve_mcp_url",
+        lambda url: (url, "8.8.8.8"),
+    )
     captured: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1073,7 +1077,7 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection(monkeypatch
         headers=headers(user),
     )
     assert network_failure.json()["run"]["status"] == "failed"
-    assert network_failure.json()["run"]["errorCode"] == "MCP_UNAVAILABLE"
+    assert network_failure.json()["run"]["errorCode"] == "MCP_URL_BLOCKED"
 
     admin.post(
         f"/api/v1/admin/mcp/servers/{server_id}/disable",
@@ -1836,7 +1840,13 @@ def test_openai_compatible_provider_surfaces_upstream_error(monkeypatch):
     assert body["run"]["errorCode"] == "LLM_UPSTREAM_ERROR"
 
 
-def test_mcp_client_over_real_local_http():
+def test_mcp_client_over_real_local_http(monkeypatch):
+    # This controlled local protocol fixture deliberately bypasses the network
+    # policy; separate security tests assert that loopback is blocked in use.
+    monkeypatch.setattr(
+        "app.modules.runtime.mcp_client._resolve_mcp_url",
+        lambda url: (url, "127.0.0.1"),
+    )
     with local_mcp_server() as (port, seen_headers):
         client = McpClient(
             f"http://127.0.0.1:{port}/rpc",
