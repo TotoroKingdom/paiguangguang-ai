@@ -14,6 +14,8 @@ from app.modules.personal.storage import storage_lock
 from app.repositories import utc_now
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
+SUPPORTED_TEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
+SUPPORTED_TEXT_CONTENT_TYPES = {"text/plain", "text/markdown", "text/x-markdown"}
 
 
 def _fernet() -> Fernet:
@@ -127,6 +129,19 @@ class PersonalService:
         if len(data) > MAX_FILE_BYTES:
             raise APIError(413, "FILE_TOO_LARGE", "文件超过 5 MiB")
         name = clean_filename(filename)
+        extension = Path(name).suffix.lower()
+        normalized_type = (content_type or "").split(";", 1)[0].strip().lower()
+        if (
+            extension not in SUPPORTED_TEXT_EXTENSIONS
+            or normalized_type not in SUPPORTED_TEXT_CONTENT_TYPES
+        ):
+            raise APIError(422, "FILE_TYPE_UNSUPPORTED", "仅支持 TXT 或 Markdown 文本文件")
+        try:
+            decoded = data.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise APIError(422, "FILE_CONTENT_INVALID", "文本文件必须使用 UTF-8 编码") from error
+        if "\x00" in decoded:
+            raise APIError(422, "FILE_CONTENT_INVALID", "文本文件内容无效")
         file_id = __import__("uuid").uuid4().hex
         root = Path(settings.storage_root).resolve()
         with storage_lock(root):

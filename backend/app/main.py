@@ -27,12 +27,15 @@ from app.modules.personal.router import (
     mcp_router,
     me_router as personal_me_router,
 )
+from app.modules.personal.service import MAX_FILE_BYTES
 from app.modules.runtime.router import admin_router as runtime_admin_router
 from app.modules.runtime.router import creator_router as runtime_creator_router
 from app.modules.runtime.router import router as runtime_router
 from app.routers import conversations
 
 logger = logging.getLogger(__name__)
+
+MAX_UPLOAD_REQUEST_BYTES = MAX_FILE_BYTES + 64 * 1024
 
 
 @asynccontextmanager
@@ -86,16 +89,18 @@ app.include_router(capability_governance_router, prefix="/api/v1")
 
 @app.middleware("http")
 async def request_guard(request: Request, call_next):
+    is_file_upload = request.url.path == "/api/v1/me/files"
     if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/v1/"):
         content_type = request.headers.get("content-type", "").lower()
-        is_file_upload = request.url.path == "/api/v1/me/files"
         if not content_type.startswith("application/json") and not (
             is_file_upload and content_type.startswith("multipart/form-data")
         ):
             return JSONResponse(status_code=415, content={"detail": "JSON request body required"})
     content_length = request.headers.get("content-length")
-    if content_length and content_length.isdigit() and int(content_length) > settings.max_body_bytes:
-        return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+    if content_length and content_length.isdigit():
+        body_limit = MAX_UPLOAD_REQUEST_BYTES if is_file_upload else settings.max_body_bytes
+        if int(content_length) > body_limit:
+            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
     origin = request.headers.get("origin")
     if origin:
         normalized = origin.rstrip("/")
