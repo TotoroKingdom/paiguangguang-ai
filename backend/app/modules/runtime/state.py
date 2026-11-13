@@ -18,6 +18,11 @@ from app.modules.runtime.models import AgentRun
 
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "timed_out"})
 ACTIVE_STATES = frozenset({"queued", "running", "waiting_tool"})
+ALLOWED_TRANSITIONS = {
+    "queued": frozenset({"running", "failed", "cancelled", "timed_out"}),
+    "running": frozenset({"waiting_tool", "completed", "failed", "cancelled", "timed_out"}),
+    "waiting_tool": frozenset({"running", "failed", "cancelled", "timed_out"}),
+}
 _MAX_CHECKPOINT_BYTES = 2 * 1024 * 1024
 
 
@@ -95,7 +100,8 @@ def heartbeat_run(
             AgentRun.id == run_id,
             AgentRun.worker_id == worker_id.strip()[:128],
             AgentRun.status.in_(("running", "waiting_tool")),
-            or_(AgentRun.lease_expires_at.is_(None), AgentRun.lease_expires_at > now),
+            AgentRun.lease_expires_at.is_not(None),
+            AgentRun.lease_expires_at > now,
         )
         .values(
             heartbeat_at=now,
@@ -134,14 +140,27 @@ def transition_run(
     """CAS transition with one-way terminal-state protection."""
     if to_state not in ACTIVE_STATES | TERMINAL_STATES:
         raise ValueError(f"unknown run state: {to_state}")
-    allowed = tuple(state for state in dict.fromkeys(from_states) if state not in TERMINAL_STATES)
+    allowed = tuple(
+        state
+        for state in dict.fromkeys(from_states)
+        if state not in TERMINAL_STATES and to_state in ALLOWED_TRANSITIONS.get(state, ())
+    )
     if not allowed:
+        return False
+    if worker_id is None and to_state in {"running", "waiting_tool", "completed"}:
         return False
     now = now or utc_now()
     conditions = [AgentRun.id == run_id, AgentRun.status.in_(allowed)]
     if worker_id is not None:
+        if not worker_id.strip():
+            return False
         conditions.append(AgentRun.worker_id == worker_id)
-        conditions.append(or_(AgentRun.lease_expires_at.is_(None), AgentRun.lease_expires_at > now))
+        conditions.extend((AgentRun.lease_expires_at.is_not(None), AgentRun.lease_expires_at > now))
+    elif any(state in {"running", "waiting_tool"} for state in allowed):
+        # Active execution must always be fenced by a worker lease.
+        return False
+    if to_state in ACTIVE_STATES | {"completed"}:
+        conditions.append(AgentRun.cancel_requested.is_(False))
     if expected_version is not None:
         conditions.append(AgentRun.state_version == expected_version)
     values: dict[str, object] = {
@@ -177,8 +196,12 @@ def save_checkpoint(
         raise ValueError("checkpoint exceeds 2 MiB")
     conditions = [AgentRun.id == run_id, AgentRun.status.in_(tuple(ACTIVE_STATES))]
     if worker_id is not None:
+        if not worker_id.strip():
+            return False
         conditions.append(AgentRun.worker_id == worker_id)
-        conditions.append(or_(AgentRun.lease_expires_at.is_(None), AgentRun.lease_expires_at > utc_now()))
+        conditions.extend((AgentRun.lease_expires_at.is_not(None), AgentRun.lease_expires_at > utc_now()))
+    else:
+        return False
     if expected_version is not None:
         conditions.append(AgentRun.state_version == expected_version)
     now = utc_now()
@@ -209,10 +232,15 @@ def increment_tool_count(
         AgentRun.status == "running",
         AgentRun.cancel_requested.is_(False),
         AgentRun.tool_call_count < AgentRun.max_tool_calls,
-        or_(AgentRun.lease_expires_at.is_(None), AgentRun.lease_expires_at > utc_now()),
+        AgentRun.lease_expires_at.is_not(None),
+        AgentRun.lease_expires_at > utc_now(),
     ]
     if worker_id is not None:
+        if not worker_id.strip():
+            return False
         conditions.append(AgentRun.worker_id == worker_id)
+    else:
+        return False
     result = session.execute(
         update(AgentRun)
         .where(*conditions)

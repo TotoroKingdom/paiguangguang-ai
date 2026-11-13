@@ -110,6 +110,40 @@ def test_terminal_transition_is_single_winner_and_cancel_blocks_tool_claim():
         assert TERMINAL_STATES == {"completed", "failed", "cancelled", "timed_out"}
 
 
+def test_cancelled_run_cannot_complete_and_graph_rejects_invalid_edges():
+    with _session() as session:
+        run = _run(session)
+        assert not transition_run(
+            session, run.id, from_states=("queued",), to_state="completed"
+        )
+        assert claim_run(session, run.id, worker_id="worker-a")
+        session.commit()
+        assert request_cancel(session, run.id)
+        session.commit()
+        assert not transition_run(
+            session,
+            run.id,
+            from_states=("running",),
+            to_state="completed",
+            worker_id="worker-a",
+        )
+
+
+def test_worker_writes_require_non_expired_non_null_lease():
+    with _session() as session:
+        run = _run(session)
+        assert claim_run(session, run.id, worker_id="worker-a")
+        session.commit()
+        run.lease_expires_at = None
+        session.commit()
+        assert not heartbeat_run(session, run.id, worker_id="worker-a")
+        assert not save_checkpoint(session, run.id, {"next": 1}, worker_id="worker-a")
+        assert not increment_tool_count(session, run.id, worker_id="worker-a")
+        assert not transition_run(
+            session, run.id, from_states=("running",), to_state="completed", worker_id="worker-a"
+        )
+
+
 def test_checkpoint_and_tool_quota_are_bounded_and_idempotent_lookup_is_scoped():
     with _session() as session:
         run = _run(session, idempotency_key="turn-1")
