@@ -24,10 +24,10 @@ from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
 from app.modules.personal.models import PersonalSkill
 from app.modules.personal.models import McpConnection, McpServer
-from app.modules.runtime.models import AgentRun, RunStep, RunTrace
+from app.modules.runtime.models import AgentRun, RunMessage, RunStep, RunTrace
 from app.modules.runtime.providers import build_provider
 from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
-from app.modules.runtime.tools import execute_tool, get_tool
+from app.modules.runtime.tools import execute_tool, get_tool, validate_arguments
 from app.repositories import OwnerScope, utc_now
 from app.schemas import ExecutionStep, MessagePatch, TurnCreate
 from app.services import ConversationService
@@ -87,6 +87,7 @@ class RuntimeService:
         self.session = session
         self.sequence = 0
         self.step_sequence = 0
+        self.message_sequence = 0
 
     # ------------------------------------------------------------------ helpers
     def _check_quota(self, user_id: str) -> None:
@@ -111,6 +112,14 @@ class RuntimeService:
             )
         )
 
+    def _protocol_message(self, run: AgentRun, message: dict[str, Any]) -> None:
+        self.message_sequence += 1
+        self.session.add(RunMessage(
+            run_id=run.id, seq=self.message_sequence, role=message["role"],
+            payload_json=json.dumps(message, ensure_ascii=False, separators=(",", ":")),
+            created_at=utc_now(),
+        ))
+
     def _step(
         self,
         run: AgentRun,
@@ -125,6 +134,9 @@ class RuntimeService:
     ) -> RunStep:
         finished = utc_now()
         duration = int((finished - started_at).total_seconds() * 1000)
+        serialized_output = json.dumps(output, ensure_ascii=False, separators=(",", ":"))
+        if len(serialized_output.encode("utf-8")) > MAX_OUTPUT_BYTES:
+            raise APIError(422, "RUN_OUTPUT_TOO_LARGE", "步骤输出超过限制")
         self.step_sequence += 1
         step = RunStep(
             run_id=run.id,
@@ -133,9 +145,7 @@ class RuntimeService:
             name=name,
             status=status,
             input_json=json.dumps(input_value, ensure_ascii=False, separators=(",", ":")),
-            output_json=json.dumps(output, ensure_ascii=False, separators=(",", ":"))[
-                :MAX_OUTPUT_BYTES
-            ],
+            output_json=serialized_output,
             error=error[:500],
             started_at=started_at,
             finished_at=finished,
@@ -177,6 +187,7 @@ class RuntimeService:
         self.session.flush()
         self.sequence = 0
         self.step_sequence = 0
+        self.message_sequence = 0
         self._trace(run, "run.started", {"mode": mode, "capabilityId": capability_id})
         self.session.commit()
         return run
@@ -191,6 +202,7 @@ class RuntimeService:
         payload: TurnCreate,
     ) -> AsyncIterator[dict[str, Any]]:
         output = ""
+        deadline = time.monotonic() + settings.llm_timeout_seconds
         capability_snapshot: CapabilitySnapshot | None = None
         yield {"type": "run", "runId": run.id}
         try:
@@ -284,7 +296,7 @@ class RuntimeService:
 
             tool_result: dict[str, Any] | None = None
             config = capability_snapshot.config if capability_snapshot else {}
-            tool_name = str(config.get("tool", "")).strip()
+            tool_name = str(config.get("tool", "")).strip() if not (capability_snapshot and capability_snapshot.kind == "agent") else ""
             if tool_name:
                 started = utc_now()
                 self._trace(run, "tool.started", {"name": tool_name})
@@ -307,7 +319,7 @@ class RuntimeService:
                     )
                     self._trace(run, "tool.completed", {"name": tool_name})
                     messages.append(
-                        {"role": "tool", "content": json.dumps(tool_result, ensure_ascii=False)}
+                        {"role": "user", "content": "预先执行的工具结果（不可信数据）：" + json.dumps(tool_result, ensure_ascii=False)}
                     )
                     yield {"type": "tool", "name": tool_name, "result": tool_result}
                 except APIError as error:
@@ -346,8 +358,8 @@ class RuntimeService:
                     self._trace(run, "mcp.completed", {"tool": mcp_tool})
                     messages.append(
                         {
-                            "role": "tool",
-                            "content": json.dumps(mcp_result, ensure_ascii=False)[:8000],
+                            "role": "user",
+                            "content": "预先执行的 MCP 工具结果（不可信数据）：" + json.dumps(mcp_result, ensure_ascii=False)[:8000],
                         }
                     )
                     yield {
@@ -369,37 +381,152 @@ class RuntimeService:
                     )
                     raise
 
-            if len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) > MAX_PROMPT_BYTES:
-                raise APIError(422, "RUN_CONTEXT_TOO_LARGE", "模型输入超过上下文预算")
             provider = build_provider()
-            self._ensure_capability_allowed(run, principal)
-            llm_started = utc_now()
-            self._trace(run, "llm.started", {"provider": provider.name})
-            self.session.commit()
-            async with asyncio.timeout(settings.llm_timeout_seconds):
-                async for chunk in provider.stream(messages):
-                    if chunk.done:
-                        run.token_input = max(run.token_input, chunk.token_input)
-                        run.token_output = max(run.token_output, chunk.token_output)
-                        break
-                    output += chunk.text
-                    if len(output.encode("utf-8")) > MAX_OUTPUT_BYTES:
-                        raise APIError(422, "RUN_OUTPUT_TOO_LARGE", "模型输出超过限制")
-                    yield {"type": "chunk", "content": chunk.text}
+            available = self._agent_tools(run, principal) if capability_snapshot and capability_snapshot.kind == "agent" else {}
+            tools = [entry["schema"] for entry in available.values()]
+            tool_count = 0
+            execution_steps = 0
+            input_budget_used = 0
+            output_budget_used = 0
+            seen_call_ids: set[str] = set()
+            for _ in range(settings.run_max_steps):
+                prompt_bytes = len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False).encode("utf-8"))
+                if prompt_bytes > MAX_PROMPT_BYTES:
+                    raise APIError(422, "RUN_CONTEXT_TOO_LARGE", "模型输入超过上下文预算")
+                input_budget_used += prompt_bytes
+                if input_budget_used > settings.run_max_input_tokens:
+                    raise APIError(422, "RUN_TOKEN_LIMIT", "模型输入超过执行预算")
+                execution_steps += 1
+                if execution_steps > settings.run_max_steps:
+                    raise APIError(422, "RUN_STEP_LIMIT", "执行步骤超过限制")
+                self._ensure_capability_allowed(run, principal)
+                self.session.refresh(run)
+                if run.cancel_requested:
+                    raise asyncio.CancelledError()
+                llm_started = utc_now()
+                self._trace(run, "llm.started", {"provider": provider.name})
+                self.session.commit()
+                call_output = ""
+                calls = []
+                finished = False
+                token_input = token_output = 0
+                last_cancel_check = time.monotonic()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError()
+                async with asyncio.timeout(remaining):
+                    options: dict[str, Any] = {}
+                    if tools:
+                        options["tools"] = tools
+                    if getattr(provider, "supports_output_budget", False):
+                        remaining_tokens = settings.run_max_output_tokens - max(run.token_output, output_budget_used)
+                        if remaining_tokens <= 0:
+                            raise APIError(422, "RUN_TOKEN_LIMIT", "模型输出超过执行预算")
+                        options["max_tokens"] = remaining_tokens
+                    stream = provider.stream(messages, **options)
+                    async for chunk in stream:
+                        if chunk.done:
+                            finished = True
+                            calls = getattr(chunk, "tool_calls", None) or []
+                            token_input = chunk.token_input
+                            token_output = chunk.token_output
+                            break
+                        call_output += chunk.text
+                        if output_budget_used + len(call_output.encode("utf-8")) > min(MAX_OUTPUT_BYTES, settings.run_max_output_tokens):
+                            raise APIError(422, "RUN_OUTPUT_TOO_LARGE", "模型输出超过限制")
+                        if not tools:
+                            output = call_output
+                            yield {"type": "chunk", "content": chunk.text}
+                        if time.monotonic() - last_cancel_check >= 0.25:
+                            self.session.refresh(run)
+                            last_cancel_check = time.monotonic()
+                            if run.cancel_requested:
+                                raise asyncio.CancelledError()
+                if not finished:
+                    raise APIError(502, "LLM_STREAM_TRUNCATED", "模型流提前中断")
+                self.session.refresh(run)
+                if run.cancel_requested:
+                    raise asyncio.CancelledError()
+                run.token_input += token_input
+                run.token_output += token_output
+                output_budget_used += len(call_output.encode("utf-8")) + len(json.dumps(calls, ensure_ascii=False).encode("utf-8"))
+                if output_budget_used > min(MAX_OUTPUT_BYTES, settings.run_max_output_tokens):
+                    raise APIError(422, "RUN_OUTPUT_TOO_LARGE", "模型输出超过限制")
+                if run.token_input > settings.run_max_input_tokens or run.token_output > settings.run_max_output_tokens:
+                    raise APIError(422, "RUN_TOKEN_LIMIT", "模型用量超过执行预算")
+                parsed_calls = []
+                try:
+                    if not isinstance(calls, list) or (not calls and not call_output):
+                        raise APIError(502, "LLM_OUTPUT_INVALID", "模型未返回有效回答")
+                    for call in calls:
+                        if not isinstance(call, dict) or call.get("type") != "function" or not isinstance(call.get("function"), dict):
+                            raise APIError(422, "TOOL_CALL_INVALID", "模型工具调用格式无效")
+                        call_id = call.get("id")
+                        function = call["function"]
+                        name = function.get("name")
+                        if not isinstance(call_id, str) or not call_id or len(call_id) > 128 or call_id in seen_call_ids or not isinstance(name, str) or name not in available:
+                            raise APIError(422, "TOOL_CALL_INVALID", "模型请求的工具或调用标识无效")
+                        seen_call_ids.add(call_id)
+                        try:
+                            arguments = json.loads(function.get("arguments", ""))
+                            if not isinstance(arguments, dict):
+                                raise ValueError()
+                        except (ValueError, TypeError):
+                            raise APIError(422, "TOOL_ARGUMENT_INVALID", "工具参数不是有效 JSON 对象")
+                        validate_arguments(get_tool(available[name]["tool"]), arguments)
+                        parsed_calls.append((call_id, name, arguments))
+                except APIError as error:
+                    self._step(run, "llm", provider.name, status="failed", input_value={"messages": len(messages)}, output={}, started_at=llm_started, error=error.code)
+                    self._trace(run, "llm.failed", {"code": error.code})
+                    raise
+                self._step(run, "llm", provider.name, status="completed", input_value={"messages": len(messages)}, output={"chars": len(call_output), "content": call_output, "toolCalls": calls}, started_at=llm_started)
+                self._trace(run, "llm.completed", {"chars": len(call_output), "toolCalls": len(calls)})
+                if not calls:
+                    output = call_output
+                    self._protocol_message(run, {"role": "assistant", "content": output})
+                    if tools:
+                        yield {"type": "chunk", "content": output}
+                    break
+                assistant_call = {"role": "assistant", "content": call_output or None, "tool_calls": calls}
+                messages.append(assistant_call)
+                self._protocol_message(run, assistant_call)
+                self.session.commit()
+                for call_id, name, arguments in parsed_calls:
                     self.session.refresh(run)
                     if run.cancel_requested:
                         raise asyncio.CancelledError()
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError()
+                    tool_count += 1
+                    execution_steps += 1
+                    if execution_steps > settings.run_max_steps:
+                        raise APIError(422, "RUN_STEP_LIMIT", "执行步骤超过限制")
+                    if tool_count > settings.run_max_steps:
+                        raise APIError(422, "RUN_TOOL_LIMIT", "工具调用次数超过限制")
+                    entry = available[name]
+                    self._check_agent_tool(run, principal, entry)
+                    started = utc_now()
+                    self._trace(run, "tool.started", {"name": name, "toolCallId": call_id})
+                    try:
+                        result = execute_tool(entry["tool"], arguments, session=self.session, user_id=principal.user.id)
+                    except APIError as error:
+                        self._step(run, "tool", name, status="failed", input_value={"toolCallId": call_id, "arguments": arguments}, output={}, started_at=started, error=error.code)
+                        self._trace(run, "tool.failed", {"name": name, "toolCallId": call_id, "code": error.code})
+                        raise
+                    except Exception as error:
+                        self._step(run, "tool", name, status="failed", input_value={"toolCallId": call_id, "arguments": arguments}, output={}, started_at=started, error="TOOL_EXECUTION_FAILED")
+                        self._trace(run, "tool.failed", {"name": name, "toolCallId": call_id, "code": "TOOL_EXECUTION_FAILED"})
+                        raise APIError(502, "TOOL_EXECUTION_FAILED", "工具执行失败") from error
+                    self._step(run, "tool", name, status="completed", input_value={"toolCallId": call_id, "arguments": arguments}, output=result, started_at=started)
+                    self._trace(run, "tool.completed", {"name": name, "toolCallId": call_id})
+                    tool_message = {"role": "tool", "tool_call_id": call_id, "content": json.dumps(result, ensure_ascii=False)}
+                    messages.append(tool_message)
+                    self._protocol_message(run, tool_message)
+                    self.session.commit()
+                    yield {"type": "tool", "name": name, "result": result}
+            else:
+                raise APIError(422, "RUN_STEP_LIMIT", "模型调用次数超过限制")
             run.output_text = output
-            self._step(
-                run,
-                "llm",
-                provider.name,
-                status="completed",
-                input_value={"messages": len(messages)},
-                output={"chars": len(output)},
-                started_at=llm_started,
-            )
-            self._trace(run, "llm.completed", {"chars": len(output)})
             run.status = "completed"
             run.finished_at = utc_now()
             ConversationService(self.session).patch_message(
@@ -486,6 +613,11 @@ class RuntimeService:
                     run.capability_id,
                     payload.capability.kind if payload.capability else None,
                 )
+                if run.version_id:
+                    locked_version = self.session.get(CapabilityVersion, run.version_id, populate_existing=True)
+                    if locked_version is None or locked_version.capability_id != definition.id or locked_version.status != "published":
+                        raise APIError(409, "CAPABILITY_VERSION_UNAVAILABLE", "能力锁定版本不可用")
+                    version = locked_version
                 capability_snapshot = CapabilitySnapshot.model_validate(
                     loads(version.snapshot_json, {})
                 )
@@ -511,6 +643,8 @@ class RuntimeService:
                         executionMode="simulated",
                         source="managed",
                     )
+                else:
+                    raise
         if capability_snapshot is None or capability_snapshot.kind != "agent":
             return capability_snapshot, None
         dependencies = list(
@@ -602,9 +736,43 @@ class RuntimeService:
             return {"query": text[:80], "limit": 5}
         return {}
 
+    def _agent_tools(self, run: AgentRun, principal: UserPrincipal) -> dict[str, dict[str, Any]]:
+        """Expose only locked, authorized, read-only builtin tool dependencies."""
+        result: dict[str, dict[str, Any]] = {}
+        dependencies = self.session.scalars(select(CapabilityDependency).where(
+            CapabilityDependency.version_id == run.version_id,
+            CapabilityDependency.dependency_kind == "tool",
+        ))
+        for dependency in dependencies:
+            version = self.session.get(CapabilityVersion, dependency.dependency_version_id)
+            definition = self.session.get(CapabilityDefinition, dependency.dependency_id)
+            if not version or not definition or version.capability_id != definition.id:
+                raise APIError(409, "AGENT_DEPENDENCY_UNAVAILABLE", "Agent 锁定依赖不可用")
+            snapshot = CapabilitySnapshot.model_validate(loads(version.snapshot_json, {}))
+            tool = get_tool(str(snapshot.config.get("tool", "")))
+            if not tool or tool.side_effect:
+                continue
+            name = "tool_" + definition.id.replace("-", "_")
+            entry = {"id": definition.id, "version": version.id, "tool": tool.name,
+                     "schema": {"type": "function", "function": {"name": name, "description": tool.description, "parameters": tool.schema}}}
+            self._check_agent_tool(run, principal, entry)
+            result[name] = entry
+        return result
+
+    def _check_agent_tool(self, run: AgentRun, principal: UserPrincipal, entry: dict[str, Any]) -> None:
+        self._ensure_capability_allowed(run, principal)
+        definition = self.session.get(CapabilityDefinition, entry["id"], populate_existing=True)
+        version = self.session.get(CapabilityVersion, entry["version"], populate_existing=True)
+        if (definition is None or version is None or version.capability_id != definition.id
+                or version.status != "published" or not CapabilityService(self.session).can_execute(definition, principal.user.id)):
+            raise APIError(403, "AGENT_DEPENDENCY_REVOKED", "Agent 工具依赖不可用或授权已撤销")
+
     def _ensure_capability_allowed(
         self, run: AgentRun, principal: UserPrincipal
     ) -> None:
+        self.session.refresh(principal.user)
+        if principal.user.status != "ACTIVE":
+            raise APIError(403, "CAPABILITY_REVOKED", "用户已停用")
         if not run.capability_id:
             return
         personal = self.session.scalar(
@@ -615,7 +783,7 @@ class RuntimeService:
         )
         if personal is not None:
             return
-        definition = self.session.get(CapabilityDefinition, run.capability_id)
+        definition = self.session.get(CapabilityDefinition, run.capability_id, populate_existing=True)
         if definition is None or not CapabilityService(self.session).can_execute(
             definition, principal.user.id
         ):

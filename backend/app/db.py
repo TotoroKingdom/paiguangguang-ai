@@ -55,7 +55,7 @@ def init_db() -> None:
         PersonalSkill,
         UserFile,
     )
-    from app.modules.runtime.models import AgentRun, RunStep, RunTrace  # noqa: F401
+    from app.modules.runtime.models import AgentRun, RunMessage, RunStep, RunTrace  # noqa: F401
     from app.modules.observability.models import AuditEvent  # noqa: F401
 
     if settings.database_path:

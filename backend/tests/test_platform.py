@@ -62,6 +62,7 @@ def local_openai_server(*, chunks: list[str], status: int = 200, done: bool = Tr
                 )
                 self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
             if done:
+                self.wfile.write(b'data: {"choices":[{"delta":{},"finish_reason":"stop"}]}\n\n')
                 self.wfile.write(b"data: [DONE]\n\n")
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -1541,6 +1542,11 @@ def test_agent_v2_uses_new_dependency_but_old_run_keeps_v1():
         headers=headers(admin),
     )
     user_id = make_user("950")
+    granted = admin.post(
+        f"/api/v1/admin/capabilities/{tool_id}/grants",
+        json={"userId": user_id}, headers=headers(admin),
+    )
+    assert granted.status_code == 204, granted.text
     admin.post(
         f"/api/v1/admin/capabilities/{agent_id}/grants",
         json={"userId": user_id},
@@ -2475,6 +2481,11 @@ def test_disabled_agent_dependency_blocks_new_runs_without_rewriting_history():
         headers=headers(admin),
     )
     user_id = make_user("997")
+    granted = admin.post(
+        f"/api/v1/admin/capabilities/{tool_id}/grants",
+        json={"userId": user_id}, headers=headers(admin),
+    )
+    assert granted.status_code == 204, granted.text
     admin.post(
         f"/api/v1/admin/capabilities/{agent_id}/grants",
         json={"userId": user_id},
@@ -2495,7 +2506,7 @@ def test_disabled_agent_dependency_blocks_new_runs_without_rewriting_history():
         headers=headers(user),
     )
     assert first.status_code == 200, first.text
-    assert first.json()["run"]["status"] == "completed"
+    assert first.json()["run"]["status"] == "completed", (first.json()["run"]["errorCode"], first.json()["run"]["errorMessage"])
     first_run_id = first.json()["run"]["id"]
 
     disabled = admin.post(

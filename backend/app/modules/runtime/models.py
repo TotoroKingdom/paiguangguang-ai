@@ -1,6 +1,15 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -35,6 +44,9 @@ class AgentRun(Base):
     )
     traces: Mapped[list["RunTrace"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="RunTrace.seq"
+    )
+    messages: Mapped[list["RunMessage"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="RunMessage.seq"
     )
 
 
@@ -72,3 +84,29 @@ class RunTrace(Base):
     detail_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     run: Mapped[AgentRun] = relationship(back_populates="traces")
+
+
+class RunMessage(Base):
+    """Persisted OpenAI-compatible protocol messages for a Run.
+
+    ``payload_json`` stores the complete wire-shaped message, including
+    assistant ``tool_calls`` and matching tool ``tool_call_id`` values. The
+    per-run sequence is unique so recovery/retry cannot append a second copy
+    of the same protocol position.
+    """
+
+    __tablename__ = "run_messages"
+    __table_args__ = (
+        UniqueConstraint("run_id", "seq", name="uq_run_messages_run_seq"),
+        Index("ix_run_messages_run_seq", "run_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
+    run_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    run: Mapped[AgentRun] = relationship(back_populates="messages")
