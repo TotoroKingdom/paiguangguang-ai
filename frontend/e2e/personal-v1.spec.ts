@@ -111,6 +111,39 @@ test("persists personal skills and files and restricts MCP to approved servers",
   } finally {
     await otherBrowser.dispose();
   }
+
+  await page.getByRole("button", { name: "选择聊天附件", exact: true }).click();
+  const attachmentDialog = page.getByRole("dialog");
+  await attachmentDialog.getByLabel(/personal-notes\.txt/).check();
+  await attachmentDialog.getByRole("button", { name: "用于聊天", exact: true }).click();
+  await page.goto("/assistant");
+  await expect(page.getByText("personal-notes.txt", { exact: true })).toBeVisible();
+  await page.screenshot({
+    path: screenshotPath(testInfo, "personal-attachment-context"),
+    animations: "disabled",
+  });
+
+  const streamRequestPromise = page.waitForRequest(
+    (request) => request.url().includes("/api/v1/assistant/runs/stream"),
+  );
+  const streamResponsePromise = page.waitForResponse(
+    (response) => response.url().includes("/api/v1/assistant/runs/stream"),
+  );
+  await page.getByRole("textbox", { name: "询问任何问题" }).fill("请读取文件内容并回复");
+  await page.getByRole("button", { name: "发送消息", exact: true }).click();
+  const [streamRequest, streamResponse] = await Promise.all([
+    streamRequestPromise,
+    streamResponsePromise,
+  ]);
+  expect(streamResponse.status()).toBe(200);
+  expect(streamRequest.postDataJSON().fileIds).toEqual([uploaded.id]);
+  await expect(page.getByRole("article", { name: "助手消息", exact: true }).last()).toBeVisible();
+  await expect(
+    page.getByRole("article", { name: "助手消息", exact: true }).last().locator(".as-message-status"),
+  ).toHaveCount(0);
+  await page.goto("/assistant/files");
+  await expect(page.getByText("personal-notes.txt", { exact: true })).toBeVisible();
+
   await page.getByRole("button", { name: "删除文件：personal-notes.txt" }).click();
   await page.getByRole("button", { name: "确认删除", exact: true }).click();
   await expect(page.getByText("personal-notes.txt", { exact: true })).toHaveCount(0);

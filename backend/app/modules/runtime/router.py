@@ -34,6 +34,7 @@ from app.modules.runtime.schemas import (
 )
 from app.modules.runtime.service import RuntimeService, run_view
 from app.modules.personal.models import PersonalSkill
+from app.modules.personal.service import PersonalService
 from app.core.errors import APIError
 from app.owner import require_json_request
 from app.repositories import utc_now
@@ -49,6 +50,8 @@ creator_router = APIRouter(prefix="/creator/runs", tags=["creator-runs"])
 def _turn_payload(
     payload: ExecuteRequest, session: Session, user_id: str
 ) -> tuple[TurnCreate, str, str]:
+    for file_id in payload.fileIds:
+        PersonalService(session).get_file(user_id, file_id)
     capability = None
     version_id = ""
     capability_id = ""
@@ -85,6 +88,7 @@ def _turn_payload(
             clientTurnId=payload.clientTurnId,
             text=payload.text,
             capability=capability,
+            fileIds=payload.fileIds,
         ),
     )
     return turn, capability_id, version_id
@@ -263,6 +267,7 @@ async def retry_run_stream(
         text=text,
         capabilityId=capability.id if capability else None,
         capabilityKind=capability.kind if capability else None,
+        fileIds=stored.get("fileIds", []),
         mode=payload.mode,
     )
     turn, capability_id, version_id = _turn_payload(

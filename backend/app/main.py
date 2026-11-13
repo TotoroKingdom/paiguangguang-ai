@@ -90,6 +90,7 @@ app.include_router(capability_governance_router, prefix="/api/v1")
 @app.middleware("http")
 async def request_guard(request: Request, call_next):
     is_file_upload = request.url.path == "/api/v1/me/files"
+    body_limit = MAX_UPLOAD_REQUEST_BYTES if is_file_upload else settings.max_body_bytes
     if request.method in {"POST", "PATCH"} and request.url.path.startswith("/api/v1/"):
         content_type = request.headers.get("content-type", "").lower()
         if not content_type.startswith("application/json") and not (
@@ -98,7 +99,6 @@ async def request_guard(request: Request, call_next):
             return JSONResponse(status_code=415, content={"detail": "JSON request body required"})
     content_length = request.headers.get("content-length")
     if content_length and content_length.isdigit():
-        body_limit = MAX_UPLOAD_REQUEST_BYTES if is_file_upload else settings.max_body_bytes
         if int(content_length) > body_limit:
             return JSONResponse(status_code=413, content={"detail": "Request body too large"})
     origin = request.headers.get("origin")
@@ -107,6 +107,38 @@ async def request_guard(request: Request, call_next):
         same_origin = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
         if normalized not in settings.allowed_origin_values | {same_origin}:
             return JSONResponse(status_code=403, content={"detail": "Origin not allowed"})
+
+    # Content-Length is optional and can be forged. Count bytes as they arrive
+    # before Starlette parses JSON or multipart data. Keep only a bounded body
+    # buffer so accepted requests can be replayed to the downstream parser.
+    original_receive = request._receive
+    received_bytes = 0
+    body = bytearray()
+    while True:
+        message = await original_receive()
+        if message.get("type") != "http.request":
+            break
+        chunk = message.get("body", b"")
+        received_bytes += len(chunk)
+        if received_bytes > body_limit:
+            return JSONResponse(status_code=413, content={"detail": "Request body too large"})
+        body.extend(chunk)
+        if not message.get("more_body", False):
+            break
+
+    replayed = False
+
+    async def replay_receive():
+        nonlocal replayed
+        if replayed:
+            # The body has already been replayed. Keep waiting for the real
+            # disconnect so StreamingResponse can continue sending its SSE
+            # stream while the client remains connected.
+            return await original_receive()
+        replayed = True
+        return {"type": "http.request", "body": bytes(body), "more_body": False}
+
+    request._receive = replay_receive
     return await call_next(request)
 
 

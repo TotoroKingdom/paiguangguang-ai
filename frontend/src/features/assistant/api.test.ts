@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createConversation, getConversation, listConversations, streamRun } from "./api";
+import { createConversation, createTurn, getConversation, listConversations, streamRun } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -74,6 +74,25 @@ describe("assistant API client", () => {
     });
   });
 
+  it("sends the auth CSRF token when creating a server turn", async () => {
+    document.cookie = "paiguangguang_csrf=csrf-token; path=/";
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({}), { status: 201, headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await createTurn(
+      "conversation-1",
+      { text: "读取文件", capability: null, fileIds: [] },
+      [],
+      "turn-1",
+    );
+
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      "X-CSRF-Token": "csrf-token",
+    });
+  });
+
   it("does not send a client-selected provider mode for runtime execution", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response('data: {"type":"done","status":"completed"}\n\n', { status: 200 }),
@@ -86,12 +105,13 @@ describe("assistant API client", () => {
         clientTurnId: "turn-1",
         text: "使用服务端模型",
         capability: null,
-        fileIds: [],
+        fileIds: ["file-1", "file-2"],
       },
       vi.fn(),
     );
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string) as Record<string, unknown>;
     expect(body).not.toHaveProperty("mode");
+    expect(body.fileIds).toEqual(["file-1", "file-2"]);
   });
 });

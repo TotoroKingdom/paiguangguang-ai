@@ -365,7 +365,7 @@ function PersonalFilesPage() {
       )}
       {selectionOpen && (
         <AssistantDialog title="选择聊天附件" onClose={() => setSelectionOpen(false)}>
-          <p className={styles.dialogHint}>可从服务端文件库选择多个附件元数据。</p>
+          <p className={styles.dialogHint}>可从服务端文件库选择多个文本附件，发送后会读取文件内容。</p>
           <div className={styles.list}>
             {files.map((file) => (
               <label className={styles.listItem} key={file.id}>
