@@ -351,7 +351,11 @@ def test_runtime_executes_readonly_tool_and_persists_run_and_steps():
     )
     assert result.status_code == 200, result.text
     body = result.json()
-    assert body["run"]["status"] == "completed"
+    assert body["run"]["status"] == "completed", (
+        body["run"].get("errorCode"),
+        body["run"].get("errorMessage"),
+        body["run"].get("traces"),
+    )
     assert body["run"]["mode"] == "fake"
     assert any(step["type"] == "tool" for step in body["run"]["steps"])
     assert "FakeProvider" in body["run"]["outputText"]

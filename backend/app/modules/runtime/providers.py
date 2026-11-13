@@ -203,7 +203,7 @@ class OpenAICompatibleProvider:
             return calls
 
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 async with client.stream("POST", url, headers=headers, json=body) as response:
                     if response.status_code >= 400:
                         raise APIError(502, "LLM_UPSTREAM_ERROR", "模型服务返回错误")
