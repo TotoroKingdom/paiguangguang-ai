@@ -2,6 +2,8 @@
 
 This script never opens the source database in write mode. It copies through the
 SQLite backup API into an isolated directory, then reports aggregate counts only.
+Pass ``--storage`` to add the verified database plus user-file recovery drill
+implemented by ``scripts.backup_restore``.
 """
 
 from __future__ import annotations
@@ -11,6 +13,11 @@ import hashlib
 import json
 import sqlite3
 from pathlib import Path
+
+try:
+    from scripts.backup_restore import create_backup, restore_and_verify
+except ModuleNotFoundError:  # Supports direct execution from backend/scripts.
+    from backup_restore import create_backup, restore_and_verify
 
 TABLES = [
     "conversations",
@@ -151,6 +158,7 @@ def main() -> None:
     parser.add_argument("--source", required=True)
     parser.add_argument("--workdir", required=True)
     parser.add_argument("--compare", default="")
+    parser.add_argument("--storage", default="")
     args = parser.parse_args()
     source = Path(args.source)
     workdir = Path(args.workdir)
@@ -177,6 +185,18 @@ def main() -> None:
         compared = report(Path(args.compare))
         result["compareTo"] = str(args.compare)
         result["schemaDiff"] = diff_schema(original["schema"], compared["schema"])
+    if args.storage:
+        joint_backup = workdir / "joint-backup"
+        joint_restore_db = workdir / "joint-restored.db"
+        joint_restore_storage = workdir / "joint-restored-user-files"
+        manifest = create_backup(source, Path(args.storage), joint_backup)
+        result["jointBackup"] = {
+            "fileCount": len(manifest["files"]),
+            "databaseSha256": manifest["database"]["sha256"],
+        }
+        result["jointRestore"] = restore_and_verify(
+            joint_backup, joint_restore_db, joint_restore_storage
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
 
 

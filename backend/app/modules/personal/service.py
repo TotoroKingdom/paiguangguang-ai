@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.errors import APIError
 from app.modules.personal.models import McpConnection, McpServer, PersonalSkill, UserFile
+from app.modules.personal.storage import storage_lock
 from app.repositories import utc_now
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
@@ -128,27 +129,33 @@ class PersonalService:
         name = clean_filename(filename)
         file_id = __import__("uuid").uuid4().hex
         root = Path(settings.storage_root).resolve()
-        directory = (root / user_id).resolve()
-        if root not in directory.parents and directory != root:
-            raise APIError(500, "STORAGE_INVALID", "文件存储路径异常")
-        directory.mkdir(parents=True, exist_ok=True)
-        target = directory / f"{file_id}.bin"
-        target.write_bytes(data)
-        now = utc_now()
-        item = UserFile(
-            id=file_id,
-            user_id=user_id,
-            filename=name,
-            content_type=(content_type or "application/octet-stream")[:120],
-            size_bytes=len(data),
-            checksum=hashlib.sha256(data).hexdigest(),
-            storage_path=str(target),
-            status="active",
-            created_at=now,
-        )
-        self.session.add(item)
-        self.session.commit()
-        return item
+        with storage_lock(root):
+            directory = (root / user_id).resolve()
+            if root not in directory.parents and directory != root:
+                raise APIError(500, "STORAGE_INVALID", "文件存储路径异常")
+            directory.mkdir(parents=True, exist_ok=True)
+            target = directory / f"{file_id}.bin"
+            target.write_bytes(data)
+            now = utc_now()
+            item = UserFile(
+                id=file_id,
+                user_id=user_id,
+                filename=name,
+                content_type=(content_type or "application/octet-stream")[:120],
+                size_bytes=len(data),
+                checksum=hashlib.sha256(data).hexdigest(),
+                storage_path=str(target),
+                status="active",
+                created_at=now,
+            )
+            self.session.add(item)
+            try:
+                self.session.commit()
+            except Exception:
+                self.session.rollback()
+                target.unlink(missing_ok=True)
+                raise
+            return item
 
     def read_file(self, user_id: str, file_id: str) -> tuple[UserFile, bytes]:
         item = self.get_file(user_id, file_id)
@@ -161,10 +168,11 @@ class PersonalService:
         return item, path.read_bytes()
 
     def delete_file(self, user_id: str, file_id: str) -> None:
-        item = self.get_file(user_id, file_id)
-        item.status = "deleted"
-        item.deleted_at = utc_now()
-        self.session.commit()
+        with storage_lock(settings.storage_root):
+            item = self.get_file(user_id, file_id)
+            item.status = "deleted"
+            item.deleted_at = utc_now()
+            self.session.commit()
 
     # ---------------------------------------------------------------------- mcp
     def list_servers(self, *, approved_only: bool = True) -> list[McpServer]:
