@@ -1,4 +1,5 @@
 import asyncio
+import json
 import socket
 
 import httpx
@@ -111,9 +112,27 @@ def test_each_client_keeps_bearer_token_isolated(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         requests.append(request)
+        body = json.loads(request.content)
+        if body["method"] == "initialize":
+            return httpx.Response(
+                200,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": body["id"],
+                    "result": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {"tools": {}},
+                        "serverInfo": {"name": "fixture", "version": "1"},
+                    },
+                },
+                headers={"Mcp-Session-Id": "session"},
+                request=request,
+            )
+        if body["method"] == "notifications/initialized":
+            return httpx.Response(202, request=request)
         return httpx.Response(
             200,
-            json={"jsonrpc": "2.0", "id": 1, "result": {"tools": []}},
+            json={"jsonrpc": "2.0", "id": body["id"], "result": {"tools": []}},
             request=request,
         )
 
@@ -161,9 +180,26 @@ def test_http_client_does_not_trust_proxy_environment(monkeypatch):
 
         async def post(self, url, *, json, headers, **kwargs):
             request = httpx.Request("POST", url, json=json, headers=headers)
+            if json["method"] == "initialize":
+                return httpx.Response(
+                    200,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": json["id"],
+                        "result": {
+                            "protocolVersion": "2025-06-18",
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {"name": "fixture", "version": "1"},
+                        },
+                    },
+                    headers={"Mcp-Session-Id": "session"},
+                    request=request,
+                )
+            if json["method"] == "notifications/initialized":
+                return httpx.Response(202, request=request)
             return httpx.Response(
                 200,
-                json={"jsonrpc": "2.0", "id": 1, "result": {"tools": []}},
+                json={"jsonrpc": "2.0", "id": json["id"], "result": {"tools": []}},
                 request=request,
             )
 

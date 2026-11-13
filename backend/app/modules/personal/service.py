@@ -211,9 +211,14 @@ class PersonalService:
 
     # ---------------------------------------------------------------------- mcp
     def list_servers(self, *, approved_only: bool = True) -> list[McpServer]:
+        from app.modules.runtime.mcp_client import MCP_TRANSPORT_STREAMABLE_HTTP
+
         statement = select(McpServer).order_by(McpServer.created_at.desc())
         if approved_only:
-            statement = statement.where(McpServer.status == "approved")
+            statement = statement.where(
+                McpServer.status == "approved",
+                McpServer.transport == MCP_TRANSPORT_STREAMABLE_HTTP,
+            )
         return list(self.session.scalars(statement))
 
     def get_server(self, server_id: str) -> McpServer:
@@ -232,9 +237,18 @@ class PersonalService:
         created_by: str,
         status: str = "pending",
     ) -> McpServer:
-        from app.modules.runtime.mcp_client import validate_mcp_url
+        from app.modules.runtime.mcp_client import (
+            MCP_TRANSPORT_STREAMABLE_HTTP,
+            validate_mcp_url,
+        )
 
         now = utc_now()
+        if transport != MCP_TRANSPORT_STREAMABLE_HTTP:
+            raise APIError(
+                422,
+                "MCP_TRANSPORT_UNSUPPORTED",
+                "MCP 仅支持 Streamable HTTP transport",
+            )
         server = McpServer(
             name=name.strip(),
             description=description.strip(),
@@ -276,9 +290,17 @@ class PersonalService:
     def connect_server(
         self, user_id: str, server_id: str, token: str
     ) -> McpConnection:
+        from app.modules.runtime.mcp_client import MCP_TRANSPORT_STREAMABLE_HTTP
+
         server = self.get_server(server_id)
         if server.status != "approved":
             raise APIError(403, "MCP_SERVER_NOT_APPROVED", "只能连接平台已批准的 Server")
+        if server.transport != MCP_TRANSPORT_STREAMABLE_HTTP:
+            raise APIError(
+                403,
+                "MCP_TRANSPORT_UNSUPPORTED",
+                "MCP 仅支持 Streamable HTTP transport",
+            )
         connection = self.session.scalar(
             select(McpConnection).where(
                 McpConnection.user_id == user_id,

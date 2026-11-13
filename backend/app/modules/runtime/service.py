@@ -23,8 +23,12 @@ from app.modules.capabilities.models import (
 from app.modules.capabilities.service import CapabilityService, loads
 from app.modules.identity.user_service import UserPrincipal
 from app.modules.personal.service import PersonalService, decrypt_secret
-from app.modules.personal.models import PersonalSkill
-from app.modules.personal.models import McpConnection, McpServer
+from app.modules.personal.models import (
+    McpConnection,
+    McpServer,
+    McpServerTool,
+    PersonalSkill,
+)
 from app.modules.runtime.models import AgentRun, RunMessage, RunStep, RunTrace
 from app.modules.runtime.providers import build_provider
 from app.modules.runtime.state import (
@@ -33,7 +37,12 @@ from app.modules.runtime.state import (
     release_user_slot,
     transition_run,
 )
-from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
+from app.modules.runtime.mcp_client import (
+    MCP_TRANSPORT_STREAMABLE_HTTP,
+    McpClient,
+    mcp_tool_fingerprint,
+    validate_mcp_url,
+)
 from app.modules.runtime.tools import execute_tool, get_tool, validate_arguments
 from app.repositories import OwnerScope, utc_now
 from app.schemas import ExecutionStep, MessagePatch, TurnCreate
@@ -1142,10 +1151,21 @@ class RuntimeService:
         server = self.session.get(McpServer, server_id)
         if server is None or server.status != "approved":
             raise APIError(403, "MCP_SERVER_NOT_APPROVED", "MCP Server 未获平台批准")
-        tools = loads(server.tools_json, [])
-        if not isinstance(tools, list) or not any(
-            isinstance(item, dict) and item.get("name") == tool_name for item in tools
-        ):
+        if server.transport != MCP_TRANSPORT_STREAMABLE_HTTP:
+            raise APIError(
+                403,
+                "MCP_TRANSPORT_UNSUPPORTED",
+                "MCP 仅支持 Streamable HTTP transport",
+            )
+        approved_tool = self.session.scalar(
+            select(McpServerTool).where(
+                McpServerTool.server_id == server.id,
+                McpServerTool.name == tool_name,
+                McpServerTool.approval_status == "approved",
+                McpServerTool.risk_class == "readonly",
+            )
+        )
+        if approved_tool is None:
             raise APIError(403, "MCP_TOOL_NOT_ALLOWED", "MCP 工具不在允许列表中")
         connection = self.session.scalar(
             select(McpConnection).where(
@@ -1164,6 +1184,20 @@ class RuntimeService:
         validate_mcp_url(server.endpoint_url)
         client = McpClient(server.endpoint_url, token=token, timeout=20)
         async with asyncio.timeout(25):
+            live_tools = await client.list_tools()
+            live_tool = next(
+                (item for item in live_tools if item.name == tool_name),
+                None,
+            )
+            if (
+                live_tool is None
+                or mcp_tool_fingerprint(live_tool) != approved_tool.schema_fingerprint
+            ):
+                raise APIError(
+                    409,
+                    "MCP_TOOL_SCHEMA_DRIFT",
+                    "MCP 工具定义已变化，需要管理员重新审核",
+                )
             result = await client.call_tool(tool_name, arguments)
         connection.last_used_at = utc_now()
         return result

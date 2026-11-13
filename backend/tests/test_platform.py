@@ -1,6 +1,7 @@
 import asyncio
 import json
 import secrets
+import socket
 import threading
 import time
 from contextlib import contextmanager
@@ -24,14 +25,40 @@ from app.modules.runtime.models import AgentRun, RunStep, RunTrace
 from app.modules.runtime.providers import LLMChunk, build_provider
 from app.modules.runtime.service import RuntimeService
 from app.modules.runtime.tools import execute_tool
-from app.modules.personal.models import McpServer
-from app.modules.runtime.mcp_client import McpClient, set_transport_factory
+from app.modules.personal.models import McpServer, McpServerTool
+from app.modules.runtime.mcp_client import (
+    McpClient,
+    McpTool,
+    mcp_tool_fingerprint,
+    set_transport_factory,
+)
 from app.modules.observability.models import AuditEvent
 from app.models import Conversation, Message
 from app.repositories import utc_now
 from app.repositories import OwnerScope
 from app.schemas import CapabilityRef, MessageRequest, TurnCreate
 from app.services import ConversationService
+
+
+class LocalMcpRouteTransport(httpx.AsyncBaseTransport):
+    """Test-only route from an approved public DNS answer to local HTTP."""
+
+    def __init__(self):
+        self._inner = httpx.AsyncHTTPTransport()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        routed_url = request.url.copy_with(host="127.0.0.1")
+        routed_request = httpx.Request(
+            request.method,
+            routed_url,
+            headers=request.headers,
+            content=request.content,
+            extensions=request.extensions,
+        )
+        return await self._inner.handle_async_request(routed_request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
 
 
 @contextmanager
@@ -90,6 +117,30 @@ def local_mcp_server():
             body = json.loads(self.rfile.read(length) or b"{}")
             seen_headers.append(self.headers.get("authorization", ""))
             method = body.get("method")
+            if method == "initialize":
+                payload = json.dumps(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": body["id"],
+                        "result": {
+                            "protocolVersion": "2025-06-18",
+                            "capabilities": {"tools": {}},
+                            "serverInfo": {"name": "local", "version": "1"},
+                        },
+                    }
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Mcp-Session-Id", "local-session")
+                self.end_headers()
+                self.wfile.write(payload)
+                return
+            if method == "notifications/initialized":
+                self.send_response(202)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
             if method == "tools/list":
                 result = {
                     "tools": [
@@ -807,6 +858,22 @@ def test_mcp_connections_only_use_approved_servers_and_hide_tokens():
 def mcp_handler(request: httpx.Request) -> httpx.Response:
     body = json.loads(request.content)
     method = body.get("method")
+    if method == "initialize":
+        return httpx.Response(
+            200,
+            json={
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "result": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "fixture", "version": "1"},
+                },
+            },
+            headers={"Mcp-Session-Id": "fixture-session"},
+        )
+    if method == "notifications/initialized":
+        return httpx.Response(202, request=request)
     if method == "tools/list":
         return httpx.Response(
             200,
@@ -821,7 +888,6 @@ def mcp_handler(request: httpx.Request) -> httpx.Response:
                             "inputSchema": {
                                 "type": "object",
                                 "properties": {"query": {"type": "string"}},
-                                "required": ["query"],
                             },
                         }
                     ]
@@ -923,14 +989,40 @@ def test_runtime_executes_approved_mcp_tool_with_personal_connection(monkeypatch
             endpoint_url="https://example.com/rpc",
             transport="http",
             status="approved",
-            tools_json=json.dumps(
-                [{"name": "search", "description": "Search", "inputSchema": {}}]
-            ),
+            tools_json="[]",
             created_by="admin",
             created_at=utc_now(),
             updated_at=utc_now(),
         )
+        now = utc_now()
+        tool_schema = {
+            "type": "object",
+            "properties": {"query": {"type": "string"}},
+        }
+        approved_tool = McpTool(
+            name="search",
+            description="Search approved knowledge",
+            input_schema=tool_schema,
+        )
         session.add(server)
+        session.flush()
+        session.add(
+            McpServerTool(
+                server_id=server.id,
+                name=approved_tool.name,
+                description=approved_tool.description,
+                input_schema_json=json.dumps(tool_schema, separators=(",", ":")),
+                output_schema_json="null",
+                schema_fingerprint=mcp_tool_fingerprint(approved_tool),
+                approval_status="approved",
+                risk_class="readonly",
+                approval_reason="runtime test",
+                approved_by="admin",
+                approved_at=now,
+                discovered_at=now,
+                updated_at=now,
+            )
+        )
         session.commit()
         server_id = server.id
 
@@ -1851,23 +1943,28 @@ def test_openai_compatible_provider_surfaces_upstream_error(monkeypatch):
 
 
 def test_mcp_client_over_real_local_http(monkeypatch):
-    # This controlled local protocol fixture deliberately bypasses the network
-    # policy; separate security tests assert that loopback is blocked in use.
-    monkeypatch.setattr(
-        "app.modules.runtime.mcp_client._resolve_mcp_url",
-        lambda url: (url, "127.0.0.1"),
-    )
+    # The production resolver runs against a public test DNS answer.  Only the
+    # test transport routes the already-validated request to this local server.
     with local_mcp_server() as (port, seen_headers):
+        original_getaddrinfo = socket.getaddrinfo
+
+        def public_dns(host, requested_port, *args, **kwargs):
+            if host == "mcp.example.test":
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", requested_port))]
+            return original_getaddrinfo(host, requested_port, *args, **kwargs)
+
+        monkeypatch.setattr(socket, "getaddrinfo", public_dns)
         client = McpClient(
-            f"http://127.0.0.1:{port}/rpc",
+            f"http://mcp.example.test:{port}/rpc",
             token="http-private-token",
+            transport=LocalMcpRouteTransport(),
             timeout=5,
         )
         tools = asyncio.run(client.list_tools())
         result = asyncio.run(client.call_tool("http-search", {"query": "policy"}))
     assert tools[0].name == "http-search"
     assert result["content"][0]["text"] == "http-mcp-ok"
-    assert seen_headers == ["Bearer http-private-token"] * 2
+    assert seen_headers == ["Bearer http-private-token"] * 4
 
 
 def test_openai_provider_network_error_is_explicit(monkeypatch):

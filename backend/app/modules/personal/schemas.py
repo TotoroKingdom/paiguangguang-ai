@@ -49,7 +49,7 @@ class McpServerCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1000)
     endpointUrl: str = Field(min_length=8, max_length=512)
-    transport: Literal["http", "sse"] = "http"
+    transport: Literal["http"] = "http"
 
 
 class McpServerView(BaseModel):
@@ -92,3 +92,18 @@ class ReviewRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str = Field(default="", max_length=255)
+
+
+class McpToolApprovalRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # A tool is eligible for the default runtime only after an administrator
+    # explicitly classifies it as read-only. Remote annotations are not used.
+    riskClass: Literal["readonly"]
+    reason: str = Field(min_length=1, max_length=255)
+
+
+class McpToolDisableRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=255)
