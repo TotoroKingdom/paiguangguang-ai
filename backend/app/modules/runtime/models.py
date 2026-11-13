@@ -18,11 +18,18 @@ from app.models import uuid_string
 
 class AgentRun(Base):
     __tablename__ = "agent_runs"
-    __table_args__ = (Index("ix_agent_runs_user_created", "user_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_agent_runs_user_created", "user_id", "created_at"),
+        Index("ix_agent_runs_assistant_attempt", "assistant_message_id", "attempt"),
+        UniqueConstraint("user_id", "idempotency_key", name="uq_agent_runs_user_idempotency"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
     user_id: Mapped[str] = mapped_column(String(36), nullable=False)
     conversation_id: Mapped[str] = mapped_column(String(36), nullable=False, default="")
+    assistant_message_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    client_turn_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(160), nullable=True)
     capability_id: Mapped[str] = mapped_column(String(36), nullable=False, default="")
     version_id: Mapped[str] = mapped_column(String(36), nullable=False, default="")
     mode: Mapped[str] = mapped_column(String(16), nullable=False, default="fake")
@@ -39,6 +46,18 @@ class AgentRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    worker_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    checkpoint_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    max_steps: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    max_tool_calls: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    tool_call_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    input_token_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=200_000)
+    output_token_budget: Mapped[int] = mapped_column(Integer, nullable=False, default=100_000)
     steps: Mapped[list["RunStep"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", order_by="RunStep.seq"
     )
@@ -52,7 +71,10 @@ class AgentRun(Base):
 
 class RunStep(Base):
     __tablename__ = "run_steps"
-    __table_args__ = (Index("ix_run_steps_run_seq", "run_id", "seq"),)
+    __table_args__ = (
+        Index("ix_run_steps_run_seq", "run_id", "seq"),
+        UniqueConstraint("run_id", "seq", name="uq_run_steps_run_seq"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
     run_id: Mapped[str] = mapped_column(
@@ -73,7 +95,10 @@ class RunStep(Base):
 
 class RunTrace(Base):
     __tablename__ = "run_traces"
-    __table_args__ = (Index("ix_run_traces_run_seq", "run_id", "seq"),)
+    __table_args__ = (
+        Index("ix_run_traces_run_seq", "run_id", "seq"),
+        UniqueConstraint("run_id", "seq", name="uq_run_traces_run_seq"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_string)
     run_id: Mapped[str] = mapped_column(
