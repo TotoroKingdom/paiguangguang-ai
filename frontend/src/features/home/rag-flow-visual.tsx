@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import styles from "./rag-flow-visual.module.css";
 
 type Tone = "default" | "blue" | "teal" | "violet" | "amber" | "green";
@@ -7,7 +9,7 @@ type DiagramNodeProps = {
   detail?: string;
   eyebrow?: string;
   tone?: Tone;
-  children?: React.ReactNode;
+  children?: ReactNode;
 };
 
 function DiagramNode({ title, detail, eyebrow, tone = "default", children }: DiagramNodeProps) {
@@ -34,7 +36,7 @@ function DiagramSection({
   index: string;
   title: string;
   subtitle: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className={styles.section}>
