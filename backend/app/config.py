@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: int = 120
     llm_daily_request_limit: int = 20
     run_max_steps: int = 6
+    run_max_input_tokens: int = 200_000
+    run_max_output_tokens: int = 100_000
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="ASSISTANT_", extra="ignore")
 
