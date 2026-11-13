@@ -3,11 +3,12 @@ import codecs
 import json
 import time
 from collections.abc import AsyncIterator
-from datetime import timezone
+from datetime import timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -26,6 +27,12 @@ from app.modules.personal.models import PersonalSkill
 from app.modules.personal.models import McpConnection, McpServer
 from app.modules.runtime.models import AgentRun, RunMessage, RunStep, RunTrace
 from app.modules.runtime.providers import build_provider
+from app.modules.runtime.state import (
+    acquire_user_slot,
+    increment_tool_count,
+    release_user_slot,
+    transition_run,
+)
 from app.modules.runtime.mcp_client import McpClient, validate_mcp_url
 from app.modules.runtime.tools import execute_tool, get_tool, validate_arguments
 from app.repositories import OwnerScope, utc_now
@@ -165,7 +172,19 @@ class RuntimeService:
         capability_id: str,
         input_text: str,
         mode: str | None = None,
+        assistant_message_id: str | None = None,
+        client_turn_id: str | None = None,
+        idempotency_key: str | None = None,
     ) -> AgentRun:
+        if idempotency_key:
+            existing = self.session.scalar(select(AgentRun).where(
+                AgentRun.user_id == principal.user.id, AgentRun.idempotency_key == idempotency_key
+            ))
+            if existing is not None:
+                if (existing.conversation_id != conversation_id or existing.input_text != input_text[:6000]
+                        or existing.capability_id != capability_id or existing.assistant_message_id != assistant_message_id):
+                    raise APIError(409, "RUN_IDEMPOTENCY_CONFLICT", "请求标识已用于其他执行")
+                return existing
         self._check_quota(principal.user.id)
         now = utc_now()
         configured_provider = settings.llm_provider.strip().lower() or "unconfigured"
@@ -178,17 +197,42 @@ class RuntimeService:
             version_id=version_id,
             mode=configured_provider,
             provider=configured_provider,
-            status="running",
+            status="queued" if idempotency_key else "running",
+            assistant_message_id=assistant_message_id,
+            client_turn_id=client_turn_id,
+            idempotency_key=idempotency_key,
+            max_steps=settings.run_max_steps,
+            max_tool_calls=settings.run_max_steps,
+            input_token_budget=settings.run_max_input_tokens,
+            output_token_budget=settings.run_max_output_tokens,
+            deadline_at=now + timedelta(seconds=settings.llm_timeout_seconds),
             input_text=input_text[:6000],
             created_at=now,
-            started_at=now,
+            started_at=None if idempotency_key else now,
         )
         self.session.add(run)
-        self.session.flush()
+        try:
+            self.session.flush()
+        except IntegrityError:
+            self.session.rollback()
+            existing = self.session.scalar(select(AgentRun).where(
+                AgentRun.user_id == principal.user.id, AgentRun.idempotency_key == idempotency_key
+            )) if idempotency_key else None
+            if existing is None or existing.conversation_id != conversation_id or existing.input_text != input_text[:6000] or existing.capability_id != capability_id or existing.assistant_message_id != assistant_message_id:
+                raise APIError(409, "RUN_IDEMPOTENCY_CONFLICT", "请求标识冲突")
+            return existing
+        if not acquire_user_slot(
+            self.session,
+            user_id=principal.user.id,
+            run_id=run.id,
+            lease_seconds=settings.llm_timeout_seconds + 30,
+        ):
+            self.session.rollback()
+            raise APIError(429, "RUN_CONCURRENCY_LIMIT", "已有执行中的 Run")
         self.sequence = 0
         self.step_sequence = 0
         self.message_sequence = 0
-        self._trace(run, "run.started", {"mode": mode, "capabilityId": capability_id})
+        self._trace(run, "run.queued" if idempotency_key else "run.started", {"mode": mode, "capabilityId": capability_id})
         self.session.commit()
         return run
 
@@ -200,9 +244,32 @@ class RuntimeService:
         scope: OwnerScope,
         assistant_message_id: str,
         payload: TurnCreate,
+        worker_id: str | None = None,
+        resume_checkpoint: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
+        self.sequence = int(
+            self.session.scalar(
+                select(func.max(RunTrace.seq)).where(RunTrace.run_id == run.id)
+            )
+            or 0
+        )
+        self.step_sequence = int(
+            self.session.scalar(
+                select(func.max(RunStep.seq)).where(RunStep.run_id == run.id)
+            )
+            or 0
+        )
+        self.message_sequence = int(
+            self.session.scalar(
+                select(func.max(RunMessage.seq)).where(RunMessage.run_id == run.id)
+            )
+            or 0
+        )
         output = ""
-        deadline = time.monotonic() + settings.llm_timeout_seconds
+        remaining_seconds = settings.llm_timeout_seconds
+        if run.deadline_at is not None:
+            remaining_seconds = max(0, (run.deadline_at - utc_now()).total_seconds())
+        deadline = time.monotonic() + remaining_seconds
         capability_snapshot: CapabilitySnapshot | None = None
         yield {"type": "run", "runId": run.id}
         try:
@@ -210,7 +277,7 @@ class RuntimeService:
                 run, principal, payload
             )
         except APIError as error:
-            self._fail_run(run, scope, assistant_message_id, error)
+            self._fail_run(run, scope, assistant_message_id, error, worker_id=worker_id)
             yield {
                 "type": "error",
                 "runId": run.id,
@@ -384,12 +451,151 @@ class RuntimeService:
             provider = build_provider()
             available = self._agent_tools(run, principal) if capability_snapshot and capability_snapshot.kind == "agent" else {}
             tools = [entry["schema"] for entry in available.values()]
-            tool_count = 0
-            execution_steps = 0
-            input_budget_used = 0
-            output_budget_used = 0
+            tool_count = run.tool_call_count
+            execution_steps = int(
+                self.session.scalar(
+                    select(func.count(RunStep.id)).where(
+                        RunStep.run_id == run.id,
+                        RunStep.step_type.in_(("llm", "tool")),
+                    )
+                )
+                or 0
+            )
+            input_budget_used = run.token_input
+            output_budget_used = run.token_output
             seen_call_ids: set[str] = set()
-            for _ in range(settings.run_max_steps):
+            resume_messages: list[dict[str, Any]] = []
+            if worker_id and resume_checkpoint is not None:
+                stored_messages = list(
+                    self.session.scalars(
+                        select(RunMessage)
+                        .where(RunMessage.run_id == run.id)
+                        .order_by(RunMessage.seq)
+                    )
+                )
+                for stored in stored_messages:
+                    try:
+                        payload_value = json.loads(stored.payload_json)
+                    except (TypeError, ValueError):
+                        raise APIError(
+                            409,
+                            "RUN_CHECKPOINT_INVALID",
+                            "Run 协议检查点损坏",
+                        )
+                    if not isinstance(payload_value, dict):
+                        raise APIError(
+                            409,
+                            "RUN_CHECKPOINT_INVALID",
+                            "Run 协议检查点格式无效",
+                        )
+                    resume_messages.append(payload_value)
+                    if (
+                        payload_value.get("role") == "tool"
+                        and isinstance(payload_value.get("tool_call_id"), str)
+                    ):
+                        seen_call_ids.add(payload_value["tool_call_id"])
+            messages.extend(resume_messages)
+            resume_final = False
+            if resume_messages:
+                last_message = resume_messages[-1]
+                if (
+                    last_message.get("role") == "assistant"
+                    and not last_message.get("tool_calls")
+                    and isinstance(last_message.get("content"), str)
+                    and last_message["content"]
+                ):
+                    output = last_message["content"]
+                    resume_final = True
+                pending_index = next(
+                    (
+                        index
+                        for index in range(len(resume_messages) - 1, -1, -1)
+                        if resume_messages[index].get("role") == "assistant"
+                        and isinstance(
+                            resume_messages[index].get("tool_calls"),
+                            list,
+                        )
+                    ),
+                    -1,
+                )
+                if pending_index >= 0:
+                    answered = {
+                        item.get("tool_call_id")
+                        for item in resume_messages[pending_index + 1 :]
+                        if item.get("role") == "tool"
+                    }
+                    for call in resume_messages[pending_index]["tool_calls"]:
+                        if not isinstance(call, dict):
+                            raise APIError(
+                                409,
+                                "RUN_CHECKPOINT_INVALID",
+                                "Run 工具调用检查点无效",
+                            )
+                        call_id = call.get("id")
+                        if call_id in answered:
+                            continue
+                        function = call.get("function")
+                        if (
+                            not isinstance(call_id, str)
+                            or not call_id
+                            or len(call_id) > 128
+                            or call_id in seen_call_ids
+                            or not isinstance(function, dict)
+                        ):
+                            raise APIError(
+                                409,
+                                "RUN_CHECKPOINT_INVALID",
+                                "Run 工具调用检查点无效",
+                            )
+                        name = function.get("name")
+                        if not isinstance(name, str) or name not in available:
+                            raise APIError(
+                                403,
+                                "AGENT_DEPENDENCY_REVOKED",
+                                "恢复执行时工具已不可用",
+                            )
+                        try:
+                            arguments = json.loads(function.get("arguments", ""))
+                        except (TypeError, ValueError):
+                            raise APIError(
+                                409,
+                                "RUN_CHECKPOINT_INVALID",
+                                "Run 工具参数检查点无效",
+                            )
+                        if not isinstance(arguments, dict):
+                            raise APIError(
+                                409,
+                                "RUN_CHECKPOINT_INVALID",
+                                "Run 工具参数检查点无效",
+                            )
+                        validate_arguments(get_tool(available[name]["tool"]), arguments)
+                        execution_steps += 1
+                        if execution_steps > settings.run_max_steps:
+                            raise APIError(
+                                422,
+                                "RUN_STEP_LIMIT",
+                                "恢复执行步骤超过限制",
+                            )
+                        seen_call_ids.add(call_id)
+                        result = self._execute_agent_tool_call(
+                            run,
+                            principal,
+                            call_id=call_id,
+                            name=name,
+                            arguments=arguments,
+                            available=available,
+                            worker_id=worker_id,
+                            deadline=deadline,
+                        )
+                        messages.append(
+                            {
+                                "role": "tool",
+                                "tool_call_id": call_id,
+                                "content": json.dumps(result, ensure_ascii=False),
+                            }
+                        )
+                        yield {"type": "tool", "name": name, "result": result}
+            for _ in range(settings.run_max_steps if not resume_final else 0):
                 prompt_bytes = len(json.dumps({"messages": messages, "tools": tools}, ensure_ascii=False).encode("utf-8"))
                 if prompt_bytes > MAX_PROMPT_BYTES:
                     raise APIError(422, "RUN_CONTEXT_TOO_LARGE", "模型输入超过上下文预算")
@@ -503,32 +709,40 @@ class RuntimeService:
                         raise APIError(422, "RUN_STEP_LIMIT", "执行步骤超过限制")
                     if tool_count > settings.run_max_steps:
                         raise APIError(422, "RUN_TOOL_LIMIT", "工具调用次数超过限制")
-                    entry = available[name]
-                    self._check_agent_tool(run, principal, entry)
-                    started = utc_now()
-                    self._trace(run, "tool.started", {"name": name, "toolCallId": call_id})
-                    try:
-                        result = execute_tool(entry["tool"], arguments, session=self.session, user_id=principal.user.id)
-                    except APIError as error:
-                        self._step(run, "tool", name, status="failed", input_value={"toolCallId": call_id, "arguments": arguments}, output={}, started_at=started, error=error.code)
-                        self._trace(run, "tool.failed", {"name": name, "toolCallId": call_id, "code": error.code})
-                        raise
-                    except Exception as error:
-                        self._step(run, "tool", name, status="failed", input_value={"toolCallId": call_id, "arguments": arguments}, output={}, started_at=started, error="TOOL_EXECUTION_FAILED")
-                        self._trace(run, "tool.failed", {"name": name, "toolCallId": call_id, "code": "TOOL_EXECUTION_FAILED"})
-                        raise APIError(502, "TOOL_EXECUTION_FAILED", "工具执行失败") from error
-                    self._step(run, "tool", name, status="completed", input_value={"toolCallId": call_id, "arguments": arguments}, output=result, started_at=started)
-                    self._trace(run, "tool.completed", {"name": name, "toolCallId": call_id})
-                    tool_message = {"role": "tool", "tool_call_id": call_id, "content": json.dumps(result, ensure_ascii=False)}
-                    messages.append(tool_message)
-                    self._protocol_message(run, tool_message)
-                    self.session.commit()
+                    result = self._execute_agent_tool_call(
+                        run,
+                        principal,
+                        call_id=call_id,
+                        name=name,
+                        arguments=arguments,
+                        available=available,
+                        worker_id=worker_id,
+                        deadline=deadline,
+                    )
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": json.dumps(result, ensure_ascii=False),
+                        }
+                    )
                     yield {"type": "tool", "name": name, "result": result}
             else:
-                raise APIError(422, "RUN_STEP_LIMIT", "模型调用次数超过限制")
+                if not resume_final:
+                    raise APIError(422, "RUN_STEP_LIMIT", "模型调用次数超过限制")
             run.output_text = output
-            run.status = "completed"
-            run.finished_at = utc_now()
+            if worker_id:
+                if not transition_run(self.session, run.id, from_states=("running",), to_state="completed", worker_id=worker_id, output_text=output):
+                    self.session.rollback()
+                    self.session.refresh(run)
+                    if run.cancel_requested:
+                        raise asyncio.CancelledError()
+                    raise APIError(409, "RUN_LEASE_LOST", "执行租约已失效")
+                self.session.refresh(run)
+            else:
+                run.status = "completed"
+                run.finished_at = utc_now()
+                release_user_slot(self.session, run.id)
             ConversationService(self.session).patch_message(
                 scope,
                 run.conversation_id,
@@ -549,8 +763,15 @@ class RuntimeService:
             self.session.commit()
             yield {"type": "done", "runId": run.id, "status": "completed"}
         except asyncio.CancelledError:
-            run.status = "cancelled"
-            run.finished_at = utc_now()
+            if worker_id:
+                if not transition_run(self.session, run.id, from_states=("running", "waiting_tool", "queued"), to_state="cancelled", worker_id=worker_id, output_text=output):
+                    self.session.rollback()
+                    return
+                self.session.refresh(run)
+            else:
+                run.status = "cancelled"
+                run.finished_at = utc_now()
+                release_user_slot(self.session, run.id)
             self._trace(run, "run.cancelled")
             ConversationService(self.session).patch_message(
                 scope,
@@ -562,10 +783,17 @@ class RuntimeService:
             self.session.commit()
             yield {"type": "done", "runId": run.id, "status": "cancelled"}
         except TimeoutError:
-            run.status = "timed_out"
-            run.error_code = "RUN_TIMEOUT"
-            run.error_message = "执行超时"
-            run.finished_at = utc_now()
+            if worker_id:
+                if not transition_run(self.session, run.id, from_states=("running", "waiting_tool"), to_state="timed_out", worker_id=worker_id, error_code="RUN_TIMEOUT", error_message="执行超时"):
+                    self.session.rollback()
+                    return
+                self.session.refresh(run)
+            else:
+                run.status = "timed_out"
+                run.error_code = "RUN_TIMEOUT"
+                run.error_message = "执行超时"
+                run.finished_at = utc_now()
+                release_user_slot(self.session, run.id)
             self._trace(run, "run.timed_out")
             ConversationService(self.session).patch_message(
                 scope,
@@ -577,7 +805,7 @@ class RuntimeService:
             self.session.commit()
             yield {"type": "error", "runId": run.id, "code": "RUN_TIMEOUT"}
         except APIError as error:
-            self._fail_run(run, scope, assistant_message_id, error)
+            self._fail_run(run, scope, assistant_message_id, error, worker_id=worker_id)
             yield {
                 "type": "error",
                 "runId": run.id,
@@ -588,10 +816,16 @@ class RuntimeService:
             self.session.rollback()
             run = self.session.get(AgentRun, run.id)
             if run is not None:
-                run.status = "failed"
-                run.error_code = "RUN_INTERNAL_ERROR"
-                run.error_message = str(error)[:500]
-                run.finished_at = utc_now()
+                if worker_id:
+                    if not transition_run(self.session, run.id, from_states=("running", "waiting_tool"), to_state="failed", worker_id=worker_id, error_code="RUN_INTERNAL_ERROR", error_message="执行内部错误"):
+                        self.session.rollback()
+                        return
+                else:
+                    run.status = "failed"
+                    run.error_code = "RUN_INTERNAL_ERROR"
+                    run.error_message = str(error)[:500]
+                    run.finished_at = utc_now()
+                    release_user_slot(self.session, run.id)
                 self.session.commit()
             yield {
                 "type": "error",
@@ -706,11 +940,20 @@ class RuntimeService:
         scope: OwnerScope,
         assistant_message_id: str,
         error: APIError,
+        *,
+        worker_id: str | None = None,
     ) -> None:
-        run.status = "failed"
-        run.error_code = error.code
-        run.error_message = error.message[:500]
-        run.finished_at = utc_now()
+        if worker_id:
+            if not transition_run(self.session, run.id, from_states=("running", "waiting_tool"), to_state="failed", worker_id=worker_id, error_code=error.code, error_message=error.message):
+                self.session.rollback()
+                return
+            self.session.refresh(run)
+        else:
+            run.status = "failed"
+            run.error_code = error.code
+            run.error_message = error.message[:500]
+            run.finished_at = utc_now()
+            release_user_slot(self.session, run.id)
         self._trace(run, "run.failed", {"code": error.code})
         try:
             ConversationService(self.session).patch_message(
@@ -766,6 +1009,99 @@ class RuntimeService:
         if (definition is None or version is None or version.capability_id != definition.id
                 or version.status != "published" or not CapabilityService(self.session).can_execute(definition, principal.user.id)):
             raise APIError(403, "AGENT_DEPENDENCY_REVOKED", "Agent 工具依赖不可用或授权已撤销")
+
+    def _execute_agent_tool_call(
+        self,
+        run: AgentRun,
+        principal: UserPrincipal,
+        *,
+        call_id: str,
+        name: str,
+        arguments: dict[str, Any],
+        available: dict[str, dict[str, Any]],
+        worker_id: str | None,
+        deadline: float,
+    ) -> dict[str, Any]:
+        if time.monotonic() >= deadline:
+            raise TimeoutError()
+        self.session.refresh(run)
+        if run.cancel_requested:
+            raise asyncio.CancelledError()
+        if worker_id:
+            if not increment_tool_count(self.session, run.id, worker_id=worker_id):
+                self.session.rollback()
+                self.session.refresh(run)
+                if run.cancel_requested:
+                    raise asyncio.CancelledError()
+                raise APIError(
+                    409,
+                    "RUN_LEASE_OR_QUOTA",
+                    "执行租约失效或工具额度不足",
+                )
+            self.session.commit()
+        entry = available[name]
+        self._check_agent_tool(run, principal, entry)
+        started = utc_now()
+        self._trace(run, "tool.started", {"name": name, "toolCallId": call_id})
+        try:
+            result = execute_tool(
+                entry["tool"],
+                arguments,
+                session=self.session,
+                user_id=principal.user.id,
+            )
+        except APIError as error:
+            self._step(
+                run,
+                "tool",
+                name,
+                status="failed",
+                input_value={"toolCallId": call_id, "arguments": arguments},
+                output={},
+                started_at=started,
+                error=error.code,
+            )
+            self._trace(
+                run,
+                "tool.failed",
+                {"name": name, "toolCallId": call_id, "code": error.code},
+            )
+            raise
+        except Exception as error:
+            self._step(
+                run,
+                "tool",
+                name,
+                status="failed",
+                input_value={"toolCallId": call_id, "arguments": arguments},
+                output={},
+                started_at=started,
+                error="TOOL_EXECUTION_FAILED",
+            )
+            self._trace(
+                run,
+                "tool.failed",
+                {"name": name, "toolCallId": call_id, "code": "TOOL_EXECUTION_FAILED"},
+            )
+            raise APIError(502, "TOOL_EXECUTION_FAILED", "工具执行失败") from error
+        self._step(
+            run,
+            "tool",
+            name,
+            status="completed",
+            input_value={"toolCallId": call_id, "arguments": arguments},
+            output=result,
+            started_at=started,
+        )
+        self._trace(run, "tool.completed", {"name": name, "toolCallId": call_id})
+        tool_message = {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": json.dumps(result, ensure_ascii=False),
+        }
+        self._protocol_message(run, tool_message)
+        self.session.commit()
+        return result
 
     def _ensure_capability_allowed(
         self, run: AgentRun, principal: UserPrincipal

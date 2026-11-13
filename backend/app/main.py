@@ -31,6 +31,7 @@ from app.modules.personal.service import MAX_FILE_BYTES
 from app.modules.runtime.router import admin_router as runtime_admin_router
 from app.modules.runtime.router import creator_router as runtime_creator_router
 from app.modules.runtime.router import router as runtime_router
+from app.modules.runtime.worker import recover_expired_runs
 from app.routers import conversations
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ async def lifespan(_: FastAPI):
                 "and ASSISTANT_ADMIN_PASSWORD, or create one with app.admin_cli."
             )
         logger.info("Assistant database initialized")
+    recovered = await recover_expired_runs()
+    if recovered:
+        logger.warning("Recovered %s interrupted runtime runs", recovered)
     yield
 
 

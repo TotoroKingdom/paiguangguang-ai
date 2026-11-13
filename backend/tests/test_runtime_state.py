@@ -1,12 +1,13 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
 from app.db import Base
-from app.modules.runtime.models import AgentRun
+from app.modules.runtime.models import AgentRun, RunSlot
 from app.modules.runtime.state import (
     TERMINAL_STATES,
+    acquire_user_slot,
     claim_run,
     find_idempotent_run,
     heartbeat_run,
@@ -15,6 +16,7 @@ from app.modules.runtime.state import (
     request_cancel,
     save_checkpoint,
     transition_run,
+    utc_now,
 )
 
 
@@ -26,8 +28,8 @@ def _session():
 
 def _run(session, **kwargs):
     run = AgentRun(
-        user_id="user-1",
-        created_at=datetime.utcnow(),
+        user_id=kwargs.pop("user_id", "user-1"),
+        created_at=utc_now(),
         status="queued",
         max_tool_calls=2,
         idempotency_key=kwargs.pop("idempotency_key", None),
@@ -55,10 +57,10 @@ def test_expired_lease_can_be_reclaimed_and_attempt_increments():
         run = _run(session)
         assert claim_run(session, run.id, worker_id="worker-a", lease_seconds=1)
         session.commit()
-        old = datetime.utcnow() - timedelta(minutes=1)
+        old = utc_now() - timedelta(minutes=1)
         run.lease_expires_at = old
         session.commit()
-        assert claim_run(session, run.id, worker_id="worker-b", now=datetime.utcnow(), lease_seconds=20)
+        assert claim_run(session, run.id, worker_id="worker-b", now=utc_now(), lease_seconds=20)
         session.refresh(run)
         assert run.worker_id == "worker-b"
         assert run.attempt == 2
@@ -78,7 +80,7 @@ def test_waiting_tool_requires_expired_lease_before_reclaim():
         )
         session.commit()
         assert not claim_run(session, run.id, worker_id="worker-b", lease_seconds=30)
-        run.lease_expires_at = datetime.utcnow() - timedelta(minutes=1)
+        run.lease_expires_at = utc_now() - timedelta(minutes=1)
         session.commit()
         assert claim_run(session, run.id, worker_id="worker-b", lease_seconds=30)
 
@@ -163,3 +165,38 @@ def test_checkpoint_and_tool_quota_are_bounded_and_idempotent_lookup_is_scoped()
         stored = session.scalar(select(AgentRun).where(AgentRun.id == run.id))
         assert stored.tool_call_count == 2
         assert '"next":2' in stored.checkpoint_json
+
+
+def test_user_concurrency_slot_is_scoped_and_released_on_terminal_state():
+    with _session() as session:
+        first = _run(session, user_id="user-1")
+        second = _run(session, user_id="user-1")
+        other_user = _run(session, user_id="user-2")
+        assert acquire_user_slot(
+            session,
+            user_id="user-1",
+            run_id=first.id,
+        )
+        assert not acquire_user_slot(
+            session,
+            user_id="user-1",
+            run_id=second.id,
+        )
+        assert acquire_user_slot(
+            session,
+            user_id="user-2",
+            run_id=other_user.id,
+        )
+        assert transition_run(
+            session,
+            first.id,
+            from_states=("queued",),
+            to_state="cancelled",
+        )
+        session.commit()
+        assert session.get(RunSlot, "user-1") is None
+        assert acquire_user_slot(
+            session,
+            user_id="user-1",
+            run_id=second.id,
+        )

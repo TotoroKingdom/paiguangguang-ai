@@ -11,10 +11,10 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Iterable
 
-from sqlalchemy import case, func, or_, select, update
+from sqlalchemy import case, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.modules.runtime.models import AgentRun
+from app.modules.runtime.models import AgentRun, RunSlot
 
 TERMINAL_STATES = frozenset({"completed", "failed", "cancelled", "timed_out"})
 ACTIVE_STATES = frozenset({"queued", "running", "waiting_tool"})
@@ -41,6 +41,42 @@ def find_idempotent_run(session: Session, *, user_id: str, idempotency_key: str)
             AgentRun.idempotency_key == key,
         )
     )
+
+
+def acquire_user_slot(
+    session: Session,
+    *,
+    user_id: str,
+    run_id: str,
+    now: datetime | None = None,
+    lease_seconds: int = 150,
+) -> bool:
+    now = now or utc_now()
+    slot = session.get(RunSlot, user_id)
+    if slot is not None:
+        existing = session.get(AgentRun, slot.run_id)
+        stale = slot.lease_expires_at <= now or (
+            existing is not None and existing.status in TERMINAL_STATES
+        )
+        if not stale:
+            return False
+        session.delete(slot)
+        session.flush()
+    session.add(
+        RunSlot(
+            user_id=user_id,
+            run_id=run_id,
+            lease_expires_at=now + timedelta(seconds=lease_seconds),
+            created_at=now,
+        )
+    )
+    session.flush()
+    return True
+
+
+def release_user_slot(session: Session, run_id: str) -> None:
+    session.execute(delete(RunSlot).where(RunSlot.run_id == run_id))
+    session.flush()
 
 
 def claim_run(
@@ -177,6 +213,8 @@ def transition_run(
         values.update({"finished_at": now, "lease_expires_at": None})
     result = session.execute(update(AgentRun).where(*conditions).values(**values))
     session.flush()
+    if result.rowcount == 1 and to_state in TERMINAL_STATES:
+        release_user_slot(session, run_id)
     return result.rowcount == 1
 
 

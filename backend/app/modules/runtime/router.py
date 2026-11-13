@@ -1,4 +1,7 @@
+import asyncio
+import inspect
 import json
+from typing import Any
 from datetime import timedelta
 from datetime import timezone
 
@@ -8,7 +11,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.models import Message
 from app.modules.capabilities.models import CapabilityDefinition
 from app.modules.capabilities.service import CapabilityService
@@ -19,7 +22,7 @@ from app.modules.identity.dependencies import (
     require_user_csrf,
 )
 from app.modules.identity.user_service import UserPrincipal
-from app.modules.runtime.models import AgentRun
+from app.modules.runtime.models import AgentRun, RunStep
 from app.modules.runtime.schemas import (
     AdminRunListResponse,
     AdminRunView,
@@ -33,6 +36,8 @@ from app.modules.runtime.schemas import (
     CreatorRunSummaryResponse,
 )
 from app.modules.runtime.service import RuntimeService, run_view
+from app.modules.runtime.state import find_idempotent_run, request_cancel
+from app.modules.runtime.worker import start_run_job
 from app.modules.personal.models import PersonalSkill
 from app.modules.personal.service import PersonalService
 from app.core.errors import APIError
@@ -112,15 +117,17 @@ async def _stream_events(
     capability_id: str,
     version_id: str,
     assistant_id: str,
+    run: AgentRun | None = None,
 ):
     service = RuntimeService(session)
-    run = service.create_run(
-        principal,
-        conversation_id=turn.request.conversationId or "",
-        version_id=version_id,
-        capability_id=capability_id,
-        input_text=turn.text,
-    )
+    if run is None:
+        run = service.create_run(
+            principal,
+            conversation_id=turn.request.conversationId or "",
+            version_id=version_id,
+            capability_id=capability_id,
+            input_text=turn.text,
+        )
     async for event in service.stream(
         run,
         principal=principal,
@@ -129,6 +136,101 @@ async def _stream_events(
         payload=turn,
     ):
         yield event
+
+
+async def _wait_for_background_run(run_id: str, *, after_step_seq: int = 0):
+    """Yield persisted completion state while a detached worker continues."""
+    terminal = {"completed", "failed", "cancelled", "timed_out"}
+    step_cursor = max(after_step_seq, 0)
+    output_sent = False
+    while True:
+        pending_events: list[dict[str, Any]] = []
+        terminal_event: dict[str, Any] | None = None
+        with SessionLocal() as session:
+            run = session.scalar(select(AgentRun).where(AgentRun.id == run_id))
+            if run is None:
+                terminal_event = {"type": "error", "runId": run_id, "code": "RUN_NOT_FOUND"}
+                status = "missing"
+            else:
+                status = run.status
+                steps = list(
+                    session.scalars(
+                        select(RunStep)
+                        .where(RunStep.run_id == run_id, RunStep.seq > step_cursor)
+                        .order_by(RunStep.seq)
+                    )
+                )
+                for step in steps:
+                    step_cursor = step.seq
+                    if step.step_type == "tool" and step.status == "completed":
+                        pending_events.append({
+                            "type": "tool",
+                            "name": step.name,
+                            "result": json.loads(step.output_json or "{}"),
+                        })
+                if status in terminal:
+                    if status == "completed":
+                        if run.output_text and not output_sent:
+                            output_sent = True
+                            pending_events.append({"type": "chunk", "content": run.output_text})
+                        terminal_event = {"type": "done", "runId": run.id, "status": status}
+                    else:
+                        terminal_event = {
+                            "type": "error",
+                            "runId": run.id,
+                            "code": run.error_code or "RUN_FAILED",
+                            "message": run.error_message,
+                        }
+        for event in pending_events:
+            yield event
+        if terminal_event is not None:
+            yield terminal_event
+            return
+        await asyncio.sleep(0.05)
+
+
+def _idempotency_key(user_id: str, conversation_id: str, client_turn_id: str) -> str:
+    return f"{user_id}:{conversation_id}:{client_turn_id}"[:160]
+
+
+def _create_or_reuse_run(
+    session: Session,
+    principal: UserPrincipal,
+    *,
+    turn: TurnCreate,
+    capability_id: str,
+    version_id: str,
+    assistant_message_id: str,
+) -> tuple[AgentRun, bool]:
+    key = _idempotency_key(
+        principal.user.id,
+        turn.request.conversationId or "",
+        turn.clientTurnId,
+    )
+    existing = find_idempotent_run(session, user_id=principal.user.id, idempotency_key=key)
+    if existing is not None:
+        return existing, False
+    service = RuntimeService(session)
+    kwargs: dict[str, Any] = {
+        "conversation_id": turn.request.conversationId or "",
+        "version_id": version_id,
+        "capability_id": capability_id,
+        "input_text": turn.text,
+        "assistant_message_id": assistant_message_id,
+        "client_turn_id": turn.clientTurnId,
+        "idempotency_key": key,
+    }
+    supported = inspect.signature(service.create_run).parameters
+    run = service.create_run(
+        principal,
+        **{name: value for name, value in kwargs.items() if name in supported},
+    )
+    if "assistant_message_id" not in supported:
+        run.assistant_message_id = assistant_message_id
+        run.client_turn_id = turn.clientTurnId
+        run.idempotency_key = key
+        session.commit()
+    return run, True
 
 
 @router.post("/runs")
@@ -145,19 +247,33 @@ async def execute_run(
     turn_result = ConversationService(session).create_turn(
         scope, payload.conversationId, turn
     )
-    run_id = ""
-    async for event in _stream_events(
+    run, created = _create_or_reuse_run(
         session,
         principal,
-        scope,
-        turn,
-        capability_id,
-        version_id,
-        turn_result.assistantMessage.id,
-    ):
+        turn=turn,
+        capability_id=capability_id,
+        version_id=version_id,
+        assistant_message_id=turn_result.assistantMessage.id,
+    )
+    run_id = ""
+    events = (
+        _stream_events(
+            session,
+            principal,
+            scope,
+            turn,
+            capability_id,
+            version_id,
+            turn_result.assistantMessage.id,
+            run=run,
+        )
+        if created
+        else _wait_for_background_run(run.id)
+    )
+    async for event in events:
         if event.get("runId"):
             run_id = event["runId"]
-        if event["type"] == "done" and run_id:
+        if event["type"] in {"done", "error"} and run_id:
             break
     run = _load_run(session, run_id)
     return {
@@ -181,6 +297,21 @@ async def stream_run(
     turn_result = ConversationService(session).create_turn(
         scope, payload.conversationId, turn
     )
+    run, created = _create_or_reuse_run(
+        session,
+        principal,
+        turn=turn,
+        capability_id=capability_id,
+        version_id=version_id,
+        assistant_message_id=turn_result.assistantMessage.id,
+    )
+    if created:
+        start_run_job(
+            run.id,
+            user_id=principal.user.id,
+            assistant_message_id=turn_result.assistantMessage.id,
+            payload=turn,
+        )
 
     async def events():
         try:
@@ -197,15 +328,8 @@ async def stream_run(
                 )
                 + "\n\n"
             )
-            async for event in _stream_events(
-                session,
-                principal,
-                scope,
-                turn,
-                capability_id,
-                version_id,
-                turn_result.assistantMessage.id,
-            ):
+            yield f"data: {json.dumps({'type': 'run', 'runId': run.id}, ensure_ascii=False)}\n\n"
+            async for event in _wait_for_background_run(run.id):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as error:
             yield (
@@ -220,6 +344,41 @@ async def stream_run(
                 )
                 + "\n\n"
             )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/runs/{run_id}/stream")
+def resume_run_stream(
+    run_id: str,
+    afterSeq: int = 0,
+    principal: UserPrincipal = Depends(require_active_user),
+    session: Session = Depends(get_db),
+):
+    run = session.scalar(
+        select(AgentRun).where(
+            AgentRun.id == run_id,
+            AgentRun.user_id == principal.user.id,
+        )
+    )
+    if run is None:
+        raise APIError(404, "NOT_FOUND", "Run 不存在")
+
+    async def events():
+        yield (
+            "data: "
+            + json.dumps({"type": "run", "runId": run.id}, ensure_ascii=False)
+            + "\n\n"
+        )
+        async for event in _wait_for_background_run(
+            run.id,
+            after_step_seq=afterSeq,
+        ):
+            yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         events(),
@@ -462,8 +621,8 @@ def cancel_run(
         from app.core.errors import APIError
 
         raise APIError(404, "NOT_FOUND", "Run 不存在")
-    if run.status in {"running", "queued"}:
-        run.cancel_requested = True
+    if run.status in {"running", "queued", "waiting_tool"}:
+        request_cancel(session, run.id)
         session.commit()
     return CancelResponse(runId=run.id)
 
