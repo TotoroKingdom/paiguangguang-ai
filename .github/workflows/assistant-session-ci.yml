@@ -129,6 +129,7 @@ jobs:
     env:
       IMAGE_NAME: ghcr.io/example/paiguangguang-ai-frontend:ci
       BACKEND_IMAGE_NAME: ghcr.io/example/paiguangguang-ai-backend:ci
+      ASSISTANT_ENVIRONMENT: production
       ASSISTANT_OWNER_COOKIE_SECRET: ci-owner-secret-abcdefghijklmnopqrstuvwxyz
       ASSISTANT_OWNER_COOKIE_SECURE: "true"
       ASSISTANT_ADMIN_COOKIE_SECURE: "true"
