@@ -417,7 +417,7 @@ test("keyboard dialog and mobile drawer focus, layout and reduced motion", async
 
 test("capture desktop and mobile visual evidence", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
-  const directory = path.resolve(process.cwd(), "../docs-codex/homepage-v2/screenshots");
+  const directory = path.resolve(process.cwd(), "../docs-work/evidence/homepage-v2/screenshots");
   const prefix = testInfo.project.name;
   await page.goto("/");
   await expect(page.locator(".home-page")).toHaveAttribute("data-ai-core", /ready|fallback/, {

@@ -17,7 +17,7 @@ function credentials(testInfo: TestInfo): { username: string; password: string }
 function screenshotPath(testInfo: TestInfo, name: string): string {
   const directory = path.resolve(
     process.cwd(),
-    "../docs-codex/assistant-capability-console-v1/screenshots",
+    "../docs-work/evidence/assistant-capability-console-v1/screenshots",
   );
   mkdirSync(directory, { recursive: true });
   return path.join(directory, `${testInfo.project.name}-${name}.png`);
