@@ -9,6 +9,7 @@ type HomePageFrameProps = {
   footerCopy?: string;
   mainClassName?: string;
   overlay?: ReactNode;
+  theme?: "default" | "spatial";
 };
 
 export function HomePageFrame({
@@ -17,13 +18,16 @@ export function HomePageFrame({
   footerLabel = "TotoroKingdom / AI Agent Engineer",
   footerCopy = "让系统清晰，让交付可靠。",
   mainClassName = "home-main",
-  overlay
+  overlay,
+  theme
 }: HomePageFrameProps) {
+  const resolvedTheme = theme ?? (activePage === "home" ? "spatial" : "default");
+
   return (
-    <div className={`home-page${activePage === "home" ? " home-page--spatial" : ""}`}>
+    <div className={`home-page${resolvedTheme === "spatial" ? " home-page--spatial" : ""}`}>
       {overlay}
       <div className="relative z-10 brand-page-layer">
-        <SiteNavigation activePage={activePage} />
+        <SiteNavigation />
 
         {activePage === "home" && <a className="home-skip-link" href="#home-content">跳到主要内容</a>}
         <main id={activePage === "home" ? "home-content" : undefined} className={mainClassName}>{children}</main>
