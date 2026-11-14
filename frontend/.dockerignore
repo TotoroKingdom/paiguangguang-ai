@@ -4,7 +4,6 @@ out
 coverage
 *.log
 .env*
-!.env.production
 tsconfig.tsbuildinfo
 .git
 .gitignore

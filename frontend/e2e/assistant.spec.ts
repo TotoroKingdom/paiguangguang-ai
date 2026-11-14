@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
 
 const storageKey = "paiguangguang.assistant.v1";
+const localStorageKey = "paiguangguang.assistant.local.v1";
 let pageErrors: string[] = [];
 let externalRequests: string[] = [];
 test.beforeEach(async ({ page }) => {
@@ -43,7 +44,18 @@ async function send(page: Page, text: string) {
   await page.getByRole("textbox", { name: "询问任何问题" }).fill(text);
   await page.getByRole("button", { name: "发送消息", exact: true }).click();
   await expect(page).toHaveURL(/\/assistant\/chat\//);
-  await expect(page.getByRole("button", { name: "发送消息", exact: true })).toBeVisible();
+  const reply = page.getByRole("article", { name: "助手消息", exact: true }).last();
+  await expect(reply).toBeVisible();
+  await expect(reply.locator(".as-message-status")).toHaveCount(0);
+}
+async function createConversation(page: Page) {
+  await ready(page);
+  const open = page.getByRole("button", { name: "打开导航", exact: true });
+  if (await open.isVisible()) await open.click();
+  await page.getByRole("link", { name: "新建聊天", exact: true }).click();
+  await expect(page).toHaveURL(/\/assistant\/chat\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { name: "今天想做点什么？" })).toBeVisible();
+  return page.url();
 }
 
 test("homepage aligns V2, preserves anchors, and opens the assistant card by keyboard", async ({
@@ -258,11 +270,11 @@ test("file metadata uploads and multiple attachments survive refresh and deletio
 test("stop, regenerate, simulate failure and retry without duplicating user messages", async ({
   page,
 }) => {
-  await ready(page, "/assistant/chat/conversation-1");
+  await createConversation(page);
   const originalUsers = await page.getByRole("article", { name: "用户消息" }).count();
   await page.getByRole("textbox", { name: "询问任何问题" }).fill("测试停止生成");
   await page.getByRole("button", { name: "发送消息" }).click();
-  await page.getByRole("button", { name: "停止生成" }).click();
+  await page.getByRole("button", { name: "停止生成", exact: true }).click();
   await expect(page.getByText("已停止生成", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "重新生成回复" }).click();
@@ -279,19 +291,30 @@ test("stop, regenerate, simulate failure and retry without duplicating user mess
 });
 
 test("drafts remain isolated between conversations and new-chat pages", async ({ page }) => {
-  await ready(page, "/assistant/chat/conversation-1");
+  const firstConversation = await createConversation(page);
   await page.getByRole("textbox", { name: "询问任何问题" }).fill("会话一未发送草稿");
-  await navigate(page, "新建聊天");
+  await page.goto("/assistant");
+  const open = page.getByRole("button", { name: "打开导航", exact: true });
+  if (await open.isVisible()) await open.click();
+  await page
+    .getByRole("navigation", { name: "助手导航" })
+    .getByRole("link", { name: "新建聊天", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/assistant\/chat\/[0-9a-f-]{36}$/);
+  const secondConversation = page.url();
+  expect(secondConversation).not.toBe(firstConversation);
+  await expect(page.getByRole("textbox", { name: "询问任何问题" })).toHaveValue("");
   await expect(page.getByRole("textbox", { name: "询问任何问题" })).toHaveValue("");
   await page.getByRole("textbox", { name: "询问任何问题" }).fill("新聊天草稿");
-  await page.goto("/assistant/chat/conversation-1");
+  await page.goto(firstConversation);
   await expect(page.getByRole("textbox", { name: "询问任何问题" })).toHaveValue("会话一未发送草稿");
-  await navigate(page, "新建聊天");
+  await page.goto(secondConversation);
   await expect(page.getByRole("textbox", { name: "询问任何问题" })).toHaveValue("新聊天草稿");
 });
 
 test("conversation search, rename, missing route and confirmed reset", async ({ page }) => {
-  await ready(page, "/assistant/chat/conversation-1");
+  await createConversation(page);
+  await send(page, "用于重命名的消息");
   await page.getByRole("button", { name: "管理当前聊天" }).click();
   await page.getByLabel("聊天名称", { exact: true }).fill("重命名后的研究");
   await page.getByRole("button", { name: "保存名称" }).click();
@@ -306,7 +329,7 @@ test("conversation search, rename, missing route and confirmed reset", async ({ 
   await page.getByRole("button", { name: "管理当前聊天" }).click();
   await page.getByRole("button", { name: "删除这条聊天" }).click();
   await expect(page).toHaveURL(/\/assistant$/);
-  for (const id of ["conversation-1", "missing", "constructor", "toString"]) {
+  for (const id of ["missing", "constructor", "toString"]) {
     await page.goto(`/assistant/chat/${id}`);
     await expect(page.getByRole("heading", { name: "找不到这条聊天" })).toBeVisible();
   }
@@ -320,8 +343,8 @@ test("conversation search, rename, missing route and confirmed reset", async ({ 
   await dialog.getByRole("button", { name: "确认重置" }).click();
   await expect(page).toHaveURL(/\/assistant$/);
   await page.reload();
-  const state = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey);
-  expect(state.conversations).toHaveLength(6);
+  const state = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), localStorageKey);
+  expect(state.conversations).toHaveLength(0);
   expect(state.userSkills).toHaveLength(0);
   expect(state.files).toHaveLength(3);
 });
@@ -335,7 +358,7 @@ test("invalid storage recovers and unavailable storage keeps the prototype usabl
   await ready(page);
   await expect(page.getByRole("heading", { name: "今天想做点什么？" })).toBeVisible();
   expect(
-    await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).files.length, storageKey),
+    await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).files.length, localStorageKey),
   ).toBe(3);
   await page.addInitScript(() => {
     Object.defineProperty(Storage.prototype, "getItem", {
@@ -350,7 +373,7 @@ test("invalid storage recovers and unavailable storage keeps the prototype usabl
     });
   });
   await page.reload();
-  await expect(page.getByRole("status")).toContainText("本地存储不可用");
+  await expect(page.getByRole("status").filter({ hasText: "本地配置不可用" })).toBeVisible();
   await send(page, "没有本地存储仍然可以聊天");
   await expect(page.getByRole("article", { name: "助手消息" }).last()).not.toBeEmpty();
 });
@@ -394,7 +417,7 @@ test("keyboard dialog and mobile drawer focus, layout and reduced motion", async
 
 test("capture desktop and mobile visual evidence", async ({ page }, testInfo) => {
   test.setTimeout(120_000);
-  const directory = path.resolve(process.cwd(), "../docs-codex/homepage-v2/screenshots");
+  const directory = path.resolve(process.cwd(), "../docs-work/evidence/homepage-v2/screenshots");
   const prefix = testInfo.project.name;
   await page.goto("/");
   await expect(page.locator(".home-page")).toHaveAttribute("data-ai-core", /ready|fallback/, {

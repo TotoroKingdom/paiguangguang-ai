@@ -8,6 +8,8 @@ import { AssistantIcon } from "./assistant-icon";
 import { AssistantDialog } from "./assistant-dialog";
 import { AssistantComposer } from "./assistant-composer";
 import type { Conversation } from "./types";
+import { AdminApiError, getAdminSession, type AdminUser } from "@/features/admin/api";
+import { useAuth } from "@/features/auth/provider";
 
 const navigation = [
   { href: "/assistant", name: "新建聊天", icon: "plus" },
@@ -19,17 +21,38 @@ const navigation = [
 ];
 
 export function AssistantWorkspace({ children }: { children: ReactNode }) {
-  const { state, ready, storageNotice, dispatch, resetDemo, stopGeneration } = useAssistant();
+  const { session, logout } = useAuth();
+  const {
+    state,
+    ready,
+    storageNotice,
+    createConversation,
+    searchConversations,
+    renameConversation,
+    deleteConversation,
+    resetDemo,
+    stopGeneration,
+    dispatch,
+  } = useAssistant();
   const pathname = usePathname();
   const router = useRouter();
   const sidebar = useRef<HTMLElement>(null);
+  const accountMenu = useRef<HTMLDivElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [modal, setModal] = useState<"search" | "settings" | "conversation" | null>(null);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Conversation | null>(null);
   const [title, setTitle] = useState("");
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [searchResults, setSearchResults] = useState<Conversation[]>([]);
+  useEffect(() => {
+    if (modal !== "search") return;
+    const timer = window.setTimeout(() => void searchConversations(query).then(setSearchResults), 180);
+    return () => window.clearTimeout(timer);
+  }, [modal, query, searchConversations]);
   useEffect(() => {
     if (ready)
       dispatch({
@@ -37,6 +60,36 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
         key: pathname.startsWith("/assistant/chat/") ? pathname.split("/").pop()! : "new",
       });
   }, [pathname, ready, dispatch]);
+  useEffect(() => {
+    let active = true;
+    void getAdminSession()
+      .then((session) => {
+        if (active) setAdminUser(session.user);
+      })
+      .catch((error) => {
+        if (active && (!(error instanceof AdminApiError) || error.status !== 401)) {
+          setAdminUser(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!accountOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!accountMenu.current?.contains(event.target as Node)) setAccountOpen(false);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAccountOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", keydown);
+    };
+  }, [accountOpen]);
   useEffect(() => {
     if (!mobileOpen) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -88,9 +141,14 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             ? "智能体中心"
             : pathname === "/assistant/files"
               ? "文件库"
+              : pathname === "/assistant/creator"
+                ? "创作中心"
               : pathname.startsWith("/assistant/chat/")
                 ? "聊天"
                 : "新建聊天");
+  const accountName =
+    session?.user.nickname || (session ? session.user.accountNumber : "派广广");
+  const accountInitial = accountName.slice(0, 1).toUpperCase();
   const editConversation = (conversation: Conversation) => {
     setMobileOpen(false);
     setEditing(conversation);
@@ -159,14 +217,32 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
               title={item.name}
               className={`as-nav-link${pathname === item.href ? " as-nav-link--active" : ""}`}
               aria-current={pathname === item.href ? "page" : undefined}
-              onClick={() => {
+              onClick={(event) => {
                 setMobileOpen(false);
+                if (item.href === "/assistant") {
+                  event.preventDefault();
+                  void (async () => {
+                    const conversationId = await createConversation();
+                    if (conversationId) router.push(`/assistant/chat/${conversationId}`);
+                  })();
+                }
               }}
             >
               <AssistantIcon name={item.icon} size={21} />
               <span className="as-sidebar-label">{item.name}</span>
             </Link>
           ))}
+          {session?.user.role === "CREATOR" || session?.user.role === "ADMIN" ? (
+            <Link
+              href="/assistant/creator"
+              title="创作中心"
+              className={`as-nav-link${pathname === "/assistant/creator" ? " as-nav-link--active" : ""}`}
+              onClick={() => setMobileOpen(false)}
+            >
+              <AssistantIcon name="spark" size={21} />
+              <span className="as-sidebar-label">创作中心</span>
+            </Link>
+          ) : null}
         </nav>
         <div className="as-recent as-sidebar-label">
           <div className="as-recent-heading">
@@ -214,7 +290,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             <span className="as-avatar">派</span>
             <span className="as-sidebar-label">
               <strong>派广广</strong>
-              <small>本地演示空间</small>
+              <small>服务端会话空间</small>
             </span>
             <AssistantIcon name="settings" size={19} />
           </button>
@@ -235,7 +311,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           <div className="as-topbar-end">
             <span className="as-demo-label">
               <i />
-              交互原型 · 模拟数据
+              {session?.user.status === "ACTIVE" ? "账号已登录 · 服务端会话" : "访客 · 模拟回复"}
             </span>
             {activeConversation && (
               <button
@@ -246,6 +322,105 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 <AssistantIcon name="more" />
               </button>
             )}
+            <div className="as-account-menu" ref={accountMenu}>
+              <button
+                className="as-account-trigger"
+                aria-label="账户菜单"
+                aria-expanded={accountOpen}
+                aria-haspopup="menu"
+                onClick={() => setAccountOpen((current) => !current)}
+              >
+                <span>{adminUser ? adminUser.username.slice(0, 1).toUpperCase() : accountInitial}</span>
+                <AssistantIcon name="chevron" size={14} />
+              </button>
+              {accountOpen && (
+                <div className="as-account-popover" role="menu" aria-label="账户菜单">
+                  <div className="as-account-summary">
+                    <span className="as-avatar">
+                      {adminUser ? adminUser.username.slice(0, 1).toUpperCase() : accountInitial}
+                    </span>
+                    <div>
+                      <strong>{adminUser ? adminUser.username : accountName}</strong>
+                      <small>
+                        {adminUser
+                          ? "管理员身份已登录"
+                          : session
+                            ? `${session.user.role} · ${session.user.status}`
+                            : "匿名浏览器会话"}
+                      </small>
+                    </div>
+                  </div>
+                  {!session && (
+                    <>
+                      <Link href="/assistant/login" role="menuitem" onClick={() => setAccountOpen(false)}>
+                        <AssistantIcon name="arrow" size={17} />
+                        登录 / 注册
+                      </Link>
+                      <Link href="/assistant/register" role="menuitem" onClick={() => setAccountOpen(false)}>
+                        <AssistantIcon name="plus" size={17} />
+                        创建数字账号
+                      </Link>
+                    </>
+                  )}
+                  {session && (
+                    <Link href="/assistant/me" role="menuitem" onClick={() => setAccountOpen(false)}>
+                      <AssistantIcon name="settings" size={17} />
+                      个人中心
+                    </Link>
+                  )}
+                  {(adminUser || session?.user.role === "ADMIN") && (
+                    <>
+                      <Link
+                        href="/assistant/admin"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="settings" size={17} />
+                        管理控制台
+                        <AssistantIcon name="arrow" size={14} />
+                      </Link>
+                      <Link
+                        href="/assistant/admin/users"
+                        role="menuitem"
+                        onClick={() => setAccountOpen(false)}
+                      >
+                        <AssistantIcon name="skill" size={17} />
+                        用户管理
+                      </Link>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setAccountOpen(false);
+                      setResetConfirm(false);
+                      setModal("settings");
+                    }}
+                  >
+                    <AssistantIcon name="settings" size={17} />
+                    演示设置
+                  </button>
+                  <Link href="/" role="menuitem" onClick={() => setAccountOpen(false)}>
+                    <AssistantIcon name="arrow" size={17} />
+                    返回网站
+                  </Link>
+                  {session && (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAccountOpen(false);
+                        void logout();
+                      }}
+                    >
+                      <AssistantIcon name="close" size={17} />
+                      退出登录
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </header>
         {storageNotice && (
@@ -258,7 +433,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             children
           ) : (
             <div className="as-loading" role="status">
-              正在恢复本地演示空间…
+              正在加载会话空间…
             </div>
           )}
         </main>
@@ -276,25 +451,21 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
             />
           </label>
           <div className="as-dialog-list">
-            {state.conversations
-              .filter((c) => c.title.toLowerCase().includes(query.toLowerCase()))
-              .map((c) => (
-                <Link
-                  href={`/assistant/chat/${c.id}`}
-                  key={c.id}
-                  onClick={() => {
-                    setModal(null);
-                    setMobileOpen(false);
-                  }}
-                >
-                  <AssistantIcon name="chat" size={18} />
-                  {c.title}
-                  <AssistantIcon name="arrow" size={17} />
-                </Link>
-              ))}
-            {!state.conversations.some((c) =>
-              c.title.toLowerCase().includes(query.toLowerCase()),
-            ) && <p className="as-muted">没有匹配的聊天。</p>}
+            {searchResults.map((c) => (
+              <Link
+                href={`/assistant/chat/${c.id}`}
+                key={c.id}
+                onClick={() => {
+                  setModal(null);
+                  setMobileOpen(false);
+                }}
+              >
+                <AssistantIcon name="chat" size={18} />
+                {c.title}
+                <AssistantIcon name="arrow" size={17} />
+              </Link>
+            ))}
+            {searchResults.length === 0 && <p className="as-muted">没有匹配的聊天。</p>}
           </div>
         </AssistantDialog>
       )}
@@ -303,10 +474,11 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (title.trim()) {
-                dispatch({ type: "RENAME_CONVERSATION", id: editing.id, title: title.trim() });
-                setModal(null);
-              }
+              if (!title.trim()) return;
+              void (async () => {
+                const saved = await renameConversation(editing.id, title.trim());
+                if (saved) setModal(null);
+              })();
             }}
           >
             <label className="as-field">
@@ -323,10 +495,13 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 type="button"
                 className="as-button as-button--danger"
                 onClick={() => {
-                  stopGeneration(editing.id);
-                  dispatch({ type: "DELETE_CONVERSATION", id: editing.id });
-                  if (activeConversation?.id === editing.id) router.push("/assistant");
-                  setModal(null);
+                  void (async () => {
+                    const deleted = await deleteConversation(editing.id);
+                    if (deleted) {
+                      if (activeConversation?.id === editing.id) router.push("/assistant");
+                      setModal(null);
+                    }
+                  })();
                 }}
               >
                 删除这条聊天
@@ -335,7 +510,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
                 保存名称
               </button>
             </div>
-            <p className="as-muted">删除后将从当前浏览器移除这条聊天记录。</p>
+            <p className="as-muted">删除后将从服务端会话库移除这条聊天记录。</p>
           </form>
         </AssistantDialog>
       )}
@@ -346,7 +521,7 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
         >
           {resetConfirm ? (
             <>
-              <p>确认清除本地聊天、个人技能、文件记录、常用项和连接配置，恢复初始样例？</p>
+              <p>确认清除当前浏览器中的个人技能、文件记录、常用项、连接配置和草稿，恢复初始样例？服务端会话不会被删除。</p>
               <div className="as-dialog-actions">
                 <button className="as-button" onClick={() => setResetConfirm(false)}>
                   取消
@@ -366,9 +541,9 @@ export function AssistantWorkspace({ children }: { children: ReactNode }) {
           ) : (
             <>
               <p>
-                这是使用模拟数据的前端交互原型。数据仅保存在当前浏览器，工具、技能、连接器和智能体不会执行真实任务。
+                会话和消息保存在服务端 SQLite 中，并按当前浏览器隔离；这不是登录认证，也不提供跨设备同步。工具、技能、连接器和智能体不会执行真实任务。
               </p>
-              <p className="as-muted">文件库保存文件元信息；技能导入保存 Markdown 文本。</p>
+              <p className="as-muted">文件库、技能、连接器和草稿仍保存在当前浏览器；会话记录保存在服务端。</p>
               <button className="as-button as-button--danger" onClick={() => setResetConfirm(true)}>
                 重置演示数据
               </button>

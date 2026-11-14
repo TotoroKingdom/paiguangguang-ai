@@ -1,11 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AssistantDialog } from "./assistant-dialog";
 import { AssistantIcon } from "./assistant-icon";
 import { getCapabilities } from "./data";
 import { testConnection } from "./mock-service";
 import { useAssistant } from "./provider";
+import { useOptionalAuth } from "@/features/auth/provider";
+import { McpServerCatalog } from "./mcp-server-catalog";
+import { createSkill, deleteSkill } from "./personal-api";
 import type { Capability, CapabilityKind, ConnectorConfig, ConnectorStatus } from "./types";
 import styles from "./catalog.module.css";
 
@@ -31,10 +35,20 @@ const statusLabels: Record<ConnectorStatus, string> = {
   error: "失败",
   unauthorized: "待授权",
 };
+const availabilityLabels: Record<string, string> = {
+  login_required: "登录后使用",
+  account_inactive: "账号未激活",
+  no_permission: "无使用权限",
+  needs_mcp_connection: "需连接 MCP",
+  not_ready: "暂不可用",
+  budget_exhausted: "今日额度不足",
+};
 const makeId = () => `skill-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
 export function CatalogPage({ kind }: { kind: CapabilityKind }) {
-  const { state, dispatch } = useAssistant();
+  const { state, dispatch, refreshPersonalSkills } = useAssistant();
+  const auth = useOptionalAuth();
+  const canUseService = auth?.canUseService ?? false;
   const latestState = useRef(state);
   latestState.current = state;
   const mounted = useRef(false);
@@ -62,6 +76,8 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
     kind === "mcp"
       ? ["全部", "已连接", "待配置", "待授权", "失败"]
       : ["全部", ...Array.from(new Set(items.map((item) => item.category)))];
+  const sourceLabel = (item: Capability) =>
+    item.source === "personal" ? "个人导入" : item.source === "managed" ? "平台发布" : "系统示例";
   const connectorFor = (item: Capability): ConnectorConfig =>
     state.connectors.find((connector) => connector.id === item.id) ?? {
       id: item.id,
@@ -112,6 +128,12 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
           .trim()
           .replace(/\s+/g, " ")
           .slice(0, 120) || "个人导入的技能示例。";
+      if (canUseService) {
+        await createSkill({ name: title, description, contentMd: content });
+        await refreshPersonalSkills();
+        setNotice(`技能“${title}”已保存到服务端个人空间。`);
+        return;
+      }
       dispatch({
         type: "IMPORT_SKILL",
         skill: {
@@ -172,13 +194,20 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
       result.status === "connected" ? "模拟连接成功。" : result.lastError || "模拟连接失败。",
     );
   };
+  if (kind === "mcp" && canUseService) return <McpServerCatalog />;
   return (
     <section className={styles.page}>
       <div className={styles.heading}>
         <div>
-          <p className={styles.eyebrow}>交互原型 · 模拟数据</p>
+          <p className={styles.eyebrow}>
+            {canUseService && kind === "skill" ? "服务端持久化 · 仅本人可见" : "交互原型 · 模拟数据"}
+          </p>
           <h1>{labels[kind].title}</h1>
-          <p>{labels[kind].description}</p>
+          <p>
+            {canUseService && kind === "skill"
+              ? "个人技能保存在服务端，仅本人可见；登录后可直接用于 Agent Runtime。"
+              : labels[kind].description}
+          </p>
         </div>
         <div className={styles.headingActions}>
           {kind === "skill" && (
@@ -270,12 +299,16 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                     {kind === "mcp"
                       ? `${statusLabels[connector.status]} · ${item.tools?.length ?? 0} 个工具`
                       : kind === "skill"
-                        ? `${item.steps.length} 个步骤 · ${item.source === "personal" ? "个人导入" : "系统示例"}`
+                        ? `${item.steps.length} 个步骤 · ${sourceLabel(item)}`
                         : kind === "agent"
                           ? `${item.tools?.length ?? 0} 个工具 · 多步执行`
-                          : item.source === "personal"
-                            ? "个人导入"
-                            : "系统示例"}
+                          : item.source === "managed"
+                            ? `${sourceLabel(item)} · ${
+                                item.blockedReason && item.blockedReason !== "none"
+                                  ? availabilityLabels[item.blockedReason] ?? "暂不可用"
+                                  : "已就绪"
+                              }`
+                            : sourceLabel(item)}
                   </span>
                   <button
                     className={styles.smallButton}
@@ -340,8 +373,13 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
         >
           <p className={styles.dialogHint}>{selected.description}</p>
           <p className={styles.muted}>
-            {selected.source === "personal" ? "个人导入" : "系统示例"} ·
-            交互原型，操作结果为模拟数据
+            {sourceLabel(selected)} ·
+            {selected.source === "managed" && selected.blockedReason !== "none"
+              ? availabilityLabels[selected.blockedReason ?? ""] ??
+                "当前不可用于正式聊天"
+              : selected.source === "managed"
+                ? "已通过就绪测试，可用于登录态聊天"
+                : "交互原型，操作结果为模拟数据"}
           </p>
           <h3>使用步骤</h3>
           <ol>
@@ -419,25 +457,50 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
                 删除技能
               </button>
             )}
-            <button
-              className={styles.primary}
-              onClick={() => {
-                dispatch({
-                  type: "SET_DRAFT",
-                  patch: {
-                    capability: {
-                      id: selected.id,
-                      kind: selected.kind,
-                      name: kind === "mcp" ? connectorFor(selected).name : selected.name,
+            {selected.primaryAction === "connect" ? (
+              <Link className={styles.primary} href="/assistant/mcp">
+                连接 MCP
+              </Link>
+            ) : selected.primaryAction === "login" ? (
+              <Link
+                className={styles.primary}
+                href={`/assistant/login?next=/assistant/${kind === "agent" ? "agents" : kind === "tool" ? "tools" : kind === "mcp" ? "mcp" : "skills"}`}
+              >
+                登录后使用
+              </Link>
+            ) : selected.primaryAction === "activate" ? (
+              <Link className={styles.primary} href="/assistant/pending">
+                查看账号状态
+              </Link>
+            ) : (
+              <button
+                className={styles.primary}
+                disabled={
+                  selected.source === "managed" &&
+                  Boolean(selected.blockedReason && selected.blockedReason !== "none")
+                }
+                onClick={() => {
+                  dispatch({
+                    type: "SET_DRAFT",
+                    patch: {
+                      capability: {
+                        id: selected.id,
+                        kind: selected.kind,
+                        name: kind === "mcp" ? connectorFor(selected).name : selected.name,
+                      },
                     },
-                  },
-                });
-                setSelected(null);
-                setNotice("已选择，可在下方输入框中使用。");
-              }}
-            >
-              用于聊天
-            </button>
+                  });
+                  setSelected(null);
+                  setNotice("已选择，可在下方输入框中使用。");
+                }}
+              >
+                {selected.source === "managed" &&
+                selected.blockedReason &&
+                selected.blockedReason !== "none"
+                  ? availabilityLabels[selected.blockedReason] ?? "暂不可用"
+                  : "用于聊天"}
+              </button>
+            )}
           </div>
         </AssistantDialog>
       )}
@@ -495,9 +558,20 @@ export function CatalogPage({ kind }: { kind: CapabilityKind }) {
             <button
               className={styles.danger}
               onClick={() => {
-                dispatch({ type: "DELETE_SKILL", id: confirmDelete.id });
-                setConfirmDelete(null);
-                setNotice("个人技能已删除。");
+                void (async () => {
+                  try {
+                    if (canUseService) {
+                      await deleteSkill(confirmDelete.id);
+                      await refreshPersonalSkills();
+                    } else {
+                      dispatch({ type: "DELETE_SKILL", id: confirmDelete.id });
+                    }
+                    setConfirmDelete(null);
+                    setNotice("个人技能已删除。");
+                  } catch (cause) {
+                    setError(cause instanceof Error ? cause.message : "技能删除失败。");
+                  }
+                })();
               }}
             >
               确认删除

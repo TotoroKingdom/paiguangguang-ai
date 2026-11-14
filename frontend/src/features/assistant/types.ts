@@ -4,10 +4,19 @@ export type Capability = CapabilityRef & {
   description: string;
   category: string;
   icon: string;
-  source: "system" | "personal";
+  source: "system" | "personal" | "managed";
   steps: string[];
   tools?: string[];
   content?: string;
+  version?: number;
+  versionId?: string;
+  executionMode?: "demo" | "simulated" | "real";
+  ready?: boolean;
+  authorized?: boolean;
+  accessMode?: "all_active" | "granted";
+  testStatus?: string;
+  blockedReason?: string;
+  primaryAction?: string;
 };
 export type ConnectorStatus =
   "connected" | "disconnected" | "unconfigured" | "connecting" | "error" | "unauthorized";
@@ -26,6 +35,7 @@ export type SendMessageInput = {
   capability?: CapabilityRef | null;
   fileIds: string[];
   simulateFailure?: boolean;
+  clientTurnId?: string;
 };
 export type ExecutionStep = { title: string; detail: string };
 export type ChatMessage = {
@@ -37,6 +47,7 @@ export type ChatMessage = {
   capability?: CapabilityRef | null;
   attachments?: { id: string; name: string }[];
   request?: SendMessageInput;
+  error?: string;
 };
 export type Conversation = {
   id: string;
@@ -44,10 +55,13 @@ export type Conversation = {
   createdAt: string;
   updatedAt: string;
   messages: ChatMessage[];
+  loaded?: boolean;
+  version?: number;
 };
 export type DemoState = {
   version: 1;
   conversations: Conversation[];
+  catalog: Capability[];
   favorites: string[];
   userSkills: Capability[];
   connectors: ConnectorConfig[];
@@ -61,11 +75,16 @@ export type DemoAction =
   | { type: "SET_DRAFT"; patch: Partial<Draft> }
   | { type: "TOGGLE_FAVORITE"; id: string }
   | { type: "IMPORT_SKILL"; skill: Capability }
+  | { type: "SET_SKILLS"; skills: Capability[] }
   | { type: "DELETE_SKILL"; id: string }
   | { type: "UPSERT_CONNECTOR"; connector: ConnectorConfig }
   | { type: "ADD_FILES"; files: DemoFile[] }
+  | { type: "SET_FILES"; files: DemoFile[] }
   | { type: "DELETE_FILE"; id: string }
   | { type: "CREATE_CONVERSATION"; conversation: Conversation }
+  | { type: "SET_CATALOG"; catalog: Capability[] }
+  | { type: "SET_CONVERSATIONS"; conversations: Conversation[] }
+  | { type: "UPSERT_CONVERSATION"; conversation: Conversation }
   | { type: "RENAME_CONVERSATION"; id: string; title: string }
   | { type: "DELETE_CONVERSATION"; id: string }
   | { type: "APPEND_MESSAGES"; conversationId: string; messages: ChatMessage[] }

@@ -6,6 +6,8 @@ RUN npm ci
 FROM node:20-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG ASSISTANT_API_INTERNAL_URL=http://backend:8000
+ENV ASSISTANT_API_INTERNAL_URL=$ASSISTANT_API_INTERNAL_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

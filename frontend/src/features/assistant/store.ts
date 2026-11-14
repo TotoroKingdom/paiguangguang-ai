@@ -1,6 +1,8 @@
 import { capabilityCatalog, createInitialState } from "./data";
 import type { DemoAction, DemoState, Draft } from "./types";
 export const STORAGE_KEY = "paiguangguang.assistant.v1";
+export const LOCAL_STORAGE_KEY = "paiguangguang.assistant.local.v1";
+export const MIGRATION_STORAGE_KEY = "paiguangguang.assistant.sqlite-migration.v1";
 const obj = (x: unknown): x is Record<string, unknown> =>
   x !== null && typeof x === "object" && !Array.isArray(x);
 const str = (x: unknown): x is string => typeof x === "string";
@@ -11,6 +13,11 @@ const ref = (x: unknown) =>
 const validDraft = (x: unknown) =>
   obj(x) && str(x.text) && (x.capability === null || ref(x.capability)) && strings(x.fileIds);
 const emptyDraft = (): Draft => ({ text: "", capability: null, fileIds: [] });
+const sortConversations = (conversations: DemoState["conversations"]) =>
+  [...conversations].sort((a, b) => {
+    const updated = b.updatedAt.localeCompare(a.updatedAt);
+    return updated || b.id.localeCompare(a.id);
+  });
 const skill = (x: unknown) =>
   ref(x) &&
   obj(x) &&
@@ -127,6 +134,13 @@ export function restoreState(raw: string | null): DemoState {
     return createInitialState();
   }
 }
+export function restoreLocalState(raw: string | null): DemoState {
+  const restored = restoreState(raw);
+  return { ...restored, conversations: [], catalog: createInitialState().catalog };
+}
+export function serializeLocalState(state: DemoState): string {
+  return JSON.stringify({ ...state, conversations: [], catalog: [] });
+}
 export function demoReducer(state: DemoState, action: DemoAction): DemoState {
   switch (action.type) {
     case "ACTIVATE_DRAFT": {
@@ -153,6 +167,8 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       };
     case "IMPORT_SKILL":
       return { ...state, userSkills: [...state.userSkills, action.skill] };
+    case "SET_SKILLS":
+      return { ...state, userSkills: action.skills };
     case "DELETE_SKILL":
       return {
         ...state,
@@ -178,6 +194,8 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
       };
     case "ADD_FILES":
       return { ...state, files: [...state.files, ...action.files] };
+    case "SET_FILES":
+      return { ...state, files: action.files };
     case "DELETE_FILE":
       return {
         ...state,
@@ -191,7 +209,27 @@ export function demoReducer(state: DemoState, action: DemoAction): DemoState {
         draft: { ...state.draft, fileIds: state.draft.fileIds.filter((id) => id !== action.id) },
       };
     case "CREATE_CONVERSATION":
-      return { ...state, conversations: [action.conversation, ...state.conversations] };
+      return {
+        ...state,
+        conversations: sortConversations([action.conversation, ...state.conversations]),
+      };
+    case "SET_CONVERSATIONS":
+      return { ...state, conversations: sortConversations(action.conversations) };
+    case "SET_CATALOG":
+      return { ...state, catalog: action.catalog };
+    case "UPSERT_CONVERSATION": {
+      const found = state.conversations.some((c) => c.id === action.conversation.id);
+      return {
+        ...state,
+        conversations: sortConversations(
+          found
+            ? state.conversations.map((c) =>
+                c.id === action.conversation.id ? action.conversation : c,
+              )
+            : [action.conversation, ...state.conversations],
+        ),
+      };
+    }
     case "RENAME_CONVERSATION":
       return {
         ...state,
