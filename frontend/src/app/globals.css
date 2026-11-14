@@ -2985,55 +2985,6 @@ select {
   transform: translateX(3px);
 }
 
-.home-page .rag-main {
-  width: min(calc(100% - 3rem), 1200px);
-  margin: 0 auto;
-  padding: 10.5rem 0 8rem;
-}
-
-.home-page .rag-intro {
-  display: grid;
-  align-items: end;
-  gap: 3rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  border-bottom: 1px solid var(--home-line-soft);
-  padding-bottom: 5rem;
-}
-
-.home-page .rag-intro__title {
-  max-width: 58rem;
-  margin-top: 1.7rem;
-  color: var(--home-text);
-  font-size: clamp(3.3rem, 7.2vw, 7rem);
-  font-weight: 750;
-  letter-spacing: -0.095em;
-  line-height: 0.98;
-}
-
-.home-page .rag-intro__title span {
-  background: linear-gradient(110deg, #dbb7ff 4%, #9e8cff 47%, #69d9ef 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-}
-
-.home-page .rag-intro__copy {
-  max-width: 34rem;
-  margin-top: 1.7rem;
-  color: var(--home-muted);
-  font-size: 0.95rem;
-  line-height: 1.95;
-}
-
-.home-page .rag-intro__back {
-  margin-bottom: 0.3rem;
-  white-space: nowrap;
-}
-
-.home-page .rag-board-section {
-  padding-top: 4rem;
-}
-
 @media (max-width: 767px) {
   .home-page .rag-entry-section {
     padding-top: 5.5rem;
@@ -3060,30 +3011,6 @@ select {
     font-size: 2.2rem;
   }
 
-  .home-page .rag-main {
-    width: min(calc(100% - 2rem), 1200px);
-    padding: 8.5rem 0 4.5rem;
-  }
-
-  .home-page .rag-intro {
-    display: flex;
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 2rem;
-    padding-bottom: 3.5rem;
-  }
-
-  .home-page .rag-intro__title {
-    font-size: clamp(3.15rem, 14vw, 5rem);
-  }
-
-  .home-page .rag-intro__copy {
-    font-size: 0.88rem;
-  }
-
-  .home-page .rag-board-section {
-    padding-top: 2.5rem;
-  }
 }
 
 /* The center rail is a page indicator, not a conventional site nav. */
