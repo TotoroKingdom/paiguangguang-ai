@@ -12,7 +12,7 @@ on:
       - ".env.example"
       - ".github/workflows/**"
       - "AGENTS.md"
-      - "docs-codex/**"
+      - "docs-archive/**"
       - "docs-work/**"
   push:
     branches:

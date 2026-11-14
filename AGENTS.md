@@ -11,7 +11,40 @@
 - `backend/app/`：FastAPI 应用、配置、SQLite 数据访问、会话仓储、路由与业务服务；`backend/alembic/`：数据库迁移。
 - `backend/tests/`：接口与会话持久化测试；健康检查为 `/api/v1/health`。
 - `docker-compose.yml` 与 `.env.example`：前端、内部后端、SQLite 数据卷及生产环境变量约定。
-- `docs-codex/`：需求、任务、部署与视觉验收记录；`.github/workflows/assistant-session-ci.yml`：通用 CI；`.github/workflows/deploy.yml`：仅由 `main` 触发的生产发布。
+- `docs-archive/`：已完成或冻结的归档资料；`docs-work/`：当前需求、设计、任务与验收工作区；`docs/`：整理后的长期文档与教程。`.github/workflows/assistant-session-ci.yml`：通用 CI；`.github/workflows/deploy.yml`：仅由 `main` 触发的生产发布。
+
+## 目录边界与文档分层
+
+- 工作区根目录固定为仓库根目录。所有由本仓库任务产生的临时文件、缓存、数据库、日志、截图、虚拟环境和诊断产物必须写入工作区内，不得写到 `C:\AI` 根目录、用户 `%TEMP%`、桌面、下载目录或其他工作区外路径。
+- 需要临时产物时，统一使用仓库内已忽略目录：`.local-evidence/`、`frontend/test-results/`、`frontend/playwright-report/`；任务结束前清理，不提交。
+- Codex 托管的 worktree 属于版本控制机制，不属于任务产物；使用后必须按 Git 工作树管理规则清理。禁止手工在仓库外创建仓库副本、数据库或日志目录。
+- `docs-archive/`：归档区。存放已完成、冻结或不再维护的需求、设计、验收记录与截图；只读，不新增规划，不修改历史内容；勘误需单独说明。
+- `docs-work/`：工作区。存放当前需求、设计、任务拆分、实施记录和验收草稿；活跃维护，是 `docs/` 整理发布时的事实来源。
+- `docs/`：长期文档与教程区。用于整理后的稳定文档和对外教程；不直接堆放任务草稿，内容应从 `docs-work/` 提炼后发布。
+- 目录边界变更必须同步更新 CI 路径过滤、E2E 截图路径、README 链接和本文件。
+- 发现不符合上述目录规范的文件时，先输出清单、影响范围和删除/移动建议，经用户明确确认后才能清理；不得自行删除或覆盖。
+
+## 前端目录规范（企业级）
+
+- `frontend/src/app/` 只放 Next.js App Router 路由、布局、页面装配和路由级元数据；不得直接写业务规则、数据库访问或大段状态逻辑。
+- `frontend/src/features/<domain>/` 按业务域组织组件、hooks、状态、API 客户端、类型和相邻测试；跨域复用前先确认是否应下沉到共享层。
+- `frontend/src/components/` 只放跨业务域共享的展示组件；`ui/` 放通用基础组件，`three/` 放 Three.js 场景与渲染逻辑。
+- `frontend/src/lib/` 放与 React 无关的工具函数；`frontend/src/types/` 放跨域共享类型。不要保留空目录占位。
+- `frontend/public/` 只放运行时静态资源；`frontend/e2e/` 只放 Playwright 用例；运行报告写入已忽略的 `frontend/test-results/`、`frontend/playwright-report/`，需要留存的视觉证据写入 `docs-work/evidence/<feature>/screenshots/`，不得写入 `docs-archive/`。
+- 测试与源码相邻，命名 `*.test.ts` 或 `*.test.tsx`；文件使用 kebab-case，组件使用 PascalCase；跨模块导入使用 `@/`。
+- 禁止提交 `.next/`、`node_modules/`、`*.tsbuildinfo` 和 Playwright 报告；`next-env.d.ts` 由 Next.js 生成，不得手工修改业务内容。
+- 单个组件/模块超过约 300 行，或同时承担数据获取、状态编排和复杂渲染时，应拆分；新增目录必须对应明确的业务域或技术职责。
+
+## 后端目录规范（企业级）
+
+- `backend/app/main.py` 只负责应用创建、路由注册、生命周期和中间件装配。
+- `backend/app/modules/<domain>/` 按业务域组织 `router.py`、`service.py`、`models.py`、`schemas.py`、`dependencies.py`；路由层只做参数校验和调用服务，不直接写 SQL 或业务规则。
+- `backend/app/core/` 放配置、安全、错误处理等跨域基础设施；`backend/app/db.py` 放连接和会话管理。
+- `backend/app/routers/` 仅用于尚未迁入业务域的兼容路由；新增功能必须进入 `modules/`，不得继续扩展该目录。
+- `backend/app/services.py`、`repositories.py`、`schemas.py`、`models.py` 是当前共享核心层，可继续被各业务域复用；新增业务规则应进入对应 `modules/<domain>/`，不得继续把新领域逻辑堆入这些聚合文件。
+- `backend/alembic/versions/` 只放迁移脚本；禁止手改生产库结构或跳过迁移。`backend/tests/` 镜像 `app/` 的模块划分，测试不得依赖真实生产数据。
+- 配置一律来自环境变量或 `.env`（不提交）；禁止硬编码密钥、令牌和数据库口令。
+- Python 使用 4 空格缩进、snake_case 和类型注解；单文件超过约 500 行或单函数承担多个职责时应拆分。
 
 ## 构建、测试与本地开发
 
@@ -47,7 +80,7 @@ TypeScript 启用严格类型检查；遵循现有两空格缩进、双引号及
 
 ## 配置与代理约定
 
-不要提交密钥、凭据、`.next/`、`node_modules/` 或本地诊断产物。DSH ACL 诊断的 `-Out` 应指向仓库外，例如 `$env:LOCALAPPDATA\DSH\acl-reports`。默认用中文沟通，英文技术名词附中文解释；未经用户明确许可，不使用插件及插件提供的技能。
+不要提交密钥、凭据、`.next/`、`node_modules/` 或本地诊断产物。DSH ACL 等诊断输出统一写入仓库内已忽略的 `.local-evidence/`，不得写到工作区外。默认用中文沟通，英文技术名词附中文解释；未经用户明确许可，不使用插件及插件提供的技能。
 
 ## Git 分支、发布与工作树管理
 

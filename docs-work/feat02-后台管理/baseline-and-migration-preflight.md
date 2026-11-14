@@ -86,7 +86,7 @@ feat02 文档位于 `chore/local-env-data` 的 `docs-work/feat02-后台管理/`�
 - `05-现有代码差距与实施路线图.md`
 - `06-实施TASKS.md`
 
-该分支同时提交了 `.gitignore` 的本地数据忽略规则和 `docs-codex/assistant-session-v1/DEPLOYMENT.md` 的本地数据说明；这些**不是本任务的文档产物**。后续如把 feat02 文档同步到 `dev`，必须只带文档文件，不能把整个 `chore/local-env-data` 差异作为一次变更合并。
+该分支同时提交了 `.gitignore` 的本地数据忽略规则和 `docs-archive/assistant-session-v1/DEPLOYMENT.md` 的本地数据说明；这些**不是本任务的文档产物**。后续如把 feat02 文档同步到 `dev`，必须只带文档文件，不能把整个 `chore/local-env-data` 差异作为一次变更合并。
 
 ### 1.4 文档编号差异（必须记录）
 

@@ -78,7 +78,7 @@ SQLite 的 JSON 字段暂存现有快照结构；只允许受 Pydantic 校验的
 
 1. `git fetch origin`，检查 `main`/`dev`、`git status`、现有 worktrees 和 `AGENTS.md`；记录本任务起点 SHA。
 2. 为本任务创建**独立** `feat/assistant-session-sqlite` 分支和独立 worktree（例如仓库相邻目录），以最新 `origin/main` 为基线；不得复用、切换、覆盖其他 Codex 会话正在操作的 worktree。
-3. 先在任务 worktree 内创建 `docs-codex/assistant-session-v1/SPEC.md`、`PLAN.md`、`TASKS.md`，逐项记录本任务的验收与勾选情况。此后直接实施。
+3. 先在任务 worktree 内创建 `docs-archive/assistant-session-v1/SPEC.md`、`PLAN.md`、`TASKS.md`，逐项记录本任务的验收与勾选情况。此后直接实施。
 
 ### T1：FastAPI + SQLite（P0）
 
@@ -106,7 +106,7 @@ SQLite 的 JSON 字段暂存现有快照结构；只允许受 Pydantic 校验的
 - 后端 pytest：仅本模块及健康检查；前端 Vitest：本次受影响的组件/Provider/Store；`npm run lint`、`npm run build`；新增必要的 API/前端联动测试。
 - 针对本功能的 Playwright 场景：新建空会话、发送/自动保存、刷新及 URL 直达、切换/搜索/改名/删除、失败/停止/重试、两个独立浏览器上下文数据隔离、后端重启或容器重建后 SQLite 数据保留。若运行 E2E 需另行授权，则先提交相关测试并将未执行项如实列出，绝不虚报通过。
 - 确认首页和其他 assistant 子页面未被破坏；不得将模拟工具/LLM 文案改成“真实执行”。
-- 任务进度、测试实际命令/结果、截图或失败证据、遗留风险写入 `docs-codex/assistant-session-v1/ACCEPTANCE.md`。
+- 任务进度、测试实际命令/结果、截图或失败证据、遗留风险写入 `docs-archive/assistant-session-v1/ACCEPTANCE.md`。
 
 ### T5：合并与善后（P0）
 
